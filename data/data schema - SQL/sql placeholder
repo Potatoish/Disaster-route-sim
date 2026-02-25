@@ -1,0 +1,177 @@
+-- ============================================================
+--  ACO EVACUATION SYSTEM — MySQL Database Schema
+--  Barangay Pinagbuhatan & Sta. Lucia, Pasig City
+-- ============================================================
+
+-- ── CORE GRAPH ───────────────────────────────────────────────
+
+CREATE TABLE nodes (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  name         VARCHAR(100) NOT NULL UNIQUE,
+  lat          DECIMAL(9,6) NOT NULL,
+  lng          DECIMAL(9,6) NOT NULL,
+  barangay     VARCHAR(50),
+  node_type    ENUM('road','landmark','evacuation','ferry','school','health','hall') DEFAULT 'landmark',
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE edges (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  source_id     INT NOT NULL,
+  target_id     INT NOT NULL,
+  distance_km   DECIMAL(5,2) NOT NULL,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (source_id) REFERENCES nodes(id),
+  FOREIGN KEY (target_id) REFERENCES nodes(id)
+);
+
+-- ── 1. FLOOD HAZARD ──────────────────────────────────────────
+--  Source: Project NOAH / UP
+--  Data:   Water level (meters) during rainfall events
+
+CREATE TABLE flood_hazard (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  node_id         INT NOT NULL,
+  water_level_m   DECIMAL(4,2) NOT NULL,      -- water depth in meters
+  rainfall_scenario ENUM('5yr','25yr','100yr') NOT NULL,  -- return period
+  hazard_level    INT NOT NULL CHECK (hazard_level BETWEEN 1 AND 5),
+  -- Level guide:
+  --   1 = 0.00 - 0.20m (ankle deep, passable)
+  --   2 = 0.21 - 0.50m (knee deep, caution)
+  --   3 = 0.51 - 1.00m (waist deep, difficult)
+  --   4 = 1.01 - 2.00m (chest deep, dangerous)
+  --   5 = > 2.00m      (above head, impassable)
+  source          VARCHAR(50) DEFAULT 'Project NOAH',
+  updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (node_id) REFERENCES nodes(id)
+);
+
+-- ── 2. EARTHQUAKE HAZARD ─────────────────────────────────────
+--  Source: PHIVOLCS HazardHunterPH
+--  Data:   Fault line proximity, evacuation areas, responder teams
+
+CREATE TABLE earthquake_hazard (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  node_id             INT NOT NULL,
+  fault_name          VARCHAR(100),             -- e.g. "Valley Fault System"
+  distance_to_fault_km DECIMAL(6,3),            -- km from node to nearest fault
+  liquefaction_risk   ENUM('low','moderate','high','very high') DEFAULT 'low',
+  hazard_level        INT NOT NULL CHECK (hazard_level BETWEEN 1 AND 5),
+  -- Level guide:
+  --   1 = > 5km from fault
+  --   2 = 3–5km from fault
+  --   3 = 1–3km from fault
+  --   4 = 0.5–1km from fault
+  --   5 = < 0.5km from fault
+  source              VARCHAR(50) DEFAULT 'PHIVOLCS',
+  updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (node_id) REFERENCES nodes(id)
+);
+
+CREATE TABLE evacuation_centers (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(150) NOT NULL,
+  lat           DECIMAL(9,6) NOT NULL,
+  lng           DECIMAL(9,6) NOT NULL,
+  barangay      VARCHAR(50),
+  capacity      INT,                            -- max persons
+  hazard_type   ENUM('flood','earthquake','fire','all') DEFAULT 'all',
+  is_active     BOOLEAN DEFAULT TRUE,
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE responder_teams (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  team_name      VARCHAR(100) NOT NULL,         -- e.g. "BDRRMC Pinagbuhatan"
+  hazard_type    ENUM('flood','earthquake','fire','all') DEFAULT 'all',
+  barangay       VARCHAR(50),
+  contact_no     VARCHAR(20),                   -- primary contact number
+  alt_contact_no VARCHAR(20),                   -- backup number
+  head_name      VARCHAR(100),                  -- name of team head
+  designation    VARCHAR(100),                  -- e.g. "Barangay Captain"
+  evacuation_center_id INT,                     -- assigned evac center
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (evacuation_center_id) REFERENCES evacuation_centers(id)
+);
+
+CREATE TABLE responder_personnel (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  team_id      INT NOT NULL,
+  full_name    VARCHAR(100) NOT NULL,
+  role         VARCHAR(100),                   -- e.g. "Rescue Diver", "Medic"
+  contact_no   VARCHAR(20),
+  is_available BOOLEAN DEFAULT TRUE,
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (team_id) REFERENCES responder_teams(id)
+);
+
+-- ── 3. FIRE HAZARD ───────────────────────────────────────────
+--  Source: BFP (manual encoding)
+--  Data:   Nearest fire station, past fire incidents
+
+CREATE TABLE fire_stations (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(150) NOT NULL,          -- e.g. "Pasig City Fire Station"
+  lat           DECIMAL(9,6) NOT NULL,
+  lng           DECIMAL(9,6) NOT NULL,
+  district      VARCHAR(50),
+  contact_no    VARCHAR(20),
+  station_head  VARCHAR(100),
+  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE fire_hazard (
+  id                   INT AUTO_INCREMENT PRIMARY KEY,
+  node_id              INT NOT NULL,
+  nearest_station_id   INT,
+  distance_to_station_km DECIMAL(6,3),          -- km to nearest fire station
+  hazard_level         INT NOT NULL CHECK (hazard_level BETWEEN 1 AND 5),
+  -- Level guide:
+  --   1 = < 0.5km to station, 0 past incidents
+  --   2 = 0.5–1km, 1–2 past incidents
+  --   3 = 1–2km, 3–5 past incidents
+  --   4 = 2–3km, 6–10 past incidents
+  --   5 = > 3km, 10+ past incidents
+  source               VARCHAR(50) DEFAULT 'BFP',
+  updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (node_id) REFERENCES nodes(id),
+  FOREIGN KEY (nearest_station_id) REFERENCES fire_stations(id)
+);
+
+CREATE TABLE fire_incidents (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  node_id        INT NOT NULL,
+  incident_date  DATE NOT NULL,
+  cause          VARCHAR(200),                  -- cause of fire
+  alarm_level    ENUM('first','second','third','fourth','fifth') DEFAULT 'first',
+  casualties     INT DEFAULT 0,
+  structures_burned INT DEFAULT 0,
+  responding_station_id INT,
+  reported_by    VARCHAR(100) DEFAULT 'BFP',
+  notes          TEXT,
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (node_id) REFERENCES nodes(id),
+  FOREIGN KEY (responding_station_id) REFERENCES fire_stations(id)
+);
+
+-- ── COMBINED HAZARD VIEW ─────────────────────────────────────
+--  Used by ACO algorithm to get final hazard level per node
+
+CREATE VIEW node_hazard_summary AS
+SELECT
+  n.id,
+  n.name,
+  n.lat,
+  n.lng,
+  IFNULL(f.hazard_level, 1)  AS flood_level,
+  IFNULL(e.hazard_level, 1)  AS earthquake_level,
+  IFNULL(fi.hazard_level, 1) AS fire_level,
+  GREATEST(
+    IFNULL(f.hazard_level, 1),
+    IFNULL(e.hazard_level, 1),
+    IFNULL(fi.hazard_level, 1)
+  ) AS max_hazard_level
+FROM nodes n
+LEFT JOIN flood_hazard f        ON f.node_id = n.id AND f.rainfall_scenario = '25yr'
+LEFT JOIN earthquake_hazard e   ON e.node_id = n.id
+LEFT JOIN fire_hazard fi        ON fi.node_id = n.id;
