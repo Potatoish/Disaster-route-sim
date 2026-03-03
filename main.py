@@ -1,46 +1,59 @@
 import networkx as nx
 import random
+import csv
+from datetime import datetime
+
+HAZARD_THRESHOLD = 3
+EVAPORATION_RATE = 0.5
 
 def create_graph():
     G = nx.Graph()
-    G.add_node("Novo Pinagbuhatan")
-    G.add_node("Kenneth Talipapa")
-    G.add_node("Pinagbuhatan High School")
-    G.add_node("Pinagbuhatan Ferry station")
-    G.add_node("Pinagbuhatan Barangay Hall")
-    G.add_node("2 Centinnial Street, Pinagbuhatan")
-    G.add_node("Sta. Lucia Barangay Hall")
-    G.add_node("St Jude Thaddeus Sta. Lucia")
-    G.add_node("Sta. Lucia High School")
-    G.add_node("De Castro Elementary School")
-    G.add_node("Barangay Sta. Lucia Health Center")
-    G.add_node("Mabuhay Subdivision")
 
-    G.add_edge("Novo Pinagbuhatan", "Kenneth Talipapa", distance=0.6, hazard=3)
-    G.add_edge("Kenneth Talipapa", "Pinagbuhatan Barangay Hall", distance=0.4, hazard=2)
-    G.add_edge("Pinagbuhatan Barangay Hall", "Pinagbuhatan High School", distance=0.5, hazard=2)
-    G.add_edge("Pinagbuhatan High School", "Pinagbuhatan Ferry station", distance=0.7, hazard=5)
-    G.add_edge("Pinagbuhatan Ferry station", "2 Centinnial Street, Pinagbuhatan", distance=0.6, hazard=5)
-    G.add_edge("2 Centinnial Street, Pinagbuhatan", "Sta. Lucia Barangay Hall", distance=1.2, hazard=3)
-    G.add_edge("Sta. Lucia Barangay Hall", "Barangay Sta. Lucia Health Center", distance=0.4, hazard=1)
-    G.add_edge("Barangay Sta. Lucia Health Center", "St Jude Thaddeus Sta. Lucia", distance=0.3, hazard=1)
-    G.add_edge("St Jude Thaddeus Sta. Lucia", "Sta. Lucia High School", distance=0.5, hazard=2)
-    G.add_edge("Sta. Lucia High School", "De Castro Elementary School", distance=0.6, hazard=2)
-    G.add_edge("De Castro Elementary School", "Mabuhay Subdivision", distance=0.8, hazard=1)
-    G.add_edge("Pinagbuhatan Barangay Hall", "2 Centinnial Street, Pinagbuhatan", distance=2.5, hazard=2)
-    G.add_edge("Pinagbuhatan High School", "Sta. Lucia Barangay Hall", distance=2.8, hazard=1)
-    G.add_edge("Kenneth Talipapa", "Pinagbuhatan Ferry station", distance=0.9, hazard=5)
-    G.add_edge("Kenneth Talipapa", "Sta. Lucia Barangay Hall", distance=3.2, hazard=1)
-    G.add_edge("Novo Pinagbuhatan", "Pinagbuhatan High School", distance=1.8, hazard=2)
+    locations = [
+        "Novo Pinagbuhatan", "Kenneth Talipapa", "Pinagbuhatan High School",
+        "Pinagbuhatan Ferry station", "Pinagbuhatan Barangay Hall",
+        "2 Centinnial Street, Pinagbuhatan", "Sta. Lucia Barangay Hall",
+        "St Jude Thaddeus Sta. Lucia", "Sta. Lucia High School",
+        "De Castro Elementary School", "Barangay Sta. Lucia Health Center",
+        "Mabuhay Subdivision"
+    ]
+    G.add_nodes_from(locations)
+
+    edges = [
+        ("Novo Pinagbuhatan", "Kenneth Talipapa", 0.6, 3),
+        ("Kenneth Talipapa", "Pinagbuhatan Barangay Hall", 0.4, 2),
+        ("Pinagbuhatan Barangay Hall", "Pinagbuhatan High School", 0.5, 2),
+        ("Pinagbuhatan High School", "Pinagbuhatan Ferry station", 0.7, 5),
+        ("Pinagbuhatan Ferry station", "2 Centinnial Street, Pinagbuhatan", 0.6, 5),
+        ("2 Centinnial Street, Pinagbuhatan", "Sta. Lucia Barangay Hall", 1.2, 3),
+        ("Sta. Lucia Barangay Hall", "Barangay Sta. Lucia Health Center", 0.4, 1),
+        ("Barangay Sta. Lucia Health Center", "St Jude Thaddeus Sta. Lucia", 0.3, 1),
+        ("St Jude Thaddeus Sta. Lucia", "Sta. Lucia High School", 0.5, 2),
+        ("Sta. Lucia High School", "De Castro Elementary School", 0.6, 2),
+        ("De Castro Elementary School", "Mabuhay Subdivision", 0.8, 1),
+        ("Pinagbuhatan Barangay Hall", "2 Centinnial Street, Pinagbuhatan", 2.5, 2),
+        ("Pinagbuhatan High School", "Sta. Lucia Barangay Hall", 2.8, 1),
+        ("Kenneth Talipapa", "Pinagbuhatan Ferry station", 0.9, 5),
+        ("Kenneth Talipapa", "Sta. Lucia Barangay Hall", 3.2, 1),
+        ("Novo Pinagbuhatan", "Pinagbuhatan High School", 1.8, 2)
+    ]
+
+    for u, v, dist, haz in edges:
+        G.add_edge(u, v, distance=dist, hazard=haz, pheromone=1.0)
 
     return G
 
-def calculate_cost(distance, hazard):
-    return (0.3 * distance) + (0.7 * hazard)
-
-def initialize_pheromones(G):
+def reset_pheromones(G):
     for u, v in G.edges():
         G[u][v]['pheromone'] = 1.0
+
+def get_max_hazard(G, path):
+    max_haz = 0
+    for i in range(len(path) - 1):
+        hazard = G[path[i]][path[i + 1]]['hazard']
+        if hazard > max_haz:
+            max_haz = hazard
+    return max_haz
 
 class Ant:
     def __init__(self, start, end, G):
@@ -49,7 +62,16 @@ class Ant:
         self.G = G
         self.path = [start]
         self.visited = {start}
-        self.total_cost = 0
+        self.distance = 0
+        self.hazard = 0
+
+    def build_path(self):
+        while self.path[-1] != self.end:
+            next_node = self.select_next()
+            if next_node is None:
+                return False
+            self.move_to(next_node)
+        return True
 
     def select_next(self):
         current = self.path[-1]
@@ -60,96 +82,150 @@ class Ant:
         if self.end in neighbors:
             return self.end
 
+        # Safety-first: filter out dangerous routes (hazard > 3)
+        safe_neighbors = [n for n in neighbors
+                          if self.G[current][n]['hazard'] <= HAZARD_THRESHOLD]
+        candidates = safe_neighbors if safe_neighbors else neighbors
+
+        if self.end in candidates:
+            return self.end
+
+        # Calculate probabilities based on pheromone and distance
         probs = []
-        for neighbor in neighbors:
+        for neighbor in candidates:
             edge = self.G[current][neighbor]
             pheromone = edge['pheromone']
-            cost = calculate_cost(edge['distance'], edge['hazard'])
-            heuristic = 1.0 / cost if cost > 0 else 1.0
+            heuristic = 1.0 / edge['distance']
             prob = pheromone * (heuristic ** 2)
             probs.append(prob)
 
         total = sum(probs)
         probs = [p / total for p in probs]
-        return random.choices(neighbors, weights=probs)[0]
 
-    def build_path(self):
-        while self.path[-1] != self.end:
-            next_node = self.select_next()
-            if next_node is None:
-                return False
+        return random.choices(candidates, weights=probs)[0]
 
-            current = self.path[-1]
-            edge = self.G[current][next_node]
-            self.total_cost += calculate_cost(edge['distance'], edge['hazard'])
-            self.path.append(next_node)
-            self.visited.add(next_node)
-        return True
+    def move_to(self, next_node):
+        current = self.path[-1]
+        edge = self.G[current][next_node]
+        self.distance += edge['distance']
+        self.hazard += edge['hazard']
+        self.path.append(next_node)
+        self.visited.add(next_node)
 
 def update_pheromones(G, ants):
+    # Evaporation
     for u, v in G.edges():
-        G[u][v]['pheromone'] *= 0.5
+        G[u][v]['pheromone'] *= (1 - EVAPORATION_RATE)
 
+    # Deposit pheromones
     for ant in ants:
-        if len(ant.path) > 1 and ant.path[-1] == ant.end:
-            deposit = 100 / ant.total_cost if ant.total_cost > 0 else 0
+        if ant.path[-1] == ant.end:
+            deposit = 100 / ant.distance if ant.distance > 0 else 0
             for i in range(len(ant.path) - 1):
                 u, v = ant.path[i], ant.path[i + 1]
                 G[u][v]['pheromone'] += deposit
 
-def get_metrics(G, path):
-    total_dist = 0
-    total_hazard = 0
-    for i in range(len(path) - 1):
-        edge = G[path[i]][path[i + 1]]
-        total_dist += edge['distance']
-        total_hazard += edge['hazard']
-    return total_dist, total_hazard
+def find_routes(G, start, end, num_routes=10, num_ants=10, iterations=30):
+    all_routes = []
+    unique_paths = set()
 
-def ant_colony_optimization(G, start, end, num_ants=10, iterations=50):
-    initialize_pheromones(G)
-    best_path = None
-    best_cost = float('inf')
+    for run in range(num_routes):
+        reset_pheromones(G)
 
-    for iteration in range(iterations):
-        ants = []
-        for _ in range(num_ants):
-            ant = Ant(start, end, G)
-            if ant.build_path():
-                ants.append(ant)
-                if ant.total_cost < best_cost:
-                    best_cost = ant.total_cost
-                    best_path = ant.path.copy()
+        for iteration in range(iterations):
+            ants = []
 
-        update_pheromones(G, ants)
+            # Deploy ants
+            for _ in range(num_ants):
+                ant = Ant(start, end, G)
+                if ant.build_path():
+                    ants.append(ant)
 
-        if (iteration + 1) % 10 == 0:
-            dist, haz = get_metrics(G, best_path)
-            print(f"Iteration {iteration + 1}: Cost {best_cost:.2f}, Distance {dist:.1f} km, Hazard {haz}")
+                    # Save unique paths
+                    path_tuple = tuple(ant.path)
+                    if path_tuple not in unique_paths:
+                        unique_paths.add(path_tuple)
+                        all_routes.append({
+                            'path': ant.path,
+                            'distance': round(ant.distance, 1),
+                            'total_hazard': ant.hazard,
+                            'max_hazard': get_max_hazard(G, ant.path)
+                        })
 
-    return best_path
+            update_pheromones(G, ants)
 
-G = create_graph()
+    # Sort: safety first (max hazard), then distance
+    all_routes.sort(key=lambda x: (x['max_hazard'], x['distance']))
+    return all_routes[:10]
 
-routes = [
-    ("Novo Pinagbuhatan", "Mabuhay Subdivision"),
-    ("Kenneth Talipapa", "Sta. Lucia High School")
-]
+def classify_routes(routes):
+    if not routes:
+        return []
 
-print("\nACO EVACUATION ROUTE (SAFETY FIRST)\n")
+    safe = [r for r in routes if r['max_hazard'] <= HAZARD_THRESHOLD]
+    unsafe = [r for r in routes if r['max_hazard'] > HAZARD_THRESHOLD]
 
-for i, (start, end) in enumerate(routes, 1):
-    print(f"\nROUTE {i}")
-    print(f"Start: {start}")
-    print(f"End: {end}\n")
+    classified = []
 
-    best_path = ant_colony_optimization(G, start, end, num_ants=10, iterations=50)
+    # Best route
+    if safe:
+        safe[0]['category'] = 'best'
+        safe[0]['color'] = 'green'
+        classified.append(safe[0])
 
-    dist, haz = get_metrics(G, best_path)
+        # Other safe routes
+        for route in safe[1:]:
+            route['category'] = 'available'
+            route['color'] = 'yellow'
+            classified.append(route)
 
-    print ("")
-    print ("optimal route:")
-    print(", ".join(best_path))
-    print(f"\nDistance: {dist:.1f} km")
-    print(f"Hazard Level: {haz}")
-    print("\n" + "-" * 70)
+    # Eliminated routes
+    for route in unsafe:
+        route['category'] = 'eliminated'
+        route['color'] = 'red'
+        classified.append(route)
+
+    return classified
+
+def export_csv(routes, start, end, filename=None):
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"routes_{timestamp}.csv"
+
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Route', 'Distance (km)', 'Max Hazard', 'Category', 'Path'])
+
+        for i, route in enumerate(routes, 1):
+            path_str = ' -> '.join(route['path'])
+            writer.writerow([i, route['distance'], route['max_hazard'],
+                             route['category'], path_str])
+
+    return filename
+
+def simulate(start, end, hazard_type="Flood"):
+    G = create_graph()
+    routes = find_routes(G, start, end)
+    classified = classify_routes(routes)
+
+    return {
+        'start': start,
+        'end': end,
+        'hazard_type': hazard_type,
+        'routes': classified
+    }
+
+if __name__ == "__main__":
+    result = simulate("Novo Pinagbuhatan", "Mabuhay Subdivision")
+
+    print(f"\nEvacuation Route Simulation")
+    print(f"From: {result['start']}")
+    print(f"To: {result['end']}")
+    print(f"Hazard: {result['hazard_type']}\n")
+
+    for i, route in enumerate(result['routes'], 1):
+        status = route['category'].upper()
+        print(f"Route {i}: {route['distance']} km | Hazard: {route['max_hazard']} | {status}")
+
+    csv_file = export_csv(result['routes'], result['start'], result['end'])
+    print(f"\nExported to: {csv_file}")
