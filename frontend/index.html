@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ant‑ech Route Simulation</title>
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    body { margin:0; display:flex; height:100vh; font-family:sans-serif; }
+    #sidebar { width:320px; background:#222; color:#fff; padding:20px; }
+    #sidebar select, #sidebar button { width:100%; margin-bottom:1rem; }
+    #map { flex:1; }
+    .btn { background:#f60; border:none; padding:.8rem; color:#fff; cursor:pointer;}
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h2>ANT‑ECH ROUTE SIMULATION</h2>
+
+    <label>BARANGAY
+      <select id="barangay"></select>   <!-- fill if you group nodes -->
+    </label>
+
+    <label>START NODE
+      <select id="start"></select>
+    </label>
+
+    <label>END NODE
+      <select id="end"></select>
+    </label>
+
+    <label>DISASTER
+      <select id="hazard">
+        <option>Flood</option>
+        <option>Fire</option>
+        <option>Landslide</option>
+      </select>
+    </label>
+
+    <button id="run" class="btn">&gt; RUN SIMULATION &lt;</button>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // lookup table of coordinates for each node
+    const coords = {
+      "Novo Pinagbuhatan": [14.5287, 121.0541],
+      "Kenneth Talipapa": [14.5295, 121.0559],
+      "Pinagbuhatan High School": [14.5301, 121.0572],
+      // …add the rest of your nodes
+    };
+
+    const map = L.map('map').setView(coords["Novo Pinagbuhatan"], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: ''
+    }).addTo(map);
+
+    function populateLocations(locs) {
+      const start = document.getElementById('start');
+      const end   = document.getElementById('end');
+      start.innerHTML = end.innerHTML = '';
+      locs.forEach(l => {
+        const o = document.createElement('option');
+        o.value = o.textContent = l;
+        start.appendChild(o);
+        end.appendChild(o.cloneNode(true));
+      });
+    }
+
+    async function loadInitialData() {
+      const res = await fetch('/locations');
+      const locs = await res.json();
+      populateLocations(locs);
+      // if you also supply barangay->nodes, fill #barangay and hook its change
+      // event to filter the start/end selects.
+    }
+
+    function drawRoutes(routes) {
+      map.eachLayer(layer => { if (layer instanceof L.Polyline) map.removeLayer(layer); });
+      routes.forEach(r => {
+        const latlngs = r.path.map(n => coords[n]);
+        L.polyline(latlngs, { color: r.color, weight: 5 }).addTo(map);
+      });
+    }
+
+    document.getElementById('run').addEventListener('click', async () => {
+      const start  = document.getElementById('start').value;
+      const end    = document.getElementById('end').value;
+      const hazard = document.getElementById('hazard').value;
+      const resp = await fetch('/simulate', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({start,end,hazard_type:hazard})
+      });
+      const data = await resp.json();
+      if (data.error) {
+        alert(data.message);
+      } else {
+        drawRoutes(data.routes);
+      }
+    });
+
+    loadInitialData();
+  </script>
+</body>
+</html>
