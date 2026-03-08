@@ -59,8 +59,17 @@ The simulation currently focuses on selected locations in **Barangay Pinagbuhata
 5 Routes are evaluated using hazard and distance criteria  
 6 The safest route is highlighted
 
+---
+
+### Run the backend in terminal
+py app.py
+
 Backend will run at:
 http://localhost:5000/
+
+### Open the frontend
+
+Open `index.html` in your browser or use **Live Server in VS Code**.
 
 ## System Interface
 
