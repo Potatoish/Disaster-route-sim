@@ -10,35 +10,21 @@ EVAPORATION_RATE = 0.5
 def create_graph():
     G = nx.Graph()
     
-    locations = [
-        "Novo Pinagbuhatan",
-        "Kenneth Talipapa",
-        "Pinagbuhatan High School",
-        "Pinagbuhatan Ferry station",
-        "Pinagbuhatan Barangay Hall",
-        "2 Centennial Street, Pinagbuhatan"
-    ]
-    G.add_nodes_from(locations)
+    # 1. Fetch live data from SQL database
+    nodes, edges = database.get_graph_data()
     
-    edges = [
-        ("Novo Pinagbuhatan", "Kenneth Talipapa", 0.6, 3),
-        ("Kenneth Talipapa", "Pinagbuhatan Barangay Hall", 0.4, 2),
-        ("Pinagbuhatan Barangay Hall", "Pinagbuhatan High School", 0.5, 2),
-        ("Pinagbuhatan High School", "Pinagbuhatan Ferry station", 0.7, 5),
-        ("Pinagbuhatan Ferry station", "2 Centennial Street, Pinagbuhatan", 0.6, 5),
-        ("Pinagbuhatan Barangay Hall", "2 Centennial Street, Pinagbuhatan", 2.5, 2),
-        ("Kenneth Talipapa", "Pinagbuhatan Ferry station", 0.9, 5),
-        ("Novo Pinagbuhatan", "Pinagbuhatan High School", 1.8, 2),
-        ("Kenneth Talipapa", "2 Centennial Street, Pinagbuhatan", 3.0, 2),
-        ("Novo Pinagbuhatan", "Pinagbuhatan Barangay Hall", 1.0, 2),
-        ("Pinagbuhatan High School", "2 Centennial Street, Pinagbuhatan", 1.5, 3),
-        ("Kenneth Talipapa", "Pinagbuhatan High School", 0.8, 2),
-        ("Novo Pinagbuhatan", "Pinagbuhatan Ferry station", 2.0, 4)
-    ]
-    
-    for u, v, dist, haz in edges:
-        G.add_edge(u, v, distance=dist, hazard=haz, pheromone=1.0)
-    
+    # 2. Add the locations (nodes) to the graph
+    for node in nodes:
+        # node[1] = name, node[2] = lat, node[3] = lng
+        G.add_node(node[1], lat=node[2], lng=node[3])
+        
+    # 3. Add the roads (edges) to the graph
+    for edge in edges:
+        source = edge[0]
+        target = edge[1]
+        dist = float(edge[2])
+        G.add_edge(source, target, distance=dist, hazard=1)
+        
     return G
 
 def reset_pheromones(G):
