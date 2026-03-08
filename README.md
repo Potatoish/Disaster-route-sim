@@ -64,7 +64,7 @@ http://localhost:5000/
 
 ## System Interface
 
-![Simulation Interface](screenshot.png)
+![Simulation Interface](MapUI.png)
 
 ## Author
 Ambulario, Ranielle Pearl, C.
@@ -73,4 +73,3 @@ Globiogo, Jefferson, T.
 Nunez, Jessa, S.
 
 Undergraduate thesis project in Information Technology
-
