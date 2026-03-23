@@ -16,6 +16,7 @@ CREATE TABLE nodes (
   lng          DECIMAL(9,6) NOT NULL,
   barangay     VARCHAR(50),
   node_type    VARCHAR(50) DEFAULT ('landmark') CHECK (node_type IN ('road','landmark','evacuation','ferry','school','health','hall')),
+  hazard_level INT DEFAULT 1,
   created_at   DATETIME DEFAULT (GETDATE())
 );
 GO

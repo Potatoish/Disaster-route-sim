@@ -1,5 +1,2 @@
 USE aco_evacuation;
-
-UPDATE nodes
-SET name = '2 Centennial Street, Pinagbuhatan'
-WHERE name = '2 Centinnial Street, Pinagbuhatan';
+ALTER TABLE nodes ADD hazard_level INT DEFAULT 1;
