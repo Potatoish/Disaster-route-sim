@@ -1,49 +1,5 @@
 const BACKEND = 'http://localhost:5000';
 
-const BARANGAY_DATA = {
-  'Pinagbuhatan': {
-    center: { lat: 14.5605, lng: 121.0925 }, zoom: 16,
-    nodes: [
-      { id: 'Novo Pinagbuhatan', lat: 14.5631, lng: 121.0891, haz: 3 },
-      { id: 'Kenneth Talipapa', lat: 14.5618, lng: 121.0912, haz: 3 },
-      { id: 'Pinagbuhatan High School', lat: 14.5592, lng: 121.0934, haz: 2 },
-      { id: 'Pinagbuhatan Ferry Station', lat: 14.5578, lng: 121.0958, haz: 5 },
-      { id: 'Pinagbuhatan Barangay Hall', lat: 14.5605, lng: 121.0923, haz: 2 },
-      { id: '2 Centennial Street, Pinagbuhatan', lat: 14.5598, lng: 121.0952, haz: 2 },
-    ],
-    edges: [
-      { from: 'Novo Pinagbuhatan', to: 'Kenneth Talipapa', haz: 3 },
-      { from: 'Kenneth Talipapa', to: 'Pinagbuhatan Barangay Hall', haz: 2 },
-      { from: 'Pinagbuhatan Barangay Hall', to: 'Pinagbuhatan High School', haz: 2 },
-      { from: 'Pinagbuhatan High School', to: 'Pinagbuhatan Ferry Station', haz: 5 },
-      { from: 'Pinagbuhatan Ferry Station', to: '2 Centennial Street, Pinagbuhatan', haz: 5 },
-      { from: 'Pinagbuhatan Barangay Hall', to: '2 Centennial Street, Pinagbuhatan', haz: 2 },
-      { from: 'Kenneth Talipapa', to: 'Pinagbuhatan Ferry Station', haz: 5 },
-      { from: 'Novo Pinagbuhatan', to: 'Pinagbuhatan High School', haz: 2 },
-    ]
-  },
-  'Sta. Lucia': {
-    center: { lat: 14.5580, lng: 121.0995 }, zoom: 16,
-    nodes: [
-      { id: 'Sta. Lucia Barangay Hall', lat: 14.5601, lng: 121.0978, haz: 2 },
-      { id: 'St Jude Thaddeus, Sta. Lucia', lat: 14.5582, lng: 121.0995, haz: 1 },
-      { id: 'Sta. Lucia High School', lat: 14.5571, lng: 121.0998, haz: 2 },
-      { id: 'De Castro Elementary School', lat: 14.5563, lng: 121.1012, haz: 2 },
-      { id: 'Barangay Sta. Lucia Health Center', lat: 14.5589, lng: 121.0980, haz: 1 },
-      { id: 'Mabuhay Subdivision', lat: 14.5555, lng: 121.1028, haz: 1 },
-    ],
-    edges: [
-      { from: 'Sta. Lucia Barangay Hall', to: 'Barangay Sta. Lucia Health Center', haz: 1 },
-      { from: 'Barangay Sta. Lucia Health Center', to: 'St Jude Thaddeus, Sta. Lucia', haz: 1 },
-      { from: 'St Jude Thaddeus, Sta. Lucia', to: 'Sta. Lucia High School', haz: 2 },
-      { from: 'Sta. Lucia High School', to: 'De Castro Elementary School', haz: 2 },
-      { from: 'De Castro Elementary School', to: 'Mabuhay Subdivision', haz: 1 },
-      { from: 'Sta. Lucia Barangay Hall', to: 'Sta. Lucia High School', haz: 2 },
-      { from: 'Barangay Sta. Lucia Health Center', to: 'Mabuhay Subdivision', haz: 1 },
-    ]
-  }
-};
-
 let gMap = null;
 let selectedBarangay = null;
 let selectedHazard = 'Flood';
@@ -51,8 +7,10 @@ let simData = null;
 let isBackendLive = false;
 let mapLayers = { edges: [], nodes: [], routes: [] };
 let activeInfoWindow = null;
-let bestRouteAnimator = null;
-let movingRouteMarker = null;
+
+// all locations fetched from backend
+let ALL_LOCATIONS = [];
+let LOCATIONS_BY_BARANGAY = {};
 
 const MAP_STYLES = [
   { elementType: 'geometry', stylers: [{ color: '#0d1117' }] },
@@ -89,62 +47,105 @@ function initMap() {
     rotationControl: false,
   });
 
-  checkBackend();
+  startApp();
+}
+
+async function startApp() {
+  await checkBackend();
+
+  if (!isBackendLive) {
+    document.getElementById('statusTxt').textContent = 'Backend Offline';
+    alert('Backend is not connected. Please run Flask backend first.');
+    return;
+  }
+
+  await loadLocationsFromBackend();
 }
 
 function clearRouteAnimation() {
-  if (bestRouteAnimator) {
-    clearInterval(bestRouteAnimator);
-    bestRouteAnimator = null;
-  }
-  if (movingRouteMarker) {
-    movingRouteMarker.setMap(null);
-    movingRouteMarker = null;
-  }
+  // no movement animation
 }
 
 function clearLayers() {
   clearRouteAnimation();
   [...mapLayers.edges, ...mapLayers.nodes, ...mapLayers.routes].forEach(o => o.setMap(null));
   mapLayers = { edges: [], nodes: [], routes: [] };
+
   if (activeInfoWindow) {
     activeInfoWindow.close();
     activeInfoWindow = null;
   }
 }
 
+function inferBarangayFromName(name) {
+  const lower = String(name || '').toLowerCase();
+
+  if (lower.includes('sta. lucia') || lower.includes('sta lucia')) {
+    return 'Sta. Lucia';
+  }
+
+  return 'Pinagbuhatan';
+}
+
+function normalizeLocation(loc) {
+  return {
+    name: loc.name || loc.id || '',
+    lat: Number(loc.lat),
+    lng: Number(loc.lng),
+    barangay: loc.barangay || inferBarangayFromName(loc.name || loc.id || ''),
+    haz: typeof loc.haz === 'number' ? loc.haz : null,
+    level: loc.level || null
+  };
+}
+
+function groupLocationsByBarangay(locations) {
+  const grouped = {};
+
+  locations.forEach(loc => {
+    const bgy = loc.barangay || 'Unknown';
+    if (!grouped[bgy]) grouped[bgy] = [];
+    grouped[bgy].push(loc);
+  });
+
+  return grouped;
+}
+
+async function loadLocationsFromBackend() {
+  try {
+    const res = await fetch(BACKEND + '/locations');
+    const data = await res.json();
+
+    if (data.error) {
+      throw new Error(data.message || 'Failed to load locations');
+    }
+
+    ALL_LOCATIONS = (data.locations || []).map(normalizeLocation);
+    LOCATIONS_BY_BARANGAY = groupLocationsByBarangay(ALL_LOCATIONS);
+
+    document.getElementById('statusTxt').textContent = 'Locations Loaded';
+  } catch (err) {
+    console.error(err);
+    document.getElementById('statusTxt').textContent = 'Error Loading Locations';
+    alert('Failed to load locations from backend: ' + err.message);
+  }
+}
+
+function getBarangayLocations(barangay) {
+  return LOCATIONS_BY_BARANGAY[barangay] || [];
+}
+
+function getLocationByName(name) {
+  return ALL_LOCATIONS.find(loc => loc.name === name) || null;
+}
+
 function nodeColor(haz, id, start, end) {
   if (id === start) return '#a855f7';
   if (id === end) return '#06b6d4';
+
+  if (haz == null) return '#22c55e';
   if (haz <= 2) return '#22c55e';
   if (haz === 3) return '#eab308';
   return '#ef4444';
-}
-
-function interpolatePoints(a, b, steps = 14) {
-  const points = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    points.push({
-      lat: a.lat + (b.lat - a.lat) * t,
-      lng: a.lng + (b.lng - a.lng) * t
-    });
-  }
-  return points;
-}
-
-function buildSmoothPath(pathIds, data) {
-  const pts = [];
-  for (let i = 0; i < pathIds.length - 1; i++) {
-    const a = data.nodes.find(n => n.id === pathIds[i]);
-    const b = data.nodes.find(n => n.id === pathIds[i + 1]);
-    if (!a || !b) continue;
-
-    const segment = interpolatePoints(a, b, 14);
-    if (pts.length > 0) segment.shift();
-    pts.push(...segment);
-  }
-  return pts;
 }
 
 function shortNodeLabel(name) {
@@ -154,30 +155,39 @@ function shortNodeLabel(name) {
 function infoPopup(title, rows) {
   return `<div style="padding:10px 2px 4px;">
     <div class="popup-title">${title}</div>
-    ${rows.map(([k,v,c])=>`<div class="popup-row"><span>${k}</span><span style="${c ? 'color:'+c : ''}">${v}</span></div>`).join('')}
+    ${rows.map(([k, v, c]) => `<div class="popup-row"><span>${k}</span><span style="${c ? 'color:' + c : ''}">${v}</span></div>`).join('')}
   </div>`;
+}
+
+function fitMapToLocations(locations, padding = 60) {
+  if (!locations.length) return;
+
+  const bounds = new google.maps.LatLngBounds();
+  locations.forEach(loc => bounds.extend({ lat: loc.lat, lng: loc.lng }));
+  gMap.fitBounds(bounds, padding);
 }
 
 function loadBarangayMapOnly(bgyName) {
   clearLayers();
 
-  const data = BARANGAY_DATA[bgyName];
+  const nodes = getBarangayLocations(bgyName);
 
   document.getElementById('mapLegend').style.display = 'none';
   document.getElementById('mapInfoBadge').style.display = 'none';
 
-  gMap.panTo(data.center);
-  setTimeout(() => gMap.setZoom(data.zoom), 150);
+  if (nodes.length) {
+    fitMapToLocations(nodes, 70);
+  }
 }
 
 function drawNode(n, start, end) {
-  const col = nodeColor(n.haz, n.id, start, end);
-  const special = n.id === start || n.id === end;
+  const col = nodeColor(n.haz, n.name, start, end);
+  const special = n.name === start || n.name === end;
 
   const marker = new google.maps.Marker({
     position: { lat: n.lat, lng: n.lng },
     map: gMap,
-    title: n.id,
+    title: n.name,
     zIndex: 10,
     icon: {
       path: google.maps.SymbolPath.CIRCLE,
@@ -188,18 +198,20 @@ function drawNode(n, start, end) {
       strokeWeight: 2,
     },
     label: {
-      text: shortNodeLabel(n.id),
+      text: shortNodeLabel(n.name),
       color: '#c8d8ee',
       fontSize: '9px',
       fontFamily: 'DM Mono, monospace',
     }
   });
 
+  const hazardText = n.haz == null ? 'N/A' : `${n.haz} / 5`;
+
   const iw = new google.maps.InfoWindow({
-    content: infoPopup('📍 ' + n.id, [
-      ['Role', n.id === start ? '🟣 START' : n.id === end ? '🔵 END' : 'Node'],
-      ['Flood Hazard', n.haz + ' / 5', col],
-      ['Barangay', selectedBarangay],
+    content: infoPopup('📍 ' + n.name, [
+      ['Role', n.name === start ? '🟣 START' : n.name === end ? '🔵 END' : 'Node'],
+      ['Flood Hazard', hazardText, col],
+      ['Barangay', n.barangay || selectedBarangay || 'N/A'],
     ])
   });
 
@@ -218,17 +230,18 @@ function drawSelectedPinsOnly(start, end) {
 
   if (!selectedBarangay) return;
 
-  const data = BARANGAY_DATA[selectedBarangay];
+  const nodes = getBarangayLocations(selectedBarangay);
 
-  data.nodes.forEach(n => {
-    if (n.id !== start && n.id !== end) return;
+  nodes.forEach(n => {
+    if (n.name !== start && n.name !== end) return;
 
-    const col = nodeColor(n.haz, n.id, start, end);
+    const col = nodeColor(n.haz, n.name, start, end);
+    const hazardText = n.haz == null ? 'N/A' : `${n.haz} / 5`;
 
     const marker = new google.maps.Marker({
       position: { lat: n.lat, lng: n.lng },
       map: gMap,
-      title: n.id,
+      title: n.name,
       zIndex: 20,
       icon: {
         path: google.maps.SymbolPath.CIRCLE,
@@ -239,7 +252,7 @@ function drawSelectedPinsOnly(start, end) {
         strokeWeight: 2,
       },
       label: {
-        text: n.id === start ? 'S' : 'E',
+        text: n.name === start ? 'S' : 'E',
         color: '#ffffff',
         fontSize: '10px',
         fontFamily: 'DM Mono, monospace',
@@ -248,10 +261,10 @@ function drawSelectedPinsOnly(start, end) {
     });
 
     const iw = new google.maps.InfoWindow({
-      content: infoPopup('📍 ' + n.id, [
-        ['Role', n.id === start ? '🟣 START' : '🔵 END'],
-        ['Flood Hazard', n.haz + ' / 5', col],
-        ['Barangay', selectedBarangay],
+      content: infoPopup('📍 ' + n.name, [
+        ['Role', n.name === start ? '🟣 START' : '🔵 END'],
+        ['Flood Hazard', hazardText, col],
+        ['Barangay', n.barangay || selectedBarangay || 'N/A'],
       ])
     });
 
@@ -267,60 +280,28 @@ function drawSelectedPinsOnly(start, end) {
 
 function redrawNodes(start, end) {
   if (!selectedBarangay) return;
+
   mapLayers.nodes.forEach(m => m.setMap(null));
   mapLayers.nodes = [];
-  BARANGAY_DATA[selectedBarangay].nodes.forEach(n => drawNode(n, start, end));
+
+  getBarangayLocations(selectedBarangay).forEach(n => drawNode(n, start, end));
 }
 
-function animateBestRoute(polyline) {
-  clearRouteAnimation();
+function getRoutePoints(route) {
+  if (Array.isArray(route.path_coordinates) && route.path_coordinates.length) {
+    return route.path_coordinates
+      .filter(p => p && p.lat != null && p.lng != null)
+      .map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+  }
 
-  const path = polyline.getPath();
-  if (!path || path.getLength() < 2) return;
+  if (Array.isArray(route.path) && route.path.length) {
+    return route.path
+      .map(name => getLocationByName(name))
+      .filter(Boolean)
+      .map(loc => ({ lat: loc.lat, lng: loc.lng }));
+  }
 
-  let arrowOffset = 0;
-  let markerIndex = 0;
-
-  const icons = [{
-    icon: {
-      path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-      scale: 4,
-      strokeColor: '#ffffff',
-      strokeWeight: 2,
-      fillColor: '#22c55e',
-      fillOpacity: 1
-    },
-    offset: '0%'
-  }];
-
-  polyline.set('icons', icons);
-
-  movingRouteMarker = new google.maps.Marker({
-    position: path.getAt(0),
-    map: gMap,
-    zIndex: 999,
-    icon: {
-      url: "assets/ant.png",
-      scaledSize: new google.maps.Size(40, 40),
-      anchor: new google.maps.Point(20, 20)
-    }
-  });
-
-  bestRouteAnimator = setInterval(() => {
-    arrowOffset = (arrowOffset + 1) % 200;
-
-    const updatedIcons = polyline.get('icons');
-    updatedIcons[0].offset = (arrowOffset / 2) + '%';
-    polyline.set('icons', updatedIcons);
-
-    markerIndex = (markerIndex + 1) % path.getLength();
-    const nextPos = path.getAt(markerIndex);
-    movingRouteMarker.setPosition(nextPos);
-
-    if (markerIndex % 4 === 0) {
-      gMap.panTo(nextPos);
-    }
-  }, 220);
+  return [];
 }
 
 function drawResults(result, start, end) {
@@ -328,17 +309,16 @@ function drawResults(result, start, end) {
   mapLayers.routes.forEach(l => l.setMap(null));
   mapLayers.routes = [];
 
-  const data = BARANGAY_DATA[selectedBarangay];
   const CFG = {
     best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 6 },
     available: { color: '#f59e0b', weight: 4, opacity: 0.8, zIndex: 3 },
     eliminated: { color: '#ef4444', weight: 2.5, opacity: 0.30, zIndex: 1 },
   };
 
-  [...result.routes].reverse().forEach(route => {
+  [...(result.routes || [])].reverse().forEach(route => {
     const cfg = CFG[route.category] || CFG.eliminated;
-    const path = route.path;
-    const pts = buildSmoothPath(path, data);
+    const pts = getRoutePoints(route);
+
     if (!pts.length) return;
 
     if (route.category === 'best') {
@@ -363,19 +343,12 @@ function drawResults(result, start, end) {
       }));
     }
 
-    const icons = route.category === 'available'
-      ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
-      : route.category === 'eliminated'
-      ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: .5, scale: 2 }, offset: '0', repeat: '8px' }]
-      : [];
-
     const poly = new google.maps.Polyline({
       path: pts,
       geodesic: true,
       strokeColor: cfg.color,
       strokeOpacity: cfg.opacity,
       strokeWeight: cfg.weight,
-      icons,
       map: gMap,
       zIndex: cfg.zIndex,
     });
@@ -392,8 +365,8 @@ function drawResults(result, start, end) {
         content: infoPopup(label, [
           ['Distance', route.distance + ' km'],
           ['Max Hazard', route.max_hazard + '/5', cfg.color],
-          ['Segments', route.path.length - 1],
-          ['Path', route.path.map(shortNodeLabel).join(' → ')],
+          ['Segments', Array.isArray(route.path) ? route.path.length - 1 : 'N/A'],
+          ['Path', Array.isArray(route.path) ? route.path.map(shortNodeLabel).join(' → ') : 'N/A'],
         ]),
         position: ev.latLng,
       });
@@ -401,24 +374,19 @@ function drawResults(result, start, end) {
     });
 
     mapLayers.routes.push(poly);
-
-    if (route.category === 'best') {
-      animateBestRoute(poly);
-    }
   });
 
   redrawNodes(start, end);
-
   document.getElementById('mapLegend').style.display = 'block';
 
-  const best = result.routes.find(r => r.category === 'best');
-  if (best && best.path.length >= 2) {
-    const bounds = new google.maps.LatLngBounds();
-    best.path.forEach(id => {
-      const n = data.nodes.find(x => x.id === id);
-      if (n) bounds.extend({ lat: n.lat, lng: n.lng });
-    });
-    gMap.fitBounds(bounds, 60);
+  const best = (result.routes || []).find(r => r.category === 'best');
+  if (best) {
+    const bestPts = getRoutePoints(best);
+    if (bestPts.length) {
+      const bounds = new google.maps.LatLngBounds();
+      bestPts.forEach(p => bounds.extend(p));
+      gMap.fitBounds(bounds, 60);
+    }
   }
 }
 
@@ -426,29 +394,46 @@ function selectBarangay(name) {
   selectedBarangay = name;
 
   document.querySelectorAll('.bgy-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById(name === 'Pinagbuhatan' ? 'bgyPbtn' : 'bgyStaBtn').classList.add('selected');
 
-  const locs = BARANGAY_DATA[name].nodes.map(n => n.id);
+  const pinBtn = document.getElementById('bgyPbtn');
+  const staBtn = document.getElementById('bgyStaBtn');
+
+  if (name === 'Pinagbuhatan' && pinBtn) pinBtn.classList.add('selected');
+  if (name === 'Sta. Lucia' && staBtn) staBtn.classList.add('selected');
+
+  const nodes = getBarangayLocations(name);
+  const locs = nodes.map(n => n.name);
+
   const startSel = document.getElementById('startSel');
   const endSel = document.getElementById('endSel');
 
   function populate(sel, exclude) {
     const kept = sel.value !== exclude ? sel.value : '';
     sel.innerHTML = '<option value="">— Select node —</option>';
+
     locs.forEach(l => {
       if (l === exclude) return;
       sel.innerHTML += `<option value="${l}" ${l === kept ? 'selected' : ''}>${l}</option>`;
     });
+
     sel.value = kept;
   }
 
   populate(startSel, null);
   populate(endSel, null);
+
   startSel.disabled = false;
   endSel.disabled = false;
 
-  startSel.onchange = () => { populate(endSel, startSel.value); onNodeChange(); };
-  endSel.onchange = () => { populate(startSel, endSel.value); onNodeChange(); };
+  startSel.onchange = () => {
+    populate(endSel, startSel.value);
+    onNodeChange();
+  };
+
+  endSel.onchange = () => {
+    populate(startSel, endSel.value);
+    onNodeChange();
+  };
 
   document.getElementById('emptyMap').style.display = 'none';
 
@@ -506,7 +491,12 @@ function advanceStep(n) {
 async function runSimulation() {
   const start = document.getElementById('startSel').value;
   const end = document.getElementById('endSel').value;
+
   if (!start || !end || start === end) return;
+  if (!isBackendLive) {
+    alert('Backend is not connected.');
+    return;
+  }
 
   clearRouteAnimation();
 
@@ -516,11 +506,10 @@ async function runSimulation() {
   document.getElementById('statusTxt').textContent = 'Simulating…';
 
   const msgs = [
-    'Initializing ant colony…',
-    'Evaluating flood hazard levels…',
+    'Fetching graph from database…',
+    'Evaluating route options…',
     'Applying lexicographic safety-first rule…',
-    'Reinforcing pheromone trails…',
-    'Converging on optimal route…',
+    'Ranking candidate routes…',
     'Classifying results…'
   ];
 
@@ -534,18 +523,16 @@ async function runSimulation() {
   document.getElementById('loaderBar').style.animation = 'load 2.5s ease-in-out forwards';
 
   try {
-    let result;
+    const res = await fetch(BACKEND + '/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start, end, hazard: selectedHazard })
+    });
 
-    if (isBackendLive) {
-      const res = await fetch(BACKEND + '/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start, end, hazard_type: selectedHazard })
-      });
-      result = await res.json();
-    } else {
-      await new Promise(r => setTimeout(r, 2600));
-      result = getMockData(start, end);
+    const result = await res.json();
+
+    if (!res.ok || result.error === true) {
+      throw new Error(result.message || result.error || 'Simulation failed');
     }
 
     simData = result;
@@ -558,8 +545,8 @@ async function runSimulation() {
     showResultsPanel(result);
     document.getElementById('resetBtn').classList.add('show');
 
-    const best = result.routes.find(r => r.category === 'best');
-    const safeCount = result.routes.filter(r => r.category !== 'eliminated').length;
+    const best = (result.routes || []).find(r => r.category === 'best');
+    const safeCount = (result.routes || []).filter(r => r.category !== 'eliminated').length;
 
     document.getElementById('mapInfoBadge').style.display = 'block';
     document.getElementById('mapInfoContent').innerHTML = `
@@ -570,11 +557,12 @@ async function runSimulation() {
         Best: <span style="color:var(--green)">${best ? best.distance + ' km' : 'N/A'}</span><br>
         Safe routes: <span style="color:var(--text)">${safeCount}</span>
       </div>`;
-  } catch(err) {
+  } catch (err) {
     clearInterval(msgTimer);
     loader.classList.remove('show');
     document.getElementById('statusTxt').textContent = 'Error';
     alert('Simulation failed: ' + err.message);
+  } finally {
     document.getElementById('runBtn').disabled = false;
   }
 }
@@ -583,9 +571,10 @@ function showResultsPanel(result) {
   document.getElementById('resultsPanel').classList.add('show', 'fade-in');
   document.getElementById('resultsActions').classList.add('show');
 
-  const safe = result.routes.filter(r => r.category !== 'eliminated');
-  const elim = result.routes.filter(r => r.category === 'eliminated');
-  const best = result.routes.find(r => r.category === 'best');
+  const routes = result.routes || [];
+  const safe = routes.filter(r => r.category !== 'eliminated');
+  const elim = routes.filter(r => r.category === 'eliminated');
+  const best = routes.find(r => r.category === 'best');
 
   document.getElementById('tab-safe').innerHTML = buildTable(safe);
   document.getElementById('tab-elim').innerHTML = elim.length
@@ -594,7 +583,7 @@ function showResultsPanel(result) {
 
   document.getElementById('tab-summary').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:4px 0;">
-      ${statBox('Total Routes', result.routes.length, 'var(--text)')}
+      ${statBox('Total Routes', routes.length, 'var(--text)')}
       ${statBox('Safe Routes', safe.length, 'var(--green)')}
       ${statBox('Eliminated', elim.length, 'var(--red)')}
       ${statBox('Best Dist.', best ? best.distance + ' km' : 'N/A', 'var(--accent)')}
@@ -620,16 +609,16 @@ function buildTable(routes) {
   }
 
   const rows = routes.map((r, i) => {
-    const pips = [1,2,3,4,5].map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`).join('');
-    const pathShort = r.path.map(shortNodeLabel).join(' → ');
+    const pips = [1, 2, 3, 4, 5].map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`).join('');
+    const pathShort = Array.isArray(r.path) ? r.path.map(shortNodeLabel).join(' → ') : 'N/A';
 
     return `<tr>
       <td>${i + 1}</td>
       <td><span class="badge badge-${r.category}">${r.category}</span></td>
       <td>${r.distance} km</td>
       <td><div class="hlevel">${pips}</div> <span style="font-size:.6rem;color:var(--muted);margin-left:3px;">${r.max_hazard}/5</span></td>
-      <td>${r.path.length - 1}</td>
-      <td><div class="path-txt" title="${r.path.join(' → ')}">${pathShort}</div></td>
+      <td>${Array.isArray(r.path) ? r.path.length - 1 : 'N/A'}</td>
+      <td><div class="path-txt" title="${Array.isArray(r.path) ? r.path.join(' → ') : ''}">${pathShort}</div></td>
     </tr>`;
   }).join('');
 
@@ -649,13 +638,22 @@ function switchTab(name, el) {
 function downloadCSV() {
   if (!simData) return;
 
-  const rows = [['Route','Category','Distance (km)','Max Hazard','Segments','Path']];
-  simData.routes.forEach((r, i) => rows.push([i + 1, r.category, r.distance, r.max_hazard, r.path.length - 1, r.path.join(' -> ')]));
+  const rows = [['Route', 'Category', 'Distance (km)', 'Max Hazard', 'Segments', 'Path']];
+  (simData.routes || []).forEach((r, i) => {
+    rows.push([
+      i + 1,
+      r.category,
+      r.distance,
+      r.max_hazard,
+      Array.isArray(r.path) ? r.path.length - 1 : '',
+      Array.isArray(r.path) ? r.path.join(' -> ') : ''
+    ]);
+  });
 
   const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = `safe_routes_${selectedBarangay}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `safe_routes_${selectedBarangay || 'barangay'}_${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
 }
 
@@ -664,7 +662,7 @@ function resetAll() {
   selectedBarangay = null;
   clearLayers();
 
-  ['startSel','endSel'].forEach(id => {
+  ['startSel', 'endSel'].forEach(id => {
     document.getElementById(id).innerHTML = '<option value="">— Select barangay first —</option>';
     document.getElementById(id).disabled = true;
     document.getElementById(id).value = '';
@@ -707,98 +705,7 @@ async function checkBackend() {
       b.style.color = 'var(--green)';
       document.getElementById('statusTxt').textContent = 'Backend Connected';
     }
-  } catch {}
-}
-
-function getNeighbors(barangayName, nodeId) {
-  const data = BARANGAY_DATA[barangayName];
-  const neighbors = [];
-
-  data.edges.forEach(e => {
-    if (e.from === nodeId) neighbors.push(e.to);
-    if (e.to === nodeId) neighbors.push(e.from);
-  });
-
-  return [...new Set(neighbors)];
-}
-
-function bfsPath(barangayName, start, end) {
-  if (start === end) return [start];
-
-  const queue = [[start]];
-  const visited = new Set([start]);
-
-  while (queue.length) {
-    const path = queue.shift();
-    const last = path[path.length - 1];
-
-    const neighbors = getNeighbors(barangayName, last);
-    for (const next of neighbors) {
-      if (visited.has(next)) continue;
-
-      const newPath = [...path, next];
-      if (next === end) return newPath;
-
-      visited.add(next);
-      queue.push(newPath);
-    }
+  } catch (err) {
+    isBackendLive = false;
   }
-
-  return [start, end];
-}
-
-function getPathMaxHazard(barangayName, path) {
-  const data = BARANGAY_DATA[barangayName];
-  let maxHaz = 0;
-
-  for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i];
-    const b = path[i + 1];
-    const edge = data.edges.find(e =>
-      (e.from === a && e.to === b) || (e.from === b && e.to === a)
-    );
-    if (edge) maxHaz = Math.max(maxHaz, edge.haz);
-  }
-
-  return maxHaz;
-}
-
-function getMockData(start, end) {
-  const bestPath = bfsPath(selectedBarangay, start, end);
-
-  const data = BARANGAY_DATA[selectedBarangay];
-  const altMid = data.nodes.find(n => n.id !== start && n.id !== end && !bestPath.includes(n.id));
-  const altPath = altMid ? [start, altMid.id, end] : [...bestPath];
-
-  const bestHaz = Math.min(getPathMaxHazard(selectedBarangay, bestPath) || 2, 2);
-  const altHaz = Math.max(3, Math.min(getPathMaxHazard(selectedBarangay, altPath) || 3, 3));
-
-  return {
-    start,
-    end,
-    hazard_type: selectedHazard,
-    routes: [
-      {
-        path: bestPath,
-        distance: (1 + (bestPath.length - 1) * 0.35).toFixed(1),
-        max_hazard: bestHaz,
-        total_hazard: bestHaz * (bestPath.length - 1),
-        category: 'best'
-      },
-      {
-        path: altPath,
-        distance: (1.2 + (altPath.length - 1) * 0.4).toFixed(1),
-        max_hazard: altHaz,
-        total_hazard: altHaz * (altPath.length - 1),
-        category: 'available'
-      },
-      {
-        path: bestPath,
-        distance: (1.1 + (bestPath.length - 1) * 0.38).toFixed(1),
-        max_hazard: 5,
-        total_hazard: 10,
-        category: 'eliminated'
-      }
-    ]
-  };
 }
