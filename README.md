@@ -81,4 +81,4 @@ Gaces, Winrock,
 Globiogo, Jefferson, T.
 Nunez, Jessa, S.
 
-Undergraduate thesis project in Information Technology
+Undergraduate thesis project in Computer Science
