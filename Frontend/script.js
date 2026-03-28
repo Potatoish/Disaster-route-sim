@@ -1,4 +1,4 @@
-const BACKEND = 'http://localhost:5000';
+const BACKEND = 'http://127.0.0.1:5000';
 
 let gMap = null;
 let selectedBarangay = null;
@@ -8,7 +8,6 @@ let isBackendLive = false;
 let mapLayers = { edges: [], nodes: [], routes: [] };
 let activeInfoWindow = null;
 
-// all locations fetched from backend
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
 
