@@ -7,6 +7,7 @@ let simData = null;
 let isBackendLive = false;
 let mapLayers = { edges: [], nodes: [], routes: [] };
 let activeInfoWindow = null;
+const activeInfoWindowRef = { current: null };
 
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
@@ -54,16 +55,14 @@ async function startApp() {
 
   if (!isBackendLive) {
     document.getElementById('statusTxt').textContent = 'Backend Offline';
-    alert('Backend is not connected. Please run Flask backend first.');
+    alert('Backend is not connected. Run the Flask backend first.');
     return;
   }
 
   await loadLocationsFromBackend();
 }
 
-function clearRouteAnimation() {
-  // no movement animation
-}
+function clearRouteAnimation() {}
 
 function clearLayers() {
   clearRouteAnimation();
@@ -74,26 +73,20 @@ function clearLayers() {
     activeInfoWindow.close();
     activeInfoWindow = null;
   }
-}
-
-function inferBarangayFromName(name) {
-  const lower = String(name || '').toLowerCase();
-
-  if (lower.includes('sta. lucia') || lower.includes('sta lucia')) {
-    return 'Sta. Lucia';
+  if (activeInfoWindowRef.current) {
+    activeInfoWindowRef.current.close();
+    activeInfoWindowRef.current = null;
   }
-
-  return 'Pinagbuhatan';
 }
 
 function normalizeLocation(loc) {
   return {
-    name: loc.name || loc.id || '',
+    name: loc.name || '',
     lat: Number(loc.lat),
     lng: Number(loc.lng),
-    barangay: loc.barangay || inferBarangayFromName(loc.name || loc.id || ''),
+    barangay: loc.barangay || 'Unknown',
     haz: typeof loc.haz === 'number' ? loc.haz : null,
-    level: loc.level || null
+    level: loc.level || 'safe'
   };
 }
 
@@ -140,7 +133,6 @@ function getLocationByName(name) {
 function nodeColor(haz, id, start, end) {
   if (id === start) return '#a855f7';
   if (id === end) return '#06b6d4';
-
   if (haz == null) return '#22c55e';
   if (haz <= 2) return '#22c55e';
   if (haz === 3) return '#eab308';
@@ -286,109 +278,6 @@ function redrawNodes(start, end) {
   getBarangayLocations(selectedBarangay).forEach(n => drawNode(n, start, end));
 }
 
-function getRoutePoints(route) {
-  if (Array.isArray(route.path_coordinates) && route.path_coordinates.length) {
-    return route.path_coordinates
-      .filter(p => p && p.lat != null && p.lng != null)
-      .map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }));
-  }
-
-  if (Array.isArray(route.path) && route.path.length) {
-    return route.path
-      .map(name => getLocationByName(name))
-      .filter(Boolean)
-      .map(loc => ({ lat: loc.lat, lng: loc.lng }));
-  }
-
-  return [];
-}
-
-function drawResults(result, start, end) {
-  clearRouteAnimation();
-  mapLayers.routes.forEach(l => l.setMap(null));
-  mapLayers.routes = [];
-
-  const CFG = {
-    best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 6 },
-    available: { color: '#f59e0b', weight: 4, opacity: 0.8, zIndex: 3 },
-    eliminated: { color: '#ef4444', weight: 2.5, opacity: 0.30, zIndex: 1 },
-  };
-
-  [...(result.routes || [])].reverse().forEach(route => {
-    const cfg = CFG[route.category] || CFG.eliminated;
-    const pts = getRoutePoints(route);
-
-    if (!pts.length) return;
-
-    if (route.category === 'best') {
-      mapLayers.routes.push(new google.maps.Polyline({
-        path: pts,
-        geodesic: true,
-        strokeColor: '#22c55e',
-        strokeOpacity: 0.08,
-        strokeWeight: 24,
-        map: gMap,
-        zIndex: 0,
-      }));
-
-      mapLayers.routes.push(new google.maps.Polyline({
-        path: pts,
-        geodesic: true,
-        strokeColor: '#86efac',
-        strokeOpacity: 0.16,
-        strokeWeight: 14,
-        map: gMap,
-        zIndex: 1,
-      }));
-    }
-
-    const poly = new google.maps.Polyline({
-      path: pts,
-      geodesic: true,
-      strokeColor: cfg.color,
-      strokeOpacity: cfg.opacity,
-      strokeWeight: cfg.weight,
-      map: gMap,
-      zIndex: cfg.zIndex,
-    });
-
-    const label = route.category === 'best'
-      ? '🏆 Best Route'
-      : route.category === 'available'
-      ? '✅ Available Route'
-      : '❌ Eliminated';
-
-    poly.addListener('click', ev => {
-      if (activeInfoWindow) activeInfoWindow.close();
-      activeInfoWindow = new google.maps.InfoWindow({
-        content: infoPopup(label, [
-          ['Distance', route.distance + ' km'],
-          ['Max Hazard', route.max_hazard + '/5', cfg.color],
-          ['Segments', Array.isArray(route.path) ? route.path.length - 1 : 'N/A'],
-          ['Path', Array.isArray(route.path) ? route.path.map(shortNodeLabel).join(' → ') : 'N/A'],
-        ]),
-        position: ev.latLng,
-      });
-      activeInfoWindow.open(gMap);
-    });
-
-    mapLayers.routes.push(poly);
-  });
-
-  redrawNodes(start, end);
-  document.getElementById('mapLegend').style.display = 'block';
-
-  const best = (result.routes || []).find(r => r.category === 'best');
-  if (best) {
-    const bestPts = getRoutePoints(best);
-    if (bestPts.length) {
-      const bounds = new google.maps.LatLngBounds();
-      bestPts.forEach(p => bounds.extend(p));
-      gMap.fitBounds(bounds, 60);
-    }
-  }
-}
-
 function selectBarangay(name) {
   selectedBarangay = name;
 
@@ -497,29 +386,36 @@ async function runSimulation() {
     return;
   }
 
-  clearRouteAnimation();
-
   const loader = document.getElementById('loader');
+  const loaderSub = document.getElementById('loaderSub');
+  const loaderBar = document.getElementById('loaderBar');
+  const runBtn = document.getElementById('runBtn');
+  const statusTxt = document.getElementById('statusTxt');
+
   loader.classList.add('show');
-  document.getElementById('runBtn').disabled = true;
-  document.getElementById('statusTxt').textContent = 'Simulating…';
+  runBtn.disabled = true;
+  statusTxt.textContent = 'Simulating…';
 
   const msgs = [
     'Fetching graph from database…',
     'Evaluating route options…',
     'Applying lexicographic safety-first rule…',
-    'Ranking candidate routes…',
+    'Rendering route overlay…',
     'Classifying results…'
   ];
 
   let mi = 0;
   const msgTimer = setInterval(() => {
-    document.getElementById('loaderSub').textContent = msgs[Math.min(mi++, msgs.length - 1)];
+    if (loaderSub) {
+      loaderSub.textContent = msgs[Math.min(mi++, msgs.length - 1)];
+    }
   }, 420);
 
-  document.getElementById('loaderBar').style.animation = 'none';
-  void document.getElementById('loaderBar').offsetWidth;
-  document.getElementById('loaderBar').style.animation = 'load 2.5s ease-in-out forwards';
+  if (loaderBar) {
+    loaderBar.style.animation = 'none';
+    void loaderBar.offsetWidth;
+    loaderBar.style.animation = 'load 2.5s ease-in-out forwards';
+  }
 
   try {
     const res = await fetch(BACKEND + '/simulate', {
@@ -534,18 +430,28 @@ async function runSimulation() {
       throw new Error(result.message || result.error || 'Simulation failed');
     }
 
+    const routes = normalizeRoutes(result.routes || []);
+    result.routes = routes;
     simData = result;
 
-    clearInterval(msgTimer);
-    loader.classList.remove('show');
-    document.getElementById('statusTxt').textContent = 'Simulation Complete';
+    await renderRoutesOnRoads({
+      routes,
+      gMap,
+      mapLayers,
+      getLocationByName,
+      redrawNodes,
+      start,
+      end,
+      infoPopup,
+      shortNodeLabel,
+      activeInfoWindowRef
+    });
 
-    drawResults(result, start, end);
     showResultsPanel(result);
     document.getElementById('resetBtn').classList.add('show');
 
-    const best = (result.routes || []).find(r => r.category === 'best');
-    const safeCount = (result.routes || []).filter(r => r.category !== 'eliminated').length;
+    const best = routes.find(r => r.category === 'best');
+    const safeCount = routes.filter(r => r.category !== 'eliminated').length;
 
     document.getElementById('mapInfoBadge').style.display = 'block';
     document.getElementById('mapInfoContent').innerHTML = `
@@ -556,13 +462,16 @@ async function runSimulation() {
         Best: <span style="color:var(--green)">${best ? best.distance + ' km' : 'N/A'}</span><br>
         Safe routes: <span style="color:var(--text)">${safeCount}</span>
       </div>`;
+
+    statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
-    clearInterval(msgTimer);
-    loader.classList.remove('show');
-    document.getElementById('statusTxt').textContent = 'Error';
+    console.error(err);
+    statusTxt.textContent = 'Error';
     alert('Simulation failed: ' + err.message);
   } finally {
-    document.getElementById('runBtn').disabled = false;
+    clearInterval(msgTimer);
+    loader.classList.remove('show');
+    runBtn.disabled = false;
   }
 }
 
