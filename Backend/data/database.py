@@ -8,10 +8,8 @@ CONNECTION_STRING = (
     "TrustServerCertificate=yes;"
 )
 
-
 def get_connection():
     return pyodbc.connect(CONNECTION_STRING)
-
 
 def get_graph_data():
     """Fetch nodes and edges from SQL Server."""
