@@ -12,12 +12,24 @@ const activeInfoWindowRef = { current: null };
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
 
-const MAP_STYLES = [
-  { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#333333' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9e6ff' }] },
+const MAP_STYLES_LIGHT = [
+  { elementType: 'geometry', stylers: [{ color: '#d8e0eb' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#2d3748' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#d8e0eb' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#c2cdd9' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#b0bcc9' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#a8c4e0' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#cdd5e0' }] },
+];
+
+const MAP_STYLES_DARK = [
+  { elementType: 'geometry', stylers: [{ color: '#1a1f2e' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8899aa' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1f2e' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a3244' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
 ];
 
@@ -28,13 +40,13 @@ function initTheme() {
 }
 
 function toggleTheme() {
-  const body = document.body;
-  body.classList.toggle('dark');
+  document.body.classList.toggle('dark');
+  const isDark = document.body.classList.contains('dark');
 
   const btn = document.querySelector('.theme-toggle');
-  if (btn) {
-    btn.textContent = body.classList.contains('dark') ? '☀️' : '🌙';
-  }
+  if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+
+  if (gMap) gMap.setOptions({ styles: isDark ? MAP_STYLES_DARK : MAP_STYLES_LIGHT });
 }
 
 function initMap() {
@@ -44,7 +56,7 @@ function initMap() {
     tilt: 0,
     heading: 0,
     mapTypeId: google.maps.MapTypeId.ROADMAP,
-    styles: MAP_STYLES,
+    styles: document.body.classList.contains('dark') ? MAP_STYLES_DARK : MAP_STYLES_LIGHT,
     mapTypeControl: true,
     mapTypeControlOptions: {
       style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
