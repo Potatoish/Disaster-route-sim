@@ -1,10 +1,10 @@
 :root {
-  /* SOFT LIGHT MODE */
-  --bg:      #eef2f7;     
-  --surface: #f8fafc;     
-  --panel:   #ffffff;     
-  --border:  #dbe2ea;
-  --border2: #c7d0da;
+  /* MUTED LIGHT MODE */
+  --bg:      #d9e1ec;
+  --surface: #e4eaf3;
+  --panel:   #edf1f8;
+  --border:  #b8c4d4;
+  --border2: #a3b1c4;
 
   --accent:  #2563eb;
   --accent2: #3b82f6;
@@ -14,8 +14,8 @@
   --red:     #dc2626;
 
   --text:    #0f172a;
-  --muted:   #64748b;
-  --dim:     #94a3b8;
+  --muted:   #4a5e75;
+  --dim:     #7a8fa6;
 
   --flood:   #3b82f6;
 }
