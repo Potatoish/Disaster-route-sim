@@ -126,6 +126,7 @@ def classify_routes(routes):
 
 def get_locations():
     G = create_graph()
+    hazards = database.get_hazard_data()
 
     return [
         {
@@ -133,11 +134,10 @@ def get_locations():
             "lat": G.nodes[node]["lat"],
             "lng": G.nodes[node]["lng"],
             "barangay": G.nodes[node].get("barangay", ""),
-            "haz": hazards.get(G.nodes[node]["id"], None)
+            "haz": hazards.get(G.nodes[node].get("id"), None)
         }
         for node in G.nodes()
     ]
-
 
 def simulate(start, end, hazard_type="Flood"):
     G = create_graph()
