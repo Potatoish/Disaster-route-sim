@@ -49,3 +49,15 @@ if __name__ == "__main__":
         for node in my_nodes:
             # node[1] is the name column
             print(f" - {node[1]}")
+            
+def get_hazard_data():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT node_id, hazard_level FROM flood_hazard")
+        hazards = cursor.fetchall()
+        conn.close()
+        return {row[0]: row[1] for row in hazards}  # {node_id: hazard_level}
+    except Exception as e:
+        print("Hazard fetch error:", e)
+        return {}

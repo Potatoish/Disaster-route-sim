@@ -10,8 +10,8 @@ HAZARD_THRESHOLD = 3
 def create_graph():
     G = nx.Graph()
     nodes, edges = database.get_graph_data()
+    hazards = database.get_hazard_data()  # ← dagdag
 
-    # nodes: (id, name, lat, lng)
     for node in nodes:
         G.add_node(
             node[1],
@@ -21,19 +21,16 @@ def create_graph():
             barangay=infer_barangay(node[1])
         )
 
-    # edges: (source_name, target_name, distance_km)
     for edge in edges:
         source = edge[0]
         target = edge[1]
         distance = float(edge[2])
 
-        # temporary placeholder hazard
-        G.add_edge(
-            source,
-            target,
-            distance=distance,
-            hazard=1
-        )
+        # get hazard from source node id
+        source_node = next((n for n in nodes if n[1] == source), None)
+        hazard = hazards.get(source_node[0], 1) if source_node else 1  # ← actual hazard na
+
+        G.add_edge(source, target, distance=distance, hazard=hazard)
 
     return G
 
@@ -96,7 +93,11 @@ def find_routes(G, start, end, cutoff=6, max_candidates=20):
 
     routes = list(unique.values())
 
-    routes.sort(key=lambda x: x["distance"])
+    routes.sort(key=lambda x: (
+        x["max_hazard"],
+        x["total_hazard"],
+        x["distance"]
+    ))
 
     return routes[:5]
 
