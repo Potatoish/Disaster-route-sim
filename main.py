@@ -1,5 +1,5 @@
 import networkx as nx
-import database
+from data import database
 import random
 import csv
 from datetime import datetime
