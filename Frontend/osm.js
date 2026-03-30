@@ -165,68 +165,39 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
 async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName) {
   try {
     const coords = getRoutePoints(route, getLocationByName);
-
     if (coords.length < 2) return null;
 
-    let fullPath = [];
+    const { lat: lat1, lng: lng1 } = coords[0];
+    const { lat: lat2, lng: lng2 } = coords[coords.length - 1];
 
-    for (let i = 0; i < coords.length - 1; i++) {
-      const start = coords[i];
-      const end = coords[i + 1];
+    const url = `${OSRM_BASE_URL}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson&steps=true&alternatives=3`;
 
-      const url = `${OSRM_BASE_URL}/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=true&alternatives=false`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`OSRM HTTP error: ${response.status}`);
 
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`OSRM HTTP error: ${response.status}`);
+    const data = await response.json();
+    if (data.code !== 'Ok' || !data.routes?.length) return null;
 
-      const data = await response.json();
+    const fullPath = data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
 
-      if (data.code !== 'Ok' || !data.routes || !data.routes.length) {
-        return null;
-      }
-
-      const segment = data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
-
-      const streetNames = [];
-      data.routes[0].legs.forEach(leg => {
-          leg.steps.forEach(step => {
-              if (step.name && step.name.trim() !== '') {
-                  streetNames.push(step.name);
-              }
-          });
+    const streetNames = [];
+    data.routes[0].legs.forEach(leg => {
+      leg.steps.forEach(step => {
+        if (step.name && step.name.trim() !== '') streetNames.push(step.name);
       });
-
-      const uniqueStreets = streetNames.filter((s, i) => s !== streetNames[i - 1]);
-      route.street_path = (route.street_path || []).concat(uniqueStreets);
-    
-      if (i > 0 && segment.length > 0) {
-        segment.shift();
-      }
-
-      fullPath.push(...segment);
-    }
+    });
+    route.street_path = streetNames.filter((s, i) => s !== streetNames[i - 1]);
 
     if (!fullPath.length) return null;
 
     if (route.category === 'best') {
       mapLayers.routes.push(new google.maps.Polyline({
-        path: fullPath,
-        geodesic: true,
-        strokeColor: '#22c55e',
-        strokeOpacity: 0.08,
-        strokeWeight: 24,
-        map: gMap,
-        zIndex: 0,
+        path: fullPath, geodesic: true, map: gMap,
+        strokeColor: '#22c55e', strokeOpacity: 0.08, strokeWeight: 24, zIndex: 0,
       }));
-
       mapLayers.routes.push(new google.maps.Polyline({
-        path: fullPath,
-        geodesic: true,
-        strokeColor: '#86efac',
-        strokeOpacity: 0.16,
-        strokeWeight: 14,
-        map: gMap,
-        zIndex: 1,
+        path: fullPath, geodesic: true, map: gMap,
+        strokeColor: '#86efac', strokeOpacity: 0.16, strokeWeight: 14, zIndex: 1,
       }));
     }
 

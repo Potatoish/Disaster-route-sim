@@ -127,6 +127,7 @@ def classify_routes(routes):
 def get_locations():
     G = create_graph()
     hazards = database.get_hazard_data()
+    print("Hazards loaded:", hazards)
 
     return [
         {
