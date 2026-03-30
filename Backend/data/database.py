@@ -42,8 +42,6 @@ def get_graph_data():
         print("Database error:", e)
         return [], []
 
-# --- Quick Test ---
-# If you run this specific file, it will print your locations to prove it works.
 if __name__ == "__main__":
     my_nodes, my_edges = get_graph_data()
     

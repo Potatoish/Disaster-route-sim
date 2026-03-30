@@ -1,4 +1,4 @@
-const USE_OSRM = true; //optional toggle for OSRM routing - set to false to use simple straight lines between nodes
+const USE_OSRM = false; //optional toggle for OSRM routing - set to false to use simple straight lines between nodes
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
 
 function getRouteColor(category) {

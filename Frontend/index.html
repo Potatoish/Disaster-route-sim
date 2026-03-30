@@ -10,7 +10,7 @@
 
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body onload="initTheme()">
 
 <div class="topbar">
   <div class="topbar-logo">🐜</div>
@@ -18,11 +18,15 @@
     <div class="topbar-title">DISASTER MITIGATION ACO ROUTE SYSTEM</div>
     <div class="topbar-sub">Ant Colony Optimization · Lexicographic Safety-First · Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
   </div>
+
   <div class="topbar-right">
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+
     <div class="status-pill">
       <div class="status-dot"></div>
       <span id="statusTxt">Ready</span>
     </div>
+
     <div class="mode-badge" id="modeBadge">DEMO MODE</div>
   </div>
 </div>
@@ -34,8 +38,8 @@
       <div class="panel-head-title">Simulation Parameters</div>
       <div class="panel-head-sub">Configure and run ACO route simulation</div>
     </div>
-    <div class="panel-body">
 
+    <div class="panel-body">
       <div class="steps">
         <div class="step-dot active" id="sd1">1</div>
         <div class="step-line" id="sl1"></div>
@@ -56,7 +60,8 @@
             <div class="bgy-name">Pinagbuhatan</div>
             <div class="bgy-tag">Pasig City</div>
           </div>
-          <div class="bgy-card" id="bgyStaBtn" onclick="selectBarangay('Sta. Lucia')">
+          <div class="bgy-card disabled" title="This barangay is not yet available in the simulation">
+            <div class="soon-badge">COMING SOON</div>
             <div class="bgy-icon">🏘️</div>
             <div class="bgy-name">Sta. Lucia</div>
             <div class="bgy-tag">Pasig City</div>
@@ -67,13 +72,14 @@
       <div>
         <div class="sec-label">Step 2 — Disaster Type</div>
         <div class="hazard-grid">
-          <div class="hazard-card flood selected" id="hFlood" onclick="selectHazard('Flood',this)">
+          <div class="hazard-card flood selected" id="hFlood" onclick="selectHazard('Flood', this)">
             <div class="hazard-icon">🌊</div>
             <div>
               <div class="hazard-name">Flood</div>
               <div class="hazard-sub">Water level</div>
             </div>
           </div>
+
           <div class="hazard-card disabled">
             <div class="soon-badge">SOON</div>
             <div class="hazard-icon">🔥</div>
@@ -82,6 +88,7 @@
               <div class="hazard-sub">Coming soon</div>
             </div>
           </div>
+
           <div class="hazard-card disabled">
             <div class="soon-badge">SOON</div>
             <div class="hazard-icon">⚡</div>
@@ -100,7 +107,11 @@
             <label>▲ START NODE — Safety Origin</label>
             <select id="startSel" disabled></select>
           </div>
-          <div style="text-align:center;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--dim);">↓ &nbsp;move to&nbsp; ↓</div>
+
+          <div style="text-align:center;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--dim);">
+            ↓ &nbsp;move to&nbsp; ↓
+          </div>
+
           <div class="field">
             <label>▼ END NODE — Safety Destination</label>
             <select id="endSel" disabled></select>
@@ -114,9 +125,13 @@
         hazard level is evaluated before travel distance.
       </div>
 
-      <button class="run-btn" id="runBtn" onclick="runSimulation()" disabled>▶&nbsp; RUN SIMULATION</button>
-      <button class="reset-btn" id="resetBtn" onclick="resetAll()">↺ &nbsp;New Simulation</button>
+      <button class="run-btn" id="runBtn" onclick="runSimulation()" disabled>
+        ▶&nbsp; RUN SIMULATION
+      </button>
 
+      <button class="reset-btn" id="resetBtn" onclick="resetAll()">
+        ↺ &nbsp;New Simulation
+      </button>
     </div>
   </div>
 
@@ -138,6 +153,7 @@
         <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
         <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
         <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated</span></div>
+
         <div style="margin-top:5px;">
           <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
           <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>

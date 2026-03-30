@@ -21,6 +21,22 @@ const MAP_STYLES = [
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
 ];
 
+function initTheme() {
+  document.body.classList.remove('dark');
+  const btn = document.querySelector('.theme-toggle');
+  if (btn) btn.textContent = '🌙';
+}
+
+function toggleTheme() {
+  const body = document.body;
+  body.classList.toggle('dark');
+
+  const btn = document.querySelector('.theme-toggle');
+  if (btn) {
+    btn.textContent = body.classList.contains('dark') ? '☀️' : '🌙';
+  }
+}
+
 function initMap() {
   gMap = new google.maps.Map(document.getElementById('map'), {
     center: { lat: 14.5590, lng: 121.0955 },
@@ -67,6 +83,7 @@ function clearLayers() {
     activeInfoWindow.close();
     activeInfoWindow = null;
   }
+
   if (activeInfoWindowRef.current) {
     activeInfoWindowRef.current.close();
     activeInfoWindowRef.current = null;
@@ -601,13 +618,17 @@ async function checkBackend() {
     if (r.ok) {
       isBackendLive = true;
       const b = document.getElementById('modeBadge');
-      b.textContent = 'LIVE';
-      b.style.background = 'rgba(34,197,94,.1)';
-      b.style.borderColor = 'rgba(34,197,94,.3)';
-      b.style.color = 'var(--green)';
+      if (b) {
+        b.textContent = 'LIVE';
+        b.style.background = 'rgba(34,197,94,.1)';
+        b.style.borderColor = 'rgba(34,197,94,.3)';
+        b.style.color = 'var(--green)';
+      }
       document.getElementById('statusTxt').textContent = 'Backend Connected';
     }
   } catch (err) {
     isBackendLive = false;
   }
 }
+
+window.initMap = initMap;
