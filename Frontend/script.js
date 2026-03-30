@@ -204,18 +204,19 @@ function drawNode(n, start, end) {
     title: n.name,
     zIndex: 10,
     icon: {
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: special ? 11 : 8,
+        path: google.maps.SymbolPath.CIRCLE,
+      scale: special ? 13 : 10,  
       fillColor: col,
-      fillOpacity: 0.92,
+      fillOpacity: 0.95,
       strokeColor: '#ffffff',
-      strokeWeight: 2,
+      strokeWeight: 2.5,
     },
     label: {
       text: shortNodeLabel(n.name),
-      color: '#c8d8ee',
-      fontSize: '9px',
+      color: '#ffffff',  
+      fontSize: '10px',  
       fontFamily: 'DM Mono, monospace',
+      fontWeight: 'bold'
     }
   });
 

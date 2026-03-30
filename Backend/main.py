@@ -132,7 +132,8 @@ def get_locations():
             "name": node,
             "lat": G.nodes[node]["lat"],
             "lng": G.nodes[node]["lng"],
-            "barangay": G.nodes[node].get("barangay", "")
+            "barangay": G.nodes[node].get("barangay", ""),
+            "haz": hazards.get(G.nodes[node]["id"], None)
         }
         for node in G.nodes()
     ]
