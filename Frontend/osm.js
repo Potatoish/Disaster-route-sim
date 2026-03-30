@@ -1,5 +1,6 @@
 const USE_OSRM = true;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
+const ROUTE_OFFSETS = [0, 5, -5, 10, -10];
 
 function getRouteColor(category) {
   if (category === 'best') return '#22c55e';
