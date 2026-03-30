@@ -96,14 +96,9 @@ def find_routes(G, start, end, cutoff=6, max_candidates=20):
 
     routes = list(unique.values())
 
-    routes.sort(key=lambda x: (
-        x["max_hazard"],
-        x["total_hazard"],
-        x["distance"]
-    ))
+    routes.sort(key=lambda x: x["distance"])
 
-    return routes[:max_candidates]
-
+    return routes[:5]
 
 def classify_routes(routes):
     classified = []
