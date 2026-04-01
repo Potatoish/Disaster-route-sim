@@ -14,21 +14,18 @@ def create_graph():
 
     for node in nodes:
         G.add_node(
-            node[1],
-            id=node[0],
-            lat=float(node[2]),
-            lng=float(node[3]),
-            barangay=infer_barangay(node[1])
-        )
-
+        node[1],
+        id=node[0],
+        lat=float(node[2]),
+        lng=float(node[3]),
+        barangay=node[4]
+    )
+        
     for edge in edges:
         source = edge[0]
         target = edge[1]
         distance = float(edge[2])
-
-        # get hazard from source node id
-        source_node = next((n for n in nodes if n[1] == source), None)
-        hazard = hazards.get(source_node[0], 1) if source_node else 1  # ← actual hazard na
+        hazard = int(edge[3]) if edge[3] is not None else 1  # Default hazard level is 1 (Safe)
 
         G.add_edge(source, target, distance=distance, hazard=hazard)
 
@@ -203,5 +200,4 @@ def export_csv(routes, filename=None):
                 route["total_hazard"],
                 " -> ".join(route["path"])
             ])
-
     return filename

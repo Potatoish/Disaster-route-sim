@@ -1,9 +1,10 @@
+print("THIS IS THE NEW DATABASE.PY")
 import pyodbc
 
 CONNECTION_STRING = (
     "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=PRLY04\\SQLEXPRESS;"
-    "DATABASE=disaster_route_sim;"
+    "SERVER=DESKTOP-THN5GFN\\SQLEXPRESS;"
+    "DATABASE=DIsaster_route_simulation;"
     "Trusted_Connection=yes;"
     "TrustServerCertificate=yes;"
 )
@@ -12,24 +13,37 @@ def get_connection():
     return pyodbc.connect(CONNECTION_STRING)
 
 def get_graph_data():
-    """Fetch nodes and edges from SQL Server."""
     print("Connecting to SQL Server database...")
 
     try:
         conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, name, lat, lng FROM nodes")
+        # Fetch nodes
+        cursor.execute("""
+            SELECT id, name, lat, lng, barangay
+            FROM nodes
+        """)
         nodes = cursor.fetchall()
 
+        # Fetch edges and derive hazard from connected nodes
         cursor.execute("""
             SELECT
                 n1.name AS source_name,
                 n2.name AS target_name,
-                e.distance_km
+                e.distance_km,
+                CASE
+                    WHEN fh1.hazard_level IS NULL AND fh2.hazard_level IS NULL THEN 1
+                    WHEN fh1.hazard_level IS NULL THEN fh2.hazard_level
+                    WHEN fh2.hazard_level IS NULL THEN fh1.hazard_level
+                    WHEN fh1.hazard_level >= fh2.hazard_level THEN fh1.hazard_level
+                    ELSE fh2.hazard_level
+                END AS hazard_level
             FROM edges e
             JOIN nodes n1 ON e.source_id = n1.id
             JOIN nodes n2 ON e.target_id = n2.id
+            LEFT JOIN flood_hazard fh1 ON fh1.node_id = n1.id
+            LEFT JOIN flood_hazard fh2 ON fh2.node_id = n2.id
         """)
         edges = cursor.fetchall()
 
@@ -40,24 +54,29 @@ def get_graph_data():
         print("Database error:", e)
         return [], []
 
-if __name__ == "__main__":
-    my_nodes, my_edges = get_graph_data()
-    
-    if my_nodes:
-        print(f"\nSuccess! Pulled {len(my_nodes)} locations and {len(my_edges)} roads.")
-        print("Here are your Pasig City locations:")
-        for node in my_nodes:
-            # node[1] is the name column
-            print(f" - {node[1]}")
-            
 def get_hazard_data():
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT node_id, hazard_level FROM flood_hazard")
+
+        cursor.execute("""
+            SELECT node_id, hazard_level
+            FROM flood_hazard
+        """)
         hazards = cursor.fetchall()
+
         conn.close()
-        return {row[0]: row[1] for row in hazards}  # {node_id: hazard_level}
+        return {row[0]: row[1] for row in hazards}
+
     except Exception as e:
         print("Hazard fetch error:", e)
         return {}
+
+if __name__ == "__main__":
+    my_nodes, my_edges = get_graph_data()
+
+    if my_nodes:
+        print(f"\nSuccess! Pulled {len(my_nodes)} locations and {len(my_edges)} roads.")
+        print("Here are your locations:")
+        for node in my_nodes:
+            print(f" - {node[1]}")

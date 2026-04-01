@@ -167,10 +167,13 @@ async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName)
     const coords = getRoutePoints(route, getLocationByName);
     if (coords.length < 2) return null;
 
-    const { lat: lat1, lng: lng1 } = coords[0];
-    const { lat: lat2, lng: lng2 } = coords[coords.length - 1];
+    const waypointString = coords
+      .map(({ lat, lng }) => `${lng},${lat}`)
+      .join(';');
 
-    const url = `${OSRM_BASE_URL}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson&steps=true&alternatives=3`;
+    const url =
+      `${OSRM_BASE_URL}/route/v1/driving/${waypointString}` +
+      `?overview=full&geometries=geojson&steps=true&continue_straight=true`;
 
     const response = await fetch(url);
     if (!response.ok) throw new Error(`OSRM HTTP error: ${response.status}`);
@@ -186,18 +189,30 @@ async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName)
         if (step.name && step.name.trim() !== '') streetNames.push(step.name);
       });
     });
+
     route.street_path = streetNames.filter((s, i) => s !== streetNames[i - 1]);
 
     if (!fullPath.length) return null;
 
     if (route.category === 'best') {
       mapLayers.routes.push(new google.maps.Polyline({
-        path: fullPath, geodesic: true, map: gMap,
-        strokeColor: '#22c55e', strokeOpacity: 0.08, strokeWeight: 24, zIndex: 0,
+        path: fullPath,
+        geodesic: true,
+        map: gMap,
+        strokeColor: '#22c55e',
+        strokeOpacity: 0.08,
+        strokeWeight: 24,
+        zIndex: 0,
       }));
+
       mapLayers.routes.push(new google.maps.Polyline({
-        path: fullPath, geodesic: true, map: gMap,
-        strokeColor: '#86efac', strokeOpacity: 0.16, strokeWeight: 14, zIndex: 1,
+        path: fullPath,
+        geodesic: true,
+        map: gMap,
+        strokeColor: '#86efac',
+        strokeOpacity: 0.16,
+        strokeWeight: 14,
+        zIndex: 1,
       }));
     }
 
@@ -248,7 +263,7 @@ async function renderRoutesOnRoads({
   gMap,
   mapLayers,
   getLocationByName,
-  redrawNodes,
+  drawSelectedPinsOnly,
   start,
   end,
   infoPopup,
@@ -302,7 +317,7 @@ async function renderRoutesOnRoads({
     gMap.fitBounds(bounds, 60);
   }
 
-  redrawNodes(start, end);
+  drawSelectedPinsOnly(start, end);
   document.getElementById('mapLegend').style.display = 'block';
 
   if (USE_OSRM && successCount === 0) {

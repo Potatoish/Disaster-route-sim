@@ -463,14 +463,13 @@ async function runSimulation() {
       gMap,
       mapLayers,
       getLocationByName,
-      redrawNodes,
+      drawSelectedPinsOnly,
       start,
       end,
       infoPopup,
       shortNodeLabel,
       activeInfoWindowRef
     });
-
     showResultsPanel(result);
     document.getElementById('resetBtn').classList.add('show');
 
