@@ -12,6 +12,9 @@ DROP TABLE IF EXISTS flood_hazard;
 DROP TABLE IF EXISTS edges;
 DROP TABLE IF EXISTS evacuation_centers;
 DROP TABLE IF EXISTS nodes;
+DROP TABLE IF EXISTS flood_hazard;
+DROP TABLE IF EXISTS edges;
+DROP TABLE IF EXISTS nodes;
 GO
 
 -- 2. Build the exact tables needed for Flood Simulation
@@ -39,38 +42,5 @@ CREATE TABLE flood_hazard (
     water_level_m DECIMAL(5,2) NOT NULL,
     rainfall_scenario VARCHAR(20) NOT NULL,
     hazard_level INT NOT NULL
-);
-GO
-
-CREATE TABLE evacuation_centers (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    lat DECIMAL(9,6) NOT NULL,
-    lng DECIMAL(9,6) NOT NULL,
-    barangay VARCHAR(50) NOT NULL,
-    capacity INT NOT NULL,
-    hazard_type VARCHAR(50) NOT NULL
-);
-GO
-
-CREATE TABLE responder_teams (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    team_name VARCHAR(100) NOT NULL,
-    hazard_type VARCHAR(50) NOT NULL,
-    barangay VARCHAR(50) NOT NULL,
-    contact_no VARCHAR(20),
-    alt_contact_no VARCHAR(20),
-    head_name VARCHAR(100),
-    designation VARCHAR(50),
-    evacuation_center_id INT FOREIGN KEY REFERENCES evacuation_centers(id)
-);
-GO
-
-CREATE TABLE responder_personnel (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    team_id INT NOT NULL FOREIGN KEY REFERENCES responder_teams(id),
-    full_name VARCHAR(100) NOT NULL,
-    role VARCHAR(50) NOT NULL,
-    contact_no VARCHAR(20)
 );
 GO
