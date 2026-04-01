@@ -3,12 +3,12 @@ GO
 
 -- 1. Nodes (Pinagbuhatan ONLY)
 INSERT INTO nodes (name, lat, lng, barangay, node_type) VALUES
-('Novo Pinagbuhatan',                 14.5631, 121.0891, 'Pinagbuhatan', 'landmark'),
-('Kenneth Talipapa',                  14.5618, 121.0912, 'Pinagbuhatan', 'road'),
-('Pinagbuhatan Barangay Hall',        14.5605, 121.0923, 'Pinagbuhatan', 'hall'),
-('Pinagbuhatan High School',          14.5592, 121.0934, 'Pinagbuhatan', 'school'),
-('Pinagbuhatan Ferry station',        14.5578, 121.0958, 'Pinagbuhatan', 'ferry'),
-('2 Centennial Street, Pinagbuhatan', 14.5598, 121.0952, 'Pinagbuhatan', 'road');
+('Novo Pinagbuhatan',                 14.557978282772257, 121.0854886231309, 'Pinagbuhatan', 'landmark'),
+('Kenneth Talipapa',                  14.541756513268828, 121.10554860625739, 'Pinagbuhatan', 'road'),
+('Pinagbuhatan Barangay Hall',        14.557458218288385, 121.09139261048277, 'Pinagbuhatan', 'hall'),
+('Pinagbuhatan High School',          14.555077084549803, 121.09194585752782, 'Pinagbuhatan', 'school'),
+('Pinagbuhatan Ferry station',        14.546081909369192, 121.09493313662196, 'Pinagbuhatan', 'ferry'),
+('2 Centennial Street, Pinagbuhatan', 14.545954717564475, 121.10306063821729, 'Pinagbuhatan', 'road');
 GO
 
 -- 2. Edges (Pinagbuhatan ONLY)
