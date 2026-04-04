@@ -3,10 +3,6 @@ import pyodbc
 from shapely.geometry import shape, Point
 
 def convert_noah_to_system_scale(noah_var):
-    """
-    Kino-convert ang Project NOAH Hazard Level (1-3)
-    papunta sa System Hazard Level (1-5) niyo.
-    """
     if noah_var == 3: # NOAH High (> 1.5m)
         return 5      # System Extreme Hazard
     elif noah_var == 2: # NOAH Medium (0.5m - 1.5m)
