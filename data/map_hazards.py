@@ -23,14 +23,14 @@ def update_hazards():
         with open('flood_data.json', 'r', encoding='utf-8') as f:
             flood_data = json.load(f)
     except FileNotFoundError:
-        print("ERROR: Hindi mahanap ang 'flood_data.json'. Siguraduhing nasa iisang folder ito.")
+        print("ERROR: Can't find 'flood_data.json'. Make sure it's in the same folder.")
         return
 
     # Convert the JSON shapes into mathematical objects we can check
     flood_zones = []
     print("Processing geometries...")
     for feature in flood_data['features']:
-        geom = shape(feature['geometry'])
+        geom = shape(feature['geometry']) 
         # Project NOAH usually stores the hazard level in a property called 'Var'
         noah_hazard = feature['properties'].get('Var', 0) 
         flood_zones.append((geom, noah_hazard))
@@ -50,10 +50,10 @@ def update_hazards():
         point = Point(float(lng), float(lat)) 
         raw_noah_level = 0 # Default is 0 (Safe)
         
-        # Hanapin kung saang polygon/baha nakapatong ang kalsada
+        # find the highest flood zone that contains this point
         for geom, hazard in flood_zones:
-            if geom.contains(point):
-                raw_noah_level = hazard
+            if geom.contains(point): 
+                raw_noah_level = hazard 
                 break # Found the highest flood zone, stop checking!
         
         # Convert it to your system's 1-5 scale
@@ -62,9 +62,9 @@ def update_hazards():
         print(f"Location: {name}")
         print(f"  -> NOAH Raw Var: {raw_noah_level} | System Hazard Level: {final_system_hazard}")
         
-        # THE FIX: Ipasok sa 'flood_hazard' table, hindi sa 'nodes' table
+        # THE FIX: Check if this node already has a flood hazard record
         cursor.execute("SELECT node_id FROM flood_hazard WHERE node_id = ?", (node_id,))
-        exists = cursor.fetchone()
+        exists = cursor.fetchone() 
 
         if exists:
             # Update the existing record
@@ -72,13 +72,13 @@ def update_hazards():
                 UPDATE flood_hazard 
                 SET hazard_level = ?, rainfall_scenario = '25yr_NOAH' 
                 WHERE node_id = ?
-            """, (final_system_hazard, node_id))
+            """, (final_system_hazard, node_id)) 
         else:
             # Insert a brand new record
             cursor.execute("""
                 INSERT INTO flood_hazard (node_id, water_level_m, rainfall_scenario, hazard_level) 
                 VALUES (?, 0.0, '25yr_NOAH', ?)
-            """, (node_id, final_system_hazard))
+            """, (node_id, final_system_hazard)) 
             
     # Lock in the changes to the database
     conn.commit()
