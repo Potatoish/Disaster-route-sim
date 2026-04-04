@@ -1,157 +1,34 @@
 import csv
 from datetime import datetime
 
-import networkx as nx
 from data import database
-
-HAZARD_THRESHOLD = 3
-
-
-def create_graph():
-    G = nx.Graph()
-    nodes, edges = database.get_graph_data()
-    hazards = database.get_hazard_data()  # ← dagdag
-
-    for node in nodes:
-        G.add_node(
-        node[1],
-        id=node[0],
-        lat=float(node[2]),
-        lng=float(node[3]),
-        barangay=node[4]
-    )
-        
-    for edge in edges:
-        source = edge[0]
-        target = edge[1]
-        distance = float(edge[2])
-        hazard = int(edge[3]) if edge[3] is not None else 1  # Default hazard level is 1 (Safe)
-
-        G.add_edge(source, target, distance=distance, hazard=hazard)
-
-    return G
-
-
-def infer_barangay(name):
-    lower = str(name).lower()
-    if "sta. lucia" in lower or "sta lucia" in lower:
-        return "Sta. Lucia"
-    return "Pinagbuhatan"
-
-
-def get_path_distance(G, path):
-    return round(
-        sum(G[path[i]][path[i + 1]]["distance"] for i in range(len(path) - 1)),
-        2
-    )
-
-
-def get_path_total_hazard(G, path):
-    return sum(G[path[i]][path[i + 1]]["hazard"] for i in range(len(path) - 1))
-
-
-def get_max_hazard(G, path):
-    if len(path) < 2:
-        return 0
-    return max(G[path[i]][path[i + 1]]["hazard"] for i in range(len(path) - 1))
-
-
-def path_with_coordinates(G, path):
-    return [
-        {
-            "name": node,
-            "lat": G.nodes[node]["lat"],
-            "lng": G.nodes[node]["lng"]
-        }
-        for node in path
-    ]
-
-
-def find_routes(G, start, end, cutoff=6, max_candidates=20):
-    try:
-        paths = list(nx.all_simple_paths(G, start, end, cutoff=cutoff))
-    except nx.NetworkXNoPath:
-        paths = []
-
-    routes = []
-    for path in paths:
-        routes.append({
-            "path": path,
-            "distance": get_path_distance(G, path),
-            "total_hazard": get_path_total_hazard(G, path),
-            "max_hazard": get_max_hazard(G, path)
-        })
-
-    unique = {}
-    for route in routes:
-        key = tuple(route["path"])
-        if key not in unique:
-            unique[key] = route
-
-    routes = list(unique.values())
-
-    routes.sort(key=lambda x: (
-        x["max_hazard"],
-        x["total_hazard"],
-        x["distance"]
-    ))
-
-    return routes[:5]
-
-def classify_routes(routes):
-    classified = []
-    best_assigned = False
-
-    for route in routes:
-        r = route.copy()
-
-        if r["max_hazard"] > HAZARD_THRESHOLD:
-            r["category"] = "eliminated"
-            r["color"] = "#ef4444"
-        elif not best_assigned:
-            r["category"] = "best"
-            r["color"] = "#22c55e"
-            best_assigned = True
-        else:
-            r["category"] = "available"
-            r["color"] = "#f59e0b"
-
-        classified.append(r)
-
-    return classified[:10]
+from osm_routing import simulate_osm_routes, HAZARD_THRESHOLD
 
 
 def get_locations():
-    G = create_graph()
-    hazards = database.get_hazard_data()
-    print("Hazards loaded:", hazards)
+    nodes, _ = database.get_graph_data()
 
     return [
         {
-            "name": node,
-            "lat": G.nodes[node]["lat"],
-            "lng": G.nodes[node]["lng"],
-            "barangay": G.nodes[node].get("barangay", ""),
-            "haz": hazards.get(G.nodes[node].get("id"), None)
+            "name": node[1],
+            "lat": float(node[2]),
+            "lng": float(node[3]),
+            "barangay": node[4]
         }
-        for node in G.nodes()
+        for node in nodes
     ]
 
 def simulate(start, end, hazard_type="Flood"):
-    G = create_graph()
-
-    if start not in G.nodes():
+    if not start:
         return {
             "error": True,
-            "message": f"Start location '{start}' not found",
-            "valid_locations": list(G.nodes())
+            "message": "Start location is required"
         }
 
-    if end not in G.nodes():
+    if not end:
         return {
             "error": True,
-            "message": f"End location '{end}' not found",
-            "valid_locations": list(G.nodes())
+            "message": "End location is required"
         }
 
     if start == end:
@@ -160,26 +37,38 @@ def simulate(start, end, hazard_type="Flood"):
             "message": "Start and end locations must be different"
         }
 
-    if not nx.has_path(G, start, end):
+    start_location = database.get_location_by_name(start)
+    end_location = database.get_location_by_name(end)
+
+    if not start_location:
         return {
             "error": True,
-            "message": f"No path exists between '{start}' and '{end}'"
+            "message": f"Start location '{start}' not found"
         }
 
-    routes = find_routes(G, start, end)
-    classified = classify_routes(routes)
+    if not end_location:
+        return {
+            "error": True,
+            "message": f"End location '{end}' not found"
+        }
 
-    for route in classified:
-        route["path_coordinates"] = path_with_coordinates(G, route["path"])
+    try:
+        result = simulate_osm_routes(
+            start_name=start_location["name"],
+            start_lat=start_location["lat"],
+            start_lng=start_location["lng"],
+            end_name=end_location["name"],
+            end_lat=end_location["lat"],
+            end_lng=end_location["lng"],
+            hazard_type=hazard_type
+        )
+        return result
 
-    return {
-        "error": False,
-        "start": start,
-        "end": end,
-        "hazard_type": hazard_type,
-        "safe_threshold": HAZARD_THRESHOLD,
-        "routes": classified
-    }
+    except Exception as e:
+        return {
+            "error": True,
+            "message": f"OSM routing failed: {str(e)}"
+        }
 
 
 def export_csv(routes, filename=None):
@@ -189,15 +78,27 @@ def export_csv(routes, filename=None):
 
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Route", "Category", "Distance (km)", "Max Hazard", "Total Hazard", "Path"])
+        writer.writerow([
+            "Route",
+            "Category",
+            "Status",
+            "Distance (m)",
+            "Max Hazard",
+            "Total Hazard",
+            "Eliminated",
+            "Path Coordinates Count"
+        ])
 
-        for i, route in enumerate(routes, 1):
+        for route in routes:
             writer.writerow([
-                i,
-                route["category"],
-                route["distance"],
-                route["max_hazard"],
-                route["total_hazard"],
-                " -> ".join(route["path"])
+                route.get("display_route_no", ""),
+                route.get("category", ""),
+                route.get("status", ""),
+                route.get("distance", ""),
+                route.get("max_hazard", ""),
+                route.get("total_hazard", ""),
+                route.get("eliminated", ""),
+                len(route.get("path_coordinates", []))
             ])
+
     return filename

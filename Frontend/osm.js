@@ -1,4 +1,4 @@
-const USE_OSRM = true; //optional toggle for OSRM routing - set to false to use simple straight lines between nodes
+const USE_OSRM = true;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
 const ROUTE_OFFSETS = [0, 5, -5, 10, -10];
 
@@ -15,6 +15,7 @@ function dedupePath(path) {
 function normalizeRoutes(routes) {
   return routes.map(route => {
     const normalizedPath = Array.isArray(route.path) ? dedupePath(route.path) : [];
+    const coordCount = Array.isArray(route.path_coordinates) ? route.path_coordinates.length : 0;
 
     return {
       ...route,
@@ -22,7 +23,10 @@ function normalizeRoutes(routes) {
       path_coordinates: Array.isArray(route.path_coordinates) ? route.path_coordinates : [],
       distance: route.distance ?? '—',
       max_hazard: route.max_hazard ?? 0,
-      segments: normalizedPath.length > 1 ? normalizedPath.length - 1 : 0,
+      segments: typeof route.segments === 'number'
+        ? route.segments
+        : (coordCount > 1 ? coordCount - 1 : (normalizedPath.length > 1 ? normalizedPath.length - 1 : 0)),
+      path_label: route.path_label || '',
       color: route.color || getRouteColor(route.category)
     };
   });
@@ -246,10 +250,10 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
     activeInfoWindowRef.current = new google.maps.InfoWindow({
       content: infoPopup(label, [
-        ['Distance', route.distance + ' km'],
+        ['Distance', route.distance + ' m'],
         ['Max Hazard', route.max_hazard + '/5', cfg.color],
-        ['Segments', Array.isArray(route.path) ? route.path.length - 1 : 'N/A'],
-        ['Path', Array.isArray(route.path) ? route.path.map(shortNodeLabel).join(' → ') : 'N/A'],
+        ['Segments', typeof route.segments === 'number' ? route.segments : 'N/A'],
+        ['Path', route.path_label || 'N/A'],
         ['Streets', route.street_path?.length ? route.street_path.join(' → ') : 'N/A'],
       ]),
       position: ev.latLng,
@@ -274,10 +278,10 @@ async function renderRoutesOnRoads({
   mapLayers.routes = [];
 
   const CFG = {
-  best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 6 },
-  available: { color: '#f59e0b', weight: 5, opacity: 0.9, zIndex: 3 },
-  eliminated: { color: '#ef4444', weight: 3, opacity: 0.35, zIndex: 1 },
-};
+    best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 6 },
+    available: { color: '#f59e0b', weight: 5, opacity: 0.9, zIndex: 3 },
+    eliminated: { color: '#ef4444', weight: 3, opacity: 0.35, zIndex: 1 },
+  };
 
   const bounds = new google.maps.LatLngBounds();
   let successCount = 0;

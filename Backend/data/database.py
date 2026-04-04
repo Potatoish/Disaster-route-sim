@@ -1,4 +1,3 @@
-print("THIS IS THE NEW DATABASE.PY")
 import pyodbc
 
 CONNECTION_STRING = (
@@ -71,6 +70,35 @@ def get_hazard_data():
     except Exception as e:
         print("Hazard fetch error:", e)
         return {}
+
+def get_location_by_name(name):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT TOP 1 id, name, lat, lng, barangay
+            FROM nodes
+            WHERE name = ?
+        """, (name,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+
+        return {
+            "id": row[0],
+            "name": row[1],
+            "lat": float(row[2]),
+            "lng": float(row[3]),
+            "barangay": row[4]
+        }
+
+    except Exception as e:
+        print("Location fetch error:", e)
+        return None
 
 if __name__ == "__main__":
     my_nodes, my_edges = get_graph_data()

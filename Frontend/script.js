@@ -163,7 +163,8 @@ function nodeColor(haz, id, start, end) {
 }
 
 function shortNodeLabel(name) {
-  return name.split(',')[0].split(' ').slice(0, 2).join(' ');
+  if (name == null) return 'N/A';
+  return String(name).split(',')[0].split(' ').slice(0, 2).join(' ');
 }
 
 function infoPopup(title, rows) {
@@ -204,8 +205,8 @@ function drawNode(n, start, end) {
     title: n.name,
     zIndex: 10,
     icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-      scale: special ? 13 : 10,  
+      path: google.maps.SymbolPath.CIRCLE,
+      scale: special ? 13 : 10,
       fillColor: col,
       fillOpacity: 0.95,
       strokeColor: '#ffffff',
@@ -213,8 +214,8 @@ function drawNode(n, start, end) {
     },
     label: {
       text: shortNodeLabel(n.name),
-      color: '#ffffff',  
-      fontSize: '10px',  
+      color: '#ffffff',
+      fontSize: '10px',
       fontFamily: 'DM Mono, monospace',
       fontWeight: 'bold'
     }
@@ -470,6 +471,7 @@ async function runSimulation() {
       shortNodeLabel,
       activeInfoWindowRef
     });
+
     showResultsPanel(result);
     document.getElementById('resetBtn').classList.add('show');
 
@@ -482,7 +484,7 @@ async function runSimulation() {
       <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);line-height:1.8;">
         From: <span style="color:var(--text)">${shortNodeLabel(start)}</span><br>
         To: <span style="color:var(--text)">${shortNodeLabel(end)}</span><br>
-        Best: <span style="color:var(--green)">${best ? best.distance + ' km' : 'N/A'}</span><br>
+        Best: <span style="color:var(--green)">${best ? best.distance + ' m' : 'N/A'}</span><br>
         Safe routes: <span style="color:var(--text)">${safeCount}</span>
       </div>`;
 
@@ -517,7 +519,7 @@ function showResultsPanel(result) {
       ${statBox('Total Routes', routes.length, 'var(--text)')}
       ${statBox('Safe Routes', safe.length, 'var(--green)')}
       ${statBox('Eliminated', elim.length, 'var(--red)')}
-      ${statBox('Best Dist.', best ? best.distance + ' km' : 'N/A', 'var(--accent)')}
+      ${statBox('Best Dist.', best ? best.distance + ' m' : 'N/A', 'var(--accent)')}
     </div>
     <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);">
       Hazard threshold: ≤3 &nbsp;|&nbsp; Algorithm: ACO &nbsp;|&nbsp; Rule: Lexicographic Safety-First &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
@@ -540,16 +542,23 @@ function buildTable(routes) {
   }
 
   const rows = routes.map((r, i) => {
-    const pips = [1, 2, 3, 4, 5].map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`).join('');
-    const pathShort = Array.isArray(r.path) ? r.path.map(shortNodeLabel).join(' → ') : 'N/A';
+    const pips = [1, 2, 3, 4, 5]
+      .map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`)
+      .join('');
+
+    const pathTitle = r.path_label || (Array.isArray(r.path) ? r.path.map(v => String(v)).join(' → ') : 'N/A');
+    const pathShort = r.path_label || 'N/A';
+    const segmentCount = typeof r.segments === 'number'
+      ? r.segments
+      : (Array.isArray(r.path) ? Math.max(0, r.path.length - 1) : 'N/A');
 
     return `<tr>
-      <td>${i + 1}</td>
-      <td><span class="badge badge-${r.category}">${r.category}</span></td>
-      <td>${r.distance} km</td>
+      <td>${r.display_route_no ?? i + 1}</td>
+      <td><span class="badge badge-${r.category}">${r.status || r.category}</span></td>
+      <td>${r.distance} m</td>
       <td><div class="hlevel">${pips}</div> <span style="font-size:.6rem;color:var(--muted);margin-left:3px;">${r.max_hazard}/5</span></td>
-      <td>${Array.isArray(r.path) ? r.path.length - 1 : 'N/A'}</td>
-      <td><div class="path-txt" title="${Array.isArray(r.path) ? r.path.join(' → ') : ''}">${pathShort}</div></td>
+      <td>${segmentCount}</td>
+      <td><div class="path-txt" title="${pathTitle}">${pathShort}</div></td>
     </tr>`;
   }).join('');
 
@@ -569,15 +578,18 @@ function switchTab(name, el) {
 function downloadCSV() {
   if (!simData) return;
 
-  const rows = [['Route', 'Category', 'Distance (km)', 'Max Hazard', 'Segments', 'Path']];
+  const rows = [['Route', 'Category', 'Status', 'Distance (m)', 'Max Hazard', 'Segments', 'Path']];
   (simData.routes || []).forEach((r, i) => {
     rows.push([
-      i + 1,
-      r.category,
-      r.distance,
-      r.max_hazard,
-      Array.isArray(r.path) ? r.path.length - 1 : '',
-      Array.isArray(r.path) ? r.path.join(' -> ') : ''
+      r.display_route_no ?? i + 1,
+      r.category || '',
+      r.status || '',
+      r.distance ?? '',
+      r.max_hazard ?? '',
+      typeof r.segments === 'number'
+        ? r.segments
+        : (Array.isArray(r.path) ? Math.max(0, r.path.length - 1) : ''),
+      r.path_label || ''
     ]);
   });
 
