@@ -4,11 +4,11 @@ import osmnx as ox
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
 
-DIST_METERS = 3000
+DIST_METERS = 5000
 
 INITIAL_K = 10
-K_STEP = 5
-MAX_K = 30
+K_STEP = 10
+MAX_K = 50
 
 NUM_ANTS = 40
 NUM_ITERATIONS = 30
@@ -17,9 +17,34 @@ BETA = 2.0
 EVAPORATION = 0.30
 Q = 100.0
 
+DEBUG = True
+
+# simple in-memory cache
+_GRAPH_CACHE = {}
+
+
+def debug_print(*args):
+    if DEBUG:
+        print(*args)
+
+
+def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters):
+    center_lat = round((start_lat + end_lat) / 2, 3)
+    center_lng = round((start_lng + end_lng) / 2, 3)
+    return (center_lat, center_lng, dist_meters)
+
+
 def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS):
     center_lat = (start_lat + end_lat) / 2
     center_lng = (start_lng + end_lng) / 2
+    cache_key = make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters)
+
+    if cache_key in _GRAPH_CACHE:
+        debug_print(f"[OSM] Using cached graph for key={cache_key}")
+        return _GRAPH_CACHE[cache_key]
+
+    debug_print(f"[OSM] Building graph with radius {dist_meters} meters")
+    debug_print(f"[OSM] Center: ({center_lat}, {center_lng})")
 
     G = ox.graph_from_point(
         (center_lat, center_lng),
@@ -27,27 +52,46 @@ def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS)
         network_type="drive",
         simplify=True
     )
+
+    _GRAPH_CACHE[cache_key] = G
+    debug_print(f"[OSM] Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
     return G
+
 
 def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
     start_node = ox.distance.nearest_nodes(G, X=start_lng, Y=start_lat)
     end_node = ox.distance.nearest_nodes(G, X=end_lng, Y=end_lat)
+
+    debug_print(f"[OSM] Start node: {start_node}")
+    debug_print(f"[OSM] End node: {end_node}")
+
     return start_node, end_node
 
 
 def assign_fake_hazards(G, seed=45):
     random.seed(seed)
 
+    counts = {1: 0, 2: 0, 3: 0, 5: 0}
+
     for u, v, key, data in G.edges(keys=True, data=True):
+        # keep hazards stable per run
+        if "hazard" in data:
+            counts[int(data["hazard"])] = counts.get(int(data["hazard"]), 0) + 1
+            continue
+
         r = random.random()
-        if r < 0.70:
+        if r < 0.75:
             data["hazard"] = 1
-        elif r < 0.90:
+        elif r < 0.95:
             data["hazard"] = 2
-        elif r < 0.98:
+        elif r < 0.995:
             data["hazard"] = 3
         else:
             data["hazard"] = 5
+
+        counts[data["hazard"]] += 1
+
+    debug_print(f"[OSM] Hazard distribution: {counts}")
 
 
 def get_best_edge(G, u, v):
@@ -66,7 +110,6 @@ def path_to_coords(G, route):
             "lng": float(node_data["x"])
         })
     return coords
-
 
 def evaluate_route(G, route, candidate_route_no):
     total_distance = 0.0
@@ -91,7 +134,7 @@ def evaluate_route(G, route, candidate_route_no):
 
     return {
         "candidate_route_no": candidate_route_no,
-        "path": list(route),  # raw OSM node IDs, keep for backend/debug
+        "path": list(route),
         "path_coordinates": path_to_coords(G, route),
         "distance": round(total_distance, 2),
         "total_hazard": total_hazard,
@@ -112,19 +155,36 @@ def numeric_score(route):
     return route["max_hazard"] * 1000 + route["total_hazard"] * 10 + route["distance"]
 
 
+def summarize_candidate_routes(routes):
+    valid_count = len([r for r in routes if not r["eliminated"]])
+    eliminated_count = len([r for r in routes if r["eliminated"]])
+
+    debug_print(f"[OSM] Candidate routes evaluated: {len(routes)}")
+    debug_print(f"[OSM] Valid candidate routes: {valid_count}")
+    debug_print(f"[OSM] Eliminated candidate routes: {eliminated_count}")
+
+
 def find_candidate_routes(G, start_node, end_node):
     candidate_routes = []
 
     for current_k in range(INITIAL_K, MAX_K + 1, K_STEP):
-        raw_routes = list(
-            ox.routing.k_shortest_paths(
-                G,
-                start_node,
-                end_node,
-                k=current_k,
-                weight="length"
+        debug_print(f"[OSM] Searching candidate routes with k={current_k}")
+
+        try:
+            raw_routes = list(
+                ox.routing.k_shortest_paths(
+                    G,
+                    start_node,
+                    end_node,
+                    k=current_k,
+                    weight="length"
+                )
             )
-        )
+        except Exception as e:
+            debug_print(f"[OSM] k_shortest_paths failed at k={current_k}: {e}")
+            raw_routes = []
+
+        debug_print(f"[OSM] Raw routes found: {len(raw_routes)}")
 
         unique_seen = set()
         evaluated = []
@@ -134,23 +194,30 @@ def find_candidate_routes(G, start_node, end_node):
             if route_key in unique_seen:
                 continue
             unique_seen.add(route_key)
-
             evaluated.append(evaluate_route(G, route, idx))
+
+        summarize_candidate_routes(evaluated)
 
         if any(not r["eliminated"] for r in evaluated):
             candidate_routes = evaluated
+            debug_print(f"[OSM] Found at least one valid route at k={current_k}")
             break
 
     if not candidate_routes:
-        raw_routes = list(
-            ox.routing.k_shortest_paths(
-                G,
-                start_node,
-                end_node,
-                k=MAX_K,
-                weight="length"
+        debug_print("[OSM] No valid routes found in progressive search, using MAX_K fallback")
+        try:
+            raw_routes = list(
+                ox.routing.k_shortest_paths(
+                    G,
+                    start_node,
+                    end_node,
+                    k=MAX_K,
+                    weight="length"
+                )
             )
-        )
+        except Exception as e:
+            debug_print(f"[OSM] MAX_K fallback failed: {e}")
+            raw_routes = []
 
         unique_seen = set()
         for idx, route in enumerate(raw_routes, start=1):
@@ -158,7 +225,6 @@ def find_candidate_routes(G, start_node, end_node):
             if route_key in unique_seen:
                 continue
             unique_seen.add(route_key)
-
             candidate_routes.append(evaluate_route(G, route, idx))
 
     return candidate_routes
@@ -229,17 +295,32 @@ def finalize_routes(candidate_routes, pheromone):
 
 
 def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end_lng, hazard_type="Flood"):
+    debug_print("\n" + "=" * 60)
+    debug_print("[OSM] SIMULATION START")
+    debug_print(f"[OSM] From: {start_name} ({start_lat}, {start_lng})")
+    debug_print(f"[OSM] To  : {end_name} ({end_lat}, {end_lng})")
+
     G = build_graph(start_lat, start_lng, end_lat, end_lng)
     assign_fake_hazards(G)
 
     start_node, end_node = get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng)
     candidate_routes = find_candidate_routes(G, start_node, end_node)
+
+    if not candidate_routes:
+        return {
+            "error": True,
+            "message": "No candidate routes found for the selected locations."
+        }
+
     pheromone = run_aco(candidate_routes)
     final_routes = finalize_routes(candidate_routes, pheromone)
 
     for route in final_routes:
         route["path_label"] = f"{start_name} → {end_name}"
         route["segments"] = max(1, len(route.get("path_coordinates", [])) - 1)
+
+    debug_print("[OSM] SIMULATION END")
+    debug_print("=" * 60 + "\n")
 
     return {
         "error": False,
