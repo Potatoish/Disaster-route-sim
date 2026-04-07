@@ -68,7 +68,7 @@ def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
     return start_node, end_node
 
 
-def assign_fake_hazards(G, seed=45):
+def assign_flood_hazards(G, seed=45):
     random.seed(seed)
 
     counts = {1: 0, 2: 0, 3: 0, 5: 0}
@@ -301,7 +301,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     debug_print(f"[OSM] To  : {end_name} ({end_lat}, {end_lng})")
 
     G = build_graph(start_lat, start_lng, end_lat, end_lng)
-    assign_fake_hazards(G)
+    assign_flood_hazards(G)
 
     start_node, end_node = get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng)
     candidate_routes = find_candidate_routes(G, start_node, end_node)
