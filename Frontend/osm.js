@@ -1,4 +1,4 @@
-const USE_OSRM = WebTransportDatagramDuplexStream;
+const USE_OSRM = true;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
 const ROUTE_OFFSETS = [0, 5, -5, 10, -10];
 
@@ -86,7 +86,12 @@ function interpolateSegment(start, end, steps = 32, bend = 0.00018) {
   return points;
 }
 
-function buildSmoothFallbackPath(route, getLocationByName) {
+function buildFallbackPath(route, getLocationByName) {
+  const routePoints = getRoutePoints(route, getLocationByName);
+  if (routePoints.length >= 2) {
+    return routePoints;
+  }
+
   const routeNodes = route.path
     .map(name => getLocationByName(name))
     .filter(Boolean)
@@ -115,12 +120,12 @@ function buildSmoothFallbackPath(route, getLocationByName) {
 }
 
 function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
-  const smoothCoords = buildSmoothFallbackPath(route, getLocationByName);
-  if (smoothCoords.length === 0) return null;
+  const pathCoords = buildFallbackPath(route, getLocationByName);
+  if (pathCoords.length === 0) return null;
 
   if (route.category === 'best') {
     mapLayers.routes.push(new google.maps.Polyline({
-      path: smoothCoords,
+      path: pathCoords,
       geodesic: true,
       strokeColor: '#22c55e',
       strokeOpacity: 0.10,
@@ -130,7 +135,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
     }));
 
     mapLayers.routes.push(new google.maps.Polyline({
-      path: smoothCoords,
+      path: pathCoords,
       geodesic: true,
       strokeColor: '#86efac',
       strokeOpacity: 0.18,
@@ -142,7 +147,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
 
   if (route.category === 'available') {
     mapLayers.routes.push(new google.maps.Polyline({
-      path: smoothCoords,
+      path: pathCoords,
       geodesic: true,
       strokeColor: '#fcd34d',
       strokeOpacity: 0.10,
@@ -153,7 +158,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
   }
 
   const poly = new google.maps.Polyline({
-    path: smoothCoords,
+    path: pathCoords,
     geodesic: true,
     strokeColor: cfg.color,
     strokeOpacity: cfg.opacity,
