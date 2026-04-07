@@ -1,4 +1,4 @@
-const USE_OSRM = false;
+const USE_OSRM = WebTransportDatagramDuplexStream;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
 const ROUTE_OFFSETS = [0, 5, -5, 10, -10];
 

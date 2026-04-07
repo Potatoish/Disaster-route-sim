@@ -1,5 +1,10 @@
+import json
 import random
+from pathlib import Path
+
 import osmnx as ox
+from shapely.geometry import LineString, shape
+from shapely.prepared import prep
 
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
@@ -21,11 +26,124 @@ DEBUG = True
 
 # simple in-memory cache
 _GRAPH_CACHE = {}
+_FLOOD_ZONES_CACHE = None
+
+FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
+FLOOD_ZONE_FILES = [
+    FLOOD_CLASSES_DIR / "flood_var_1.geojson",
+    FLOOD_CLASSES_DIR / "flood_var_2.geojson",
+    FLOOD_CLASSES_DIR / "flood_var_3.geojson",
+]
+
+VAR_TO_HAZARD = {
+    1: 1,
+    2: 3,
+    3: 5,
+}
 
 
 def debug_print(*args):
     if DEBUG:
         print(*args)
+
+
+def map_flood_var_to_hazard(var_value):
+    return VAR_TO_HAZARD.get(int(var_value), 1)
+
+
+def load_flood_zones():
+    global _FLOOD_ZONES_CACHE
+
+    if _FLOOD_ZONES_CACHE is not None:
+        return _FLOOD_ZONES_CACHE
+
+    flood_zones = []
+
+    for file_path in FLOOD_ZONE_FILES:
+        if not file_path.exists():
+            raise FileNotFoundError(f"Flood zone file not found: {file_path}")
+
+        with file_path.open("r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+
+        if data.get("type") != "FeatureCollection":
+            raise ValueError(
+                f"Invalid GeoJSON type in {file_path.name}: expected FeatureCollection"
+            )
+
+        features = data.get("features", [])
+        if len(features) != 1:
+            raise ValueError(
+                f"Expected exactly 1 feature in {file_path.name}, found {len(features)}"
+            )
+
+        feature = features[0]
+        properties = feature.get("properties") or {}
+        geometry_data = feature.get("geometry")
+
+        if geometry_data is None:
+            raise ValueError(f"Missing geometry in {file_path.name}")
+
+        if "Var" not in properties:
+            raise ValueError(f"Missing 'Var' property in {file_path.name}")
+
+        var_value = int(properties["Var"])
+        hazard_value = map_flood_var_to_hazard(var_value)
+
+        geom = shape(geometry_data)
+        if geom.is_empty:
+            raise ValueError(f"Empty geometry in {file_path.name}")
+
+        flood_zones.append({
+            "var": var_value,
+            "hazard": hazard_value,
+            "geometry": geom,
+            "prepared": prep(geom),
+            "source_file": file_path.name,
+        })
+
+    flood_zones.sort(key=lambda zone: zone["hazard"], reverse=True)
+    _FLOOD_ZONES_CACHE = flood_zones
+
+    debug_print(
+        "[FLOOD] Loaded zones:",
+        [
+            {
+                "file": zone["source_file"],
+                "var": zone["var"],
+                "hazard": zone["hazard"],
+                "geom_type": zone["geometry"].geom_type,
+            }
+            for zone in _FLOOD_ZONES_CACHE
+        ]
+    )
+
+    return _FLOOD_ZONES_CACHE
+
+
+def get_edge_geometry(G, u, v, data):
+    edge_geom = data.get("geometry")
+    if edge_geom is not None:
+        return edge_geom
+
+    u_node = G.nodes[u]
+    v_node = G.nodes[v]
+
+    return LineString([
+        (float(u_node["x"]), float(u_node["y"])),
+        (float(v_node["x"]), float(v_node["y"])),
+    ])
+
+
+def resolve_edge_hazard(edge_geom, flood_zones):
+    if edge_geom is None or edge_geom.is_empty:
+        return 1, None
+
+    for zone in flood_zones:
+        if zone["prepared"].intersects(edge_geom):
+            return zone["hazard"], zone["var"]
+
+    return 1, None
 
 
 def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters):
@@ -68,30 +186,37 @@ def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
     return start_node, end_node
 
 
-def assign_flood_hazards(G, seed=45):
-    random.seed(seed)
+def assign_flood_hazards(G):
+    flood_zones = load_flood_zones()
 
-    counts = {1: 0, 2: 0, 3: 0, 5: 0}
+    counts = {level: 0 for level in sorted(set(VAR_TO_HAZARD.values()) | {1})}
+    var_counts = {1: 0, 2: 0, 3: 0, None: 0}
 
     for u, v, key, data in G.edges(keys=True, data=True):
-        # keep hazards stable per run
-        if "hazard" in data:
-            counts[int(data["hazard"])] = counts.get(int(data["hazard"]), 0) + 1
-            continue
-
-        r = random.random()
-        if r < 0.75:
-            data["hazard"] = 1
-        elif r < 0.95:
-            data["hazard"] = 2
-        elif r < 0.995:
-            data["hazard"] = 3
+        if data.get("hazard_source") == "flood_json" and "hazard" in data:
+            hazard = int(data.get("hazard", 1))
+            flood_var = data.get("flood_var")
         else:
-            data["hazard"] = 5
+            edge_geom = get_edge_geometry(G, u, v, data)
+            hazard, flood_var = resolve_edge_hazard(edge_geom, flood_zones)
 
-        counts[data["hazard"]] += 1
+            data["hazard"] = int(hazard)
+            data["flood_var"] = flood_var
+            data["hazard_source"] = "flood_json"
 
-    debug_print(f"[OSM] Hazard distribution: {counts}")
+        counts[hazard] = counts.get(hazard, 0) + 1
+        var_counts[flood_var] = var_counts.get(flood_var, 0) + 1
+
+    debug_print(f"[FLOOD] Hazard distribution: {counts}")
+    debug_print(
+        "[FLOOD] Flood class matches:",
+        {
+            "Var 1": var_counts.get(1, 0),
+            "Var 2": var_counts.get(2, 0),
+            "Var 3": var_counts.get(3, 0),
+            "No zone": var_counts.get(None, 0),
+        }
+    )
 
 
 def get_best_edge(G, u, v):
@@ -123,7 +248,7 @@ def evaluate_route(G, route, candidate_route_no):
             continue
 
         length = float(edge.get("length", 0))
-        hazard = int(edge.get("hazard", 0))
+        hazard = int(edge.get("hazard", 1))
 
         total_distance += length
         total_hazard += hazard
