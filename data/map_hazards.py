@@ -2,7 +2,7 @@ import json
 import pyodbc
 from shapely.geometry import shape, Point
 
-def convert_noah_to_system_scale(noah_var):
+def convert_noah_to_system_scale(noah_var): #
     if noah_var == 3: # NOAH High (> 1.5m)
         return 5      # System Extreme Hazard
     elif noah_var == 2: # NOAH Medium (0.5m - 1.5m)

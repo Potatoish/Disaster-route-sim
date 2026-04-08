@@ -1,6 +1,5 @@
 import pyodbc
 
-# The key to specific SQL Server engine
 CONNECTION_STRING = (
     r'DRIVER={SQL Server};'
     r'SERVER=localhost\SQLEXPRESS;'
@@ -8,43 +7,76 @@ CONNECTION_STRING = (
     r'Trusted_Connection=yes;'
 )
 
-def get_graph_data():
-    """Fetches nodes and edges from the SQL database."""
-    print("Connecting to SQL Server database...")
+def get_locations(barangay=None):
     try:
-        # Open the door to the database
         conn = pyodbc.connect(CONNECTION_STRING)
         cursor = conn.cursor()
 
-        # 1. Get all locations (Nodes)
-        cursor.execute("SELECT id, name, lat, lng FROM nodes;")
-        nodes = cursor.fetchall()
+        if barangay:
+            cursor.execute("""
+                SELECT name, lat, lng, barangay, node_type
+                FROM nodes
+                WHERE barangay = ?
+                ORDER BY name
+            """, (barangay,))
+        else:
+            cursor.execute("""
+                SELECT name, lat, lng, barangay, node_type
+                FROM nodes
+                ORDER BY barangay, name
+            """)
 
-        # 2. Get all roads (Edges) and match them to the location names
-        cursor.execute("""
-            SELECT n1.name AS source_name, n2.name AS target_name, e.distance_km
-            FROM edges e
-            JOIN nodes n1 ON e.source_id = n1.id
-            JOIN nodes n2 ON e.target_id = n2.id;
-        """)
-        edges = cursor.fetchall()
-
-        # Close the door
+        rows = cursor.fetchall()
         conn.close()
-        return nodes, edges
+
+        return [
+            {
+                "name": row[0],
+                "lat": float(row[1]),
+                "lng": float(row[2]),
+                "barangay": row[3],
+                "node_type": row[4]
+            }
+            for row in rows
+        ]
 
     except Exception as e:
         print(f"Database connection failed: {e}")
-        return [], []
+        return []
 
-# --- Quick Test ---
-# If you run this specific file, it will print your locations to prove it works.
-if __name__ == "__main__":
-    my_nodes, my_edges = get_graph_data()
-    
-    if my_nodes:
-        print(f"\nSuccess! Pulled {len(my_nodes)} locations and {len(my_edges)} roads.")
-        print("Here are your Pasig City locations:")
-        for node in my_nodes:
-            # node[1] is the name column
-            print(f" - {node[1]}")
+
+def get_location_by_name(name, barangay=None):
+    try:
+        conn = pyodbc.connect(CONNECTION_STRING)
+        cursor = conn.cursor()
+
+        if barangay:
+            cursor.execute("""
+                SELECT name, lat, lng, barangay, node_type
+                FROM nodes
+                WHERE name = ? AND barangay = ?
+            """, (name, barangay))
+        else:
+            cursor.execute("""
+                SELECT name, lat, lng, barangay, node_type
+                FROM nodes
+                WHERE name = ?
+            """, (name,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return None
+
+        return {
+            "name": row[0],
+            "lat": float(row[1]),
+            "lng": float(row[2]),
+            "barangay": row[3],
+            "node_type": row[4]
+        }
+
+    except Exception as e:
+        print(f"Database connection failed: {e}")
+        return None
