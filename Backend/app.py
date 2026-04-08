@@ -5,11 +5,9 @@ from main import simulate, get_locations
 app = Flask(__name__)
 CORS(app)
 
-
 @app.route("/", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
-
 
 @app.route("/locations", methods=["GET"])
 def locations():
@@ -17,8 +15,6 @@ def locations():
         "error": False,
         "locations": get_locations()
     })
-
-
 @app.route("/simulate", methods=["POST"])
 def run_simulation():
     try:
@@ -36,7 +32,6 @@ def run_simulation():
             "error": True,
             "message": str(e)
         }), 500
-
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000)

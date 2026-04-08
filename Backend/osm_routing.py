@@ -22,17 +22,14 @@ DEBUG = True
 # simple in-memory cache
 _GRAPH_CACHE = {}
 
-
 def debug_print(*args):
     if DEBUG:
         print(*args)
-
 
 def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters):
     center_lat = round((start_lat + end_lat) / 2, 3)
     center_lng = round((start_lng + end_lng) / 2, 3)
     return (center_lat, center_lng, dist_meters)
-
 
 def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS):
     center_lat = (start_lat + end_lat) / 2
@@ -56,7 +53,6 @@ def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS)
     _GRAPH_CACHE[cache_key] = G
     debug_print(f"[OSM] Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
     return G
-
 
 def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
     start_node = ox.distance.nearest_nodes(G, X=start_lng, Y=start_lat)
