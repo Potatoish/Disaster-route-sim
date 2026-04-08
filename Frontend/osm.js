@@ -1,6 +1,6 @@
 const USE_OSRM = true;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
-const ROUTE_OFFSETS = [0, 5, -5, 10, -10];
+const MAX_OSRM_WAYPOINTS = 40;
 
 function getRouteColor(category) {
   if (category === 'best') return '#22c55e';
@@ -9,34 +9,60 @@ function getRouteColor(category) {
 }
 
 function dedupePath(path) {
-  return path.filter((node, index) => path.indexOf(node) === index);
+  const seen = new Set();
+  return path.filter(node => {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    return true;
+  });
+}
+
+function normalizePathCoordinates(points) {
+  if (!Array.isArray(points)) return [];
+
+  return points
+    .filter(point => point && point.lat != null && point.lng != null)
+    .map(point => ({ lat: Number(point.lat), lng: Number(point.lng) }));
+}
+
+function getSegmentCount(route, normalizedPath, normalizedCoords) {
+  if (typeof route.segments === 'number') {
+    return route.segments;
+  }
+
+  if (normalizedCoords.length > 1) {
+    return normalizedCoords.length - 1;
+  }
+
+  if (normalizedPath.length > 1) {
+    return normalizedPath.length - 1;
+  }
+
+  return 0;
 }
 
 function normalizeRoutes(routes) {
   return routes.map(route => {
     const normalizedPath = Array.isArray(route.path) ? dedupePath(route.path) : [];
-    const coordCount = Array.isArray(route.path_coordinates) ? route.path_coordinates.length : 0;
+    const normalizedCoords = normalizePathCoordinates(route.path_coordinates);
 
     return {
       ...route,
       path: normalizedPath,
-      path_coordinates: Array.isArray(route.path_coordinates) ? route.path_coordinates : [],
+      path_coordinates: normalizedCoords,
       distance: route.distance ?? '—',
       max_hazard: route.max_hazard ?? 0,
-      segments: typeof route.segments === 'number'
-        ? route.segments
-        : (coordCount > 1 ? coordCount - 1 : (normalizedPath.length > 1 ? normalizedPath.length - 1 : 0)),
+      segments: getSegmentCount(route, normalizedPath, normalizedCoords),
       path_label: route.path_label || '',
-      color: route.color || getRouteColor(route.category)
+      color: route.color || getRouteColor(route.category),
+      street_path: Array.isArray(route.street_path) ? route.street_path : []
     };
   });
 }
 
 function getRoutePoints(route, getLocationByName) {
-  if (Array.isArray(route.path_coordinates) && route.path_coordinates.length) {
-    return route.path_coordinates
-      .filter(p => p && p.lat != null && p.lng != null)
-      .map(p => ({ lat: Number(p.lat), lng: Number(p.lng) }));
+  if (route.path_coordinates.length) {
+    return route.path_coordinates;
   }
 
   if (Array.isArray(route.path) && route.path.length) {
@@ -47,6 +73,34 @@ function getRoutePoints(route, getLocationByName) {
   }
 
   return [];
+}
+
+function samplePathForOSRM(points, maxPoints = MAX_OSRM_WAYPOINTS) {
+  if (!Array.isArray(points) || points.length <= maxPoints) {
+    return points;
+  }
+
+  const sampled = [points[0]];
+  const interiorCount = maxPoints - 2;
+  const lastIndex = points.length - 1;
+
+  for (let i = 1; i <= interiorCount; i++) {
+    const index = Math.round((i * lastIndex) / (interiorCount + 1));
+    const point = points[index];
+    const previous = sampled[sampled.length - 1];
+
+    if (!previous || previous.lat !== point.lat || previous.lng !== point.lng) {
+      sampled.push(point);
+    }
+  }
+
+  const lastPoint = points[lastIndex];
+  const previous = sampled[sampled.length - 1];
+  if (!previous || previous.lat !== lastPoint.lat || previous.lng !== lastPoint.lng) {
+    sampled.push(lastPoint);
+  }
+
+  return sampled;
 }
 
 function interpolateSegment(start, end, steps = 32, bend = 0.00018) {
@@ -119,14 +173,11 @@ function buildFallbackPath(route, getLocationByName) {
   return smoothPath;
 }
 
-function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
-  const pathCoords = buildFallbackPath(route, getLocationByName);
-  if (pathCoords.length === 0) return null;
-
+function addRouteGlow(route, pathCoords, gMap, mapLayers) {
   if (route.category === 'best') {
     mapLayers.routes.push(new google.maps.Polyline({
       path: pathCoords,
-      geodesic: true,
+      geodesic: false,
       strokeColor: '#22c55e',
       strokeOpacity: 0.10,
       strokeWeight: 26,
@@ -136,7 +187,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
 
     mapLayers.routes.push(new google.maps.Polyline({
       path: pathCoords,
-      geodesic: true,
+      geodesic: false,
       strokeColor: '#86efac',
       strokeOpacity: 0.18,
       strokeWeight: 16,
@@ -148,7 +199,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
   if (route.category === 'available') {
     mapLayers.routes.push(new google.maps.Polyline({
       path: pathCoords,
-      geodesic: true,
+      geodesic: false,
       strokeColor: '#fcd34d',
       strokeOpacity: 0.10,
       strokeWeight: 10,
@@ -156,10 +207,12 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
       zIndex: 1,
     }));
   }
+}
 
+function addRoutePolyline(pathCoords, cfg, gMap, mapLayers) {
   const poly = new google.maps.Polyline({
     path: pathCoords,
-    geodesic: true,
+    geodesic: false,
     strokeColor: cfg.color,
     strokeOpacity: cfg.opacity,
     strokeWeight: cfg.weight,
@@ -171,12 +224,38 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
   return poly;
 }
 
+function extractStreetPath(osrmRoute) {
+  const streetNames = [];
+
+  osrmRoute.legs.forEach(leg => {
+    leg.steps.forEach(step => {
+      if (step.name && step.name.trim() !== '') {
+        streetNames.push(step.name);
+      }
+    });
+  });
+
+  return streetNames.filter((street, index) => street !== streetNames[index - 1]);
+}
+
+function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
+  const pathCoords = buildFallbackPath(route, getLocationByName);
+  if (pathCoords.length === 0) return null;
+
+  route.render_path = pathCoords;
+  addRouteGlow(route, pathCoords, gMap, mapLayers);
+  return addRoutePolyline(pathCoords, cfg, gMap, mapLayers);
+}
+
 async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName) {
   try {
     const coords = getRoutePoints(route, getLocationByName);
     if (coords.length < 2) return null;
 
-    const waypointString = coords
+    const waypointCoords = samplePathForOSRM(coords);
+    if (waypointCoords.length < 2) return null;
+
+    const waypointString = waypointCoords
       .map(({ lat, lng }) => `${lng},${lat}`)
       .join(';');
 
@@ -190,53 +269,16 @@ async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName)
     const data = await response.json();
     if (data.code !== 'Ok' || !data.routes?.length) return null;
 
-    const fullPath = data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
-
-    const streetNames = [];
-    data.routes[0].legs.forEach(leg => {
-      leg.steps.forEach(step => {
-        if (step.name && step.name.trim() !== '') streetNames.push(step.name);
-      });
-    });
-
-    route.street_path = streetNames.filter((s, i) => s !== streetNames[i - 1]);
+    const osrmRoute = data.routes[0];
+    const fullPath = osrmRoute.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+    route.street_path = extractStreetPath(osrmRoute);
+    route.osrm_waypoints = waypointCoords.length;
 
     if (!fullPath.length) return null;
 
-    if (route.category === 'best') {
-      mapLayers.routes.push(new google.maps.Polyline({
-        path: fullPath,
-        geodesic: true,
-        map: gMap,
-        strokeColor: '#22c55e',
-        strokeOpacity: 0.08,
-        strokeWeight: 24,
-        zIndex: 0,
-      }));
-
-      mapLayers.routes.push(new google.maps.Polyline({
-        path: fullPath,
-        geodesic: true,
-        map: gMap,
-        strokeColor: '#86efac',
-        strokeOpacity: 0.16,
-        strokeWeight: 14,
-        zIndex: 1,
-      }));
-    }
-
-    const poly = new google.maps.Polyline({
-      path: fullPath,
-      geodesic: true,
-      strokeColor: cfg.color,
-      strokeOpacity: cfg.opacity,
-      strokeWeight: cfg.weight,
-      map: gMap,
-      zIndex: cfg.zIndex,
-    });
-
-    mapLayers.routes.push(poly);
-    return poly;
+    route.render_path = fullPath;
+    addRouteGlow(route, fullPath, gMap, mapLayers);
+    return addRoutePolyline(fullPath, cfg, gMap, mapLayers);
 
   } catch (error) {
     console.error('OSRM segment route error:', error, route.path);
@@ -318,7 +360,9 @@ async function renderRoutesOnRoads({
       );
     }
 
-    const usableCoords = getRoutePoints(route, getLocationByName);
+    const usableCoords = Array.isArray(route.render_path) && route.render_path.length
+      ? route.render_path
+      : getRoutePoints(route, getLocationByName);
     usableCoords.forEach(point => bounds.extend(point));
   }
 

@@ -226,15 +226,67 @@ def get_best_edge(G, u, v):
     return min(edge_data.values(), key=lambda x: x.get("length", float("inf")))
 
 
+def edge_geometry_to_coords(G, u, v, edge):
+    edge_geom = get_edge_geometry(G, u, v, edge)
+    edge_coords = [
+        {"lat": float(lat), "lng": float(lng)}
+        for lng, lat in edge_geom.coords
+    ]
+
+    if not edge_coords:
+        return []
+
+    u_node = G.nodes[u]
+    start_lat = float(u_node["y"])
+    start_lng = float(u_node["x"])
+
+    first_dist = abs(edge_coords[0]["lat"] - start_lat) + abs(edge_coords[0]["lng"] - start_lng)
+    last_dist = abs(edge_coords[-1]["lat"] - start_lat) + abs(edge_coords[-1]["lng"] - start_lng)
+
+    if last_dist < first_dist:
+        edge_coords.reverse()
+
+    return edge_coords
+
+
 def path_to_coords(G, route):
+    if not route:
+        return []
+
+    if len(route) == 1:
+        node_data = G.nodes[route[0]]
+        return [{
+            "lat": float(node_data["y"]),
+            "lng": float(node_data["x"])
+        }]
+
     coords = []
+
+    for u, v in zip(route[:-1], route[1:]):
+        edge = get_best_edge(G, u, v)
+        if not edge:
+            continue
+
+        edge_coords = edge_geometry_to_coords(G, u, v, edge)
+        if not edge_coords:
+            continue
+
+        if coords and coords[-1] == edge_coords[0]:
+            coords.extend(edge_coords[1:])
+        else:
+            coords.extend(edge_coords)
+
+    if coords:
+        return coords
+
+    fallback_coords = []
     for node in route:
         node_data = G.nodes[node]
-        coords.append({
+        fallback_coords.append({
             "lat": float(node_data["y"]),
             "lng": float(node_data["x"])
         })
-    return coords
+    return fallback_coords
 
 def evaluate_route(G, route, candidate_route_no):
     total_distance = 0.0
@@ -442,7 +494,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
 
     for route in final_routes:
         route["path_label"] = f"{start_name} → {end_name}"
-        route["segments"] = max(1, len(route.get("path_coordinates", [])) - 1)
+        route["segments"] = max(1, len(route.get("path", [])) - 1)
 
     debug_print("[OSM] SIMULATION END")
     debug_print("=" * 60 + "\n")
