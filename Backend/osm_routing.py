@@ -27,6 +27,22 @@ DEBUG = True
 # simple in-memory cache
 _GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
+<<<<<<< HEAD
+=======
+
+FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
+FLOOD_ZONE_FILES = [
+    FLOOD_CLASSES_DIR / "flood_var_1.geojson",
+    FLOOD_CLASSES_DIR / "flood_var_2.geojson",
+    FLOOD_CLASSES_DIR / "flood_var_3.geojson",
+]
+
+VAR_TO_HAZARD = {
+    1: 1,
+    2: 3,
+    3: 5,
+}
+>>>>>>> 7f8f701c4db68031c8662c099b9468445a16493c
 
 FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
 FLOOD_ZONE_FILES = [
@@ -45,6 +61,109 @@ def debug_print(*args):
     if DEBUG:
         print(*args)
 
+<<<<<<< HEAD
+=======
+
+def map_flood_var_to_hazard(var_value):
+    return VAR_TO_HAZARD.get(int(var_value), 1)
+
+
+def load_flood_zones():
+    global _FLOOD_ZONES_CACHE
+
+    if _FLOOD_ZONES_CACHE is not None:
+        return _FLOOD_ZONES_CACHE
+
+    flood_zones = []
+
+    for file_path in FLOOD_ZONE_FILES:
+        if not file_path.exists():
+            raise FileNotFoundError(f"Flood zone file not found: {file_path}")
+
+        with file_path.open("r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+
+        if data.get("type") != "FeatureCollection":
+            raise ValueError(
+                f"Invalid GeoJSON type in {file_path.name}: expected FeatureCollection"
+            )
+
+        features = data.get("features", [])
+        if len(features) != 1:
+            raise ValueError(
+                f"Expected exactly 1 feature in {file_path.name}, found {len(features)}"
+            )
+
+        feature = features[0]
+        properties = feature.get("properties") or {}
+        geometry_data = feature.get("geometry")
+
+        if geometry_data is None:
+            raise ValueError(f"Missing geometry in {file_path.name}")
+
+        if "Var" not in properties:
+            raise ValueError(f"Missing 'Var' property in {file_path.name}")
+
+        var_value = int(properties["Var"])
+        hazard_value = map_flood_var_to_hazard(var_value)
+
+        geom = shape(geometry_data)
+        if geom.is_empty:
+            raise ValueError(f"Empty geometry in {file_path.name}")
+
+        flood_zones.append({
+            "var": var_value,
+            "hazard": hazard_value,
+            "geometry": geom,
+            "prepared": prep(geom),
+            "source_file": file_path.name,
+        })
+
+    flood_zones.sort(key=lambda zone: zone["hazard"], reverse=True)
+    _FLOOD_ZONES_CACHE = flood_zones
+
+    debug_print(
+        "[FLOOD] Loaded zones:",
+        [
+            {
+                "file": zone["source_file"],
+                "var": zone["var"],
+                "hazard": zone["hazard"],
+                "geom_type": zone["geometry"].geom_type,
+            }
+            for zone in _FLOOD_ZONES_CACHE
+        ]
+    )
+
+    return _FLOOD_ZONES_CACHE
+
+
+def get_edge_geometry(G, u, v, data):
+    edge_geom = data.get("geometry")
+    if edge_geom is not None:
+        return edge_geom
+
+    u_node = G.nodes[u]
+    v_node = G.nodes[v]
+
+    return LineString([
+        (float(u_node["x"]), float(u_node["y"])),
+        (float(v_node["x"]), float(v_node["y"])),
+    ])
+
+
+def resolve_edge_hazard(edge_geom, flood_zones):
+    if edge_geom is None or edge_geom.is_empty:
+        return 1, None
+
+    for zone in flood_zones:
+        if zone["prepared"].intersects(edge_geom):
+            return zone["hazard"], zone["var"]
+
+    return 1, None
+
+
+>>>>>>> 7f8f701c4db68031c8662c099b9468445a16493c
 def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters):
     center_lat = round((start_lat + end_lat) / 2, 3)
     center_lng = round((start_lng + end_lng) / 2, 3)
