@@ -1,5 +1,10 @@
+import json
 import random
+from pathlib import Path
+
 import osmnx as ox
+from shapely.geometry import LineString, shape
+from shapely.prepared import prep
 
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
@@ -21,6 +26,20 @@ DEBUG = True
 
 # simple in-memory cache
 _GRAPH_CACHE = {}
+_FLOOD_ZONES_CACHE = None
+
+FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
+FLOOD_ZONE_FILES = [
+    FLOOD_CLASSES_DIR / "flood_var_1.geojson",
+    FLOOD_CLASSES_DIR / "flood_var_2.geojson",
+    FLOOD_CLASSES_DIR / "flood_var_3.geojson",
+]
+
+VAR_TO_HAZARD = {
+    1: 1,
+    2: 3,
+    3: 5,
+}
 
 def debug_print(*args):
     if DEBUG:
@@ -64,30 +83,37 @@ def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
     return start_node, end_node
 
 
-def assign_fake_hazards(G, seed=45):
-    random.seed(seed)
+def assign_flood_hazards(G):
+    flood_zones = load_flood_zones()
 
-    counts = {1: 0, 2: 0, 3: 0, 5: 0}
+    counts = {level: 0 for level in sorted(set(VAR_TO_HAZARD.values()) | {1})}
+    var_counts = {1: 0, 2: 0, 3: 0, None: 0}
 
     for u, v, key, data in G.edges(keys=True, data=True):
-        # keep hazards stable per run
-        if "hazard" in data:
-            counts[int(data["hazard"])] = counts.get(int(data["hazard"]), 0) + 1
-            continue
-
-        r = random.random()
-        if r < 0.75:
-            data["hazard"] = 1
-        elif r < 0.95:
-            data["hazard"] = 2
-        elif r < 0.995:
-            data["hazard"] = 3
+        if data.get("hazard_source") == "flood_json" and "hazard" in data:
+            hazard = int(data.get("hazard", 1))
+            flood_var = data.get("flood_var")
         else:
-            data["hazard"] = 5
+            edge_geom = get_edge_geometry(G, u, v, data)
+            hazard, flood_var = resolve_edge_hazard(edge_geom, flood_zones)
 
-        counts[data["hazard"]] += 1
+            data["hazard"] = int(hazard)
+            data["flood_var"] = flood_var
+            data["hazard_source"] = "flood_json"
 
-    debug_print(f"[OSM] Hazard distribution: {counts}")
+        counts[hazard] = counts.get(hazard, 0) + 1
+        var_counts[flood_var] = var_counts.get(flood_var, 0) + 1
+
+    debug_print(f"[FLOOD] Hazard distribution: {counts}")
+    debug_print(
+        "[FLOOD] Flood class matches:",
+        {
+            "Var 1": var_counts.get(1, 0),
+            "Var 2": var_counts.get(2, 0),
+            "Var 3": var_counts.get(3, 0),
+            "No zone": var_counts.get(None, 0),
+        }
+    )
 
 
 def get_best_edge(G, u, v):
@@ -97,15 +123,67 @@ def get_best_edge(G, u, v):
     return min(edge_data.values(), key=lambda x: x.get("length", float("inf")))
 
 
+def edge_geometry_to_coords(G, u, v, edge):
+    edge_geom = get_edge_geometry(G, u, v, edge)
+    edge_coords = [
+        {"lat": float(lat), "lng": float(lng)}
+        for lng, lat in edge_geom.coords
+    ]
+
+    if not edge_coords:
+        return []
+
+    u_node = G.nodes[u]
+    start_lat = float(u_node["y"])
+    start_lng = float(u_node["x"])
+
+    first_dist = abs(edge_coords[0]["lat"] - start_lat) + abs(edge_coords[0]["lng"] - start_lng)
+    last_dist = abs(edge_coords[-1]["lat"] - start_lat) + abs(edge_coords[-1]["lng"] - start_lng)
+
+    if last_dist < first_dist:
+        edge_coords.reverse()
+
+    return edge_coords
+
+
 def path_to_coords(G, route):
+    if not route:
+        return []
+
+    if len(route) == 1:
+        node_data = G.nodes[route[0]]
+        return [{
+            "lat": float(node_data["y"]),
+            "lng": float(node_data["x"])
+        }]
+
     coords = []
+
+    for u, v in zip(route[:-1], route[1:]):
+        edge = get_best_edge(G, u, v)
+        if not edge:
+            continue
+
+        edge_coords = edge_geometry_to_coords(G, u, v, edge)
+        if not edge_coords:
+            continue
+
+        if coords and coords[-1] == edge_coords[0]:
+            coords.extend(edge_coords[1:])
+        else:
+            coords.extend(edge_coords)
+
+    if coords:
+        return coords
+
+    fallback_coords = []
     for node in route:
         node_data = G.nodes[node]
-        coords.append({
+        fallback_coords.append({
             "lat": float(node_data["y"]),
             "lng": float(node_data["x"])
         })
-    return coords
+    return fallback_coords
 
 def evaluate_route(G, route, candidate_route_no):
     total_distance = 0.0
@@ -119,7 +197,7 @@ def evaluate_route(G, route, candidate_route_no):
             continue
 
         length = float(edge.get("length", 0))
-        hazard = int(edge.get("hazard", 0))
+        hazard = int(edge.get("hazard", 1))
 
         total_distance += length
         total_hazard += hazard
@@ -297,7 +375,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     debug_print(f"[OSM] To  : {end_name} ({end_lat}, {end_lng})")
 
     G = build_graph(start_lat, start_lng, end_lat, end_lng)
-    assign_fake_hazards(G)
+    assign_flood_hazards(G)
 
     start_node, end_node = get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng)
     candidate_routes = find_candidate_routes(G, start_node, end_node)
@@ -313,7 +391,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
 
     for route in final_routes:
         route["path_label"] = f"{start_name} → {end_name}"
-        route["segments"] = max(1, len(route.get("path_coordinates", [])) - 1)
+        route["segments"] = max(1, len(route.get("path", [])) - 1)
 
     debug_print("[OSM] SIMULATION END")
     debug_print("=" * 60 + "\n")
