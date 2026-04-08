@@ -27,8 +27,6 @@ DEBUG = True
 # simple in-memory cache
 _GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
-<<<<<<< HEAD
-=======
 
 FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
 FLOOD_ZONE_FILES = [
@@ -42,27 +40,12 @@ VAR_TO_HAZARD = {
     2: 3,
     3: 5,
 }
->>>>>>> 7f8f701c4db68031c8662c099b9468445a16493c
 
-FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
-FLOOD_ZONE_FILES = [
-    FLOOD_CLASSES_DIR / "flood_var_1.geojson",
-    FLOOD_CLASSES_DIR / "flood_var_2.geojson",
-    FLOOD_CLASSES_DIR / "flood_var_3.geojson",
-]
-
-VAR_TO_HAZARD = {
-    1: 1,
-    2: 3,
-    3: 5,
-}
 
 def debug_print(*args):
     if DEBUG:
         print(*args)
 
-<<<<<<< HEAD
-=======
 
 def map_flood_var_to_hazard(var_value):
     return VAR_TO_HAZARD.get(int(var_value), 1)
@@ -163,11 +146,11 @@ def resolve_edge_hazard(edge_geom, flood_zones):
     return 1, None
 
 
->>>>>>> 7f8f701c4db68031c8662c099b9468445a16493c
 def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters):
     center_lat = round((start_lat + end_lat) / 2, 3)
     center_lng = round((start_lng + end_lng) / 2, 3)
     return (center_lat, center_lng, dist_meters)
+
 
 def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS):
     center_lat = (start_lat + end_lat) / 2
@@ -191,6 +174,7 @@ def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS)
     _GRAPH_CACHE[cache_key] = G
     debug_print(f"[OSM] Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
     return G
+
 
 def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
     start_node = ox.distance.nearest_nodes(G, X=start_lng, Y=start_lat)
