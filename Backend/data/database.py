@@ -2,10 +2,16 @@ import pyodbc
 
 CONNECTION_STRING = (
     "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=PRLY04\\SQLEXPRESS;" 
-    "DATABASE=disaster_route_sim;"
+    "SERVER=DESKTOP-THN5GFN\\SQLEXPRESS;" 
+    "DATABASE=DIsaster_route_simulation;"
     "Trusted_Connection=yes;"
     "TrustServerCertificate=yes;"
+    #SQL
+    #disaster_route_sim - pearl sql server database name
+    #PRLY04\\SQLEXPRESS - pearl sql server instance name
+    #------------------
+    #DESKTOP-THN5GFN\SQLEXPRESS - jeff sql server instance name
+    #DIsaster_route_simulation - jeff sql server database name
 )
 
 def get_connection():

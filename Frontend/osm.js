@@ -9,12 +9,9 @@ function getRouteColor(category) {
 }
 
 function dedupePath(path) {
-  const seen = new Set();
-  return path.filter(node => {
-    if (seen.has(node)) return false;
-    seen.add(node);
-    return true;
-  });
+  if (!Array.isArray(path)) return [];
+
+  return path.filter((node, index) => index === 0 || node !== path[index - 1]);
 }
 
 function normalizePathCoordinates(points) {
@@ -22,7 +19,12 @@ function normalizePathCoordinates(points) {
 
   return points
     .filter(point => point && point.lat != null && point.lng != null)
-    .map(point => ({ lat: Number(point.lat), lng: Number(point.lng) }));
+    .map(point => ({ lat: Number(point.lat), lng: Number(point.lng) }))
+    .filter((point, index, array) => {
+      if (index === 0) return true;
+      const previous = array[index - 1];
+      return previous.lat !== point.lat || previous.lng !== point.lng;
+    });
 }
 
 function getSegmentCount(route, normalizedPath, normalizedCoords) {
@@ -63,13 +65,6 @@ function normalizeRoutes(routes) {
 function getRoutePoints(route, getLocationByName) {
   if (route.path_coordinates.length) {
     return route.path_coordinates;
-  }
-
-  if (Array.isArray(route.path) && route.path.length) {
-    return route.path
-      .map(name => getLocationByName(name))
-      .filter(Boolean)
-      .map(loc => ({ lat: loc.lat, lng: loc.lng }));
   }
 
   return [];
@@ -146,31 +141,7 @@ function buildFallbackPath(route, getLocationByName) {
     return routePoints;
   }
 
-  const routeNodes = route.path
-    .map(name => getLocationByName(name))
-    .filter(Boolean)
-    .map(node => ({ lat: node.lat, lng: node.lng }));
-
-  if (routeNodes.length < 2) return [];
-
-  const smoothPath = [];
-
-  for (let i = 0; i < routeNodes.length - 1; i++) {
-    const start = routeNodes[i];
-    const end = routeNodes[i + 1];
-
-    const dx = Math.abs(end.lng - start.lng);
-    const dy = Math.abs(end.lat - start.lat);
-    const distanceFactor = Math.max(dx, dy);
-
-    const bend = Math.min(Math.max(distanceFactor * 0.18, 0.00008), 0.00028);
-    const segmentPoints = interpolateSegment(start, end, 34, bend);
-
-    if (i > 0) segmentPoints.shift();
-    smoothPath.push(...segmentPoints);
-  }
-
-  return smoothPath;
+  return [];
 }
 
 function addRouteGlow(route, pathCoords, gMap, mapLayers) {
@@ -201,10 +172,10 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       path: pathCoords,
       geodesic: false,
       strokeColor: '#fcd34d',
-      strokeOpacity: 0.10,
-      strokeWeight: 10,
+      strokeOpacity: 0.08,
+      strokeWeight: 8,
       map: gMap,
-      zIndex: 1,
+      zIndex: 2,
     }));
   }
 }
@@ -249,6 +220,8 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
 
 async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName) {
   try {
+    if (route.category !== 'best') return null;
+
     const coords = getRoutePoints(route, getLocationByName);
     if (coords.length < 2) return null;
 
@@ -325,15 +298,20 @@ async function renderRoutesOnRoads({
   mapLayers.routes = [];
 
   const CFG = {
-    best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 6 },
-    available: { color: '#f59e0b', weight: 5, opacity: 0.9, zIndex: 3 },
-    eliminated: { color: '#ef4444', weight: 3, opacity: 0.35, zIndex: 1 },
+    best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 8 },
+    available: { color: '#f59e0b', weight: 5, opacity: 0.9, zIndex: 5 },
+    eliminated: { color: '#ef4444', weight: 4, opacity: 0.7, zIndex: 4 },
   };
+  const DRAW_ORDER = { eliminated: 0, available: 1, best: 2 };
 
   const bounds = new google.maps.LatLngBounds();
   let successCount = 0;
 
-  for (const route of [...routes].reverse()) {
+  const orderedRoutes = [...routes].sort(
+    (left, right) => (DRAW_ORDER[left.category] ?? 99) - (DRAW_ORDER[right.category] ?? 99)
+  );
+
+  for (const route of orderedRoutes) {
     const cfg = CFG[route.category] || CFG.eliminated;
 
     let poly = null;
