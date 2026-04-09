@@ -641,13 +641,6 @@ async function checkBackend() {
 
     if (r.ok) {
       isBackendLive = true;
-      const b = document.getElementById('modeBadge');
-      if (b) {
-        b.textContent = 'LIVE';
-        b.style.background = 'rgba(34,197,94,.1)';
-        b.style.borderColor = 'rgba(34,197,94,.3)';
-        b.style.color = 'var(--green)';
-      }
       document.getElementById('statusTxt').textContent = 'Backend Connected';
     }
   } catch (err) {
