@@ -2,6 +2,15 @@ const USE_OSRM = true;
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
 const MAX_OSRM_WAYPOINTS = 40;
 
+function formatDistanceKm(distanceMeters) {
+  const numericDistance = Number(distanceMeters);
+  if (!Number.isFinite(numericDistance)) {
+    return 'N/A';
+  }
+
+  return `${(numericDistance / 1000).toFixed(2)} km`;
+}
+
 function getRouteColor(category) {
   if (category === 'best') return '#22c55e';
   if (category === 'available') return '#f59e0b';
@@ -150,8 +159,8 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       path: pathCoords,
       geodesic: false,
       strokeColor: '#22c55e',
-      strokeOpacity: 0.10,
-      strokeWeight: 26,
+      strokeOpacity: 0.06,
+      strokeWeight: 12,
       map: gMap,
       zIndex: 0,
     }));
@@ -160,8 +169,8 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       path: pathCoords,
       geodesic: false,
       strokeColor: '#86efac',
-      strokeOpacity: 0.18,
-      strokeWeight: 16,
+      strokeOpacity: 0.10,
+      strokeWeight: 7,
       map: gMap,
       zIndex: 1,
     }));
@@ -172,8 +181,8 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       path: pathCoords,
       geodesic: false,
       strokeColor: '#fcd34d',
-      strokeOpacity: 0.08,
-      strokeWeight: 8,
+      strokeOpacity: 0.04,
+      strokeWeight: 4,
       map: gMap,
       zIndex: 2,
     }));
@@ -207,6 +216,16 @@ function extractStreetPath(osrmRoute) {
   });
 
   return streetNames.filter((street, index) => street !== streetNames[index - 1]);
+}
+
+function formatStreetPath(streetPath, maxItems = 6) {
+  if (!Array.isArray(streetPath) || streetPath.length === 0) {
+    return 'No named streets available';
+  }
+
+  const visible = streetPath.slice(0, maxItems);
+  const suffix = streetPath.length > maxItems ? ' ...' : '';
+  return visible.join(' → ') + suffix;
 }
 
 function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
@@ -266,15 +285,45 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     ? '✅ Available Route'
     : '❌ Eliminated';
 
+  const baseWeight = cfg.weight;
+  const baseOpacity = cfg.opacity;
+
+  poly.addListener('mouseover', () => {
+    poly.setOptions({
+      strokeWeight: baseWeight + 2,
+      strokeOpacity: Math.min(1, baseOpacity + 0.1),
+    });
+
+    if (typeof window.highlightRouteRow === 'function') {
+      window.highlightRouteRow(route.display_route_no, route.category);
+    }
+  });
+
+  poly.addListener('mouseout', () => {
+    poly.setOptions({
+      strokeWeight: baseWeight,
+      strokeOpacity: baseOpacity,
+    });
+
+    if (typeof window.clearRouteRowHighlight === 'function') {
+      window.clearRouteRowHighlight();
+    }
+  });
+
   poly.addListener('click', ev => {
+    if (typeof window.highlightRouteRow === 'function') {
+      window.highlightRouteRow(route.display_route_no, route.category, true);
+    }
+
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
     activeInfoWindowRef.current = new google.maps.InfoWindow({
       content: infoPopup(label, [
-        ['Distance', route.distance + ' m'],
+        ['Route No.', `#${route.display_route_no ?? 'N/A'}`],
+        ['Distance', formatDistanceKm(route.distance)],
         ['Max Hazard', route.max_hazard + '/5', cfg.color],
         ['Segments', typeof route.segments === 'number' ? route.segments : 'N/A'],
         ['Path', route.path_label || 'N/A'],
-        ['Streets', route.street_path?.length ? route.street_path.join(' → ') : 'N/A'],
+        ['Streets', formatStreetPath(route.street_path)],
       ]),
       position: ev.latLng,
     });
@@ -298,9 +347,9 @@ async function renderRoutesOnRoads({
   mapLayers.routes = [];
 
   const CFG = {
-    best: { color: '#22c55e', weight: 7, opacity: 1, zIndex: 8 },
-    available: { color: '#f59e0b', weight: 5, opacity: 0.9, zIndex: 5 },
-    eliminated: { color: '#ef4444', weight: 4, opacity: 0.7, zIndex: 4 },
+    best: { color: '#22c55e', weight: 5, opacity: 0.95, zIndex: 8 },
+    available: { color: '#f59e0b', weight: 4, opacity: 0.85, zIndex: 5 },
+    eliminated: { color: '#ef4444', weight: 3, opacity: 0.65, zIndex: 4 },
   };
   const DRAW_ORDER = { eliminated: 0, available: 1, best: 2 };
 

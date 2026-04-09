@@ -53,13 +53,12 @@
       <div>
         <div class="sec-label">Step 1 — Select Barangay</div>
         <div class="bgy-grid">
-          <div class="bgy-card" id="bgyPbtn" onclick="selectBarangay('Pinagbuhatan')">
+          <div class="bgy-card" id="bgyPbtn" data-barangay="Pinagbuhatan" onclick="selectBarangay('Pinagbuhatan')">
             <div class="bgy-icon">🏘️</div>
             <div class="bgy-name">Pinagbuhatan</div>
             <div class="bgy-tag">Pasig City</div>
           </div>
-          <div class="bgy-card disabled" title="This barangay is not yet available in the simulation">
-            <div class="soon-badge">COMING SOON</div>
+          <div class="bgy-card" id="bgyStaBtn" data-barangay="Sta. Lucia" onclick="selectBarangay('Sta. Lucia')">
             <div class="bgy-icon">🏘️</div>
             <div class="bgy-name">Sta. Lucia</div>
             <div class="bgy-tag">Pasig City</div>
@@ -70,7 +69,7 @@
       <div>
         <div class="sec-label">Step 2 — Disaster Type</div>
         <div class="hazard-grid">
-          <div class="hazard-card flood selected" id="hFlood" onclick="selectHazard('Flood', this)">
+          <div class="hazard-card flood" id="hFlood" onclick="selectHazard('Flood', this)">
             <div class="hazard-icon">🌊</div>
             <div>
               <div class="hazard-name">Flood</div>
@@ -197,8 +196,11 @@
     <div class="results-actions" id="resultsActions">
       <button class="dl-btn primary" onclick="downloadCSV()">⬇ Download CSV</button>
       <button class="dl-btn secondary" onclick="resetAll()">↺ New Simulation</button>
+      <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
       <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);align-self:center;" id="resultsSummaryTxt"></div>
     </div>
+
+    <button class="results-toggle-fab" id="resultsToggleFab" onclick="showResultsPanelDrawer()">Show Results</button>
   </div>
 </div>
 

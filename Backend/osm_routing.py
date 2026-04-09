@@ -4,13 +4,13 @@ from pathlib import Path
 
 import networkx as nx
 import osmnx as ox
-from shapely.geometry import LineString, shape
+from shapely.geometry import LineString, Point, shape
 from shapely.prepared import prep
 
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
 
-DIST_METERS = 7500
+DIST_METERS = 5000
 
 ACO_MAX_ROUTE_STEPS_MULTIPLIER = 2.5
 ACO_MIN_ROUTE_STEPS = 25
@@ -152,6 +152,34 @@ def resolve_edge_hazard(edge_geom, flood_zones):
             return zone["hazard"], zone["var"]
 
     return 1, None
+
+
+def resolve_point_hazard(lat, lng, flood_zones=None):
+    if lat is None or lng is None:
+        return {
+            "haz": None,
+            "flood_var": None,
+            "hazard_source": None,
+        }
+
+    if flood_zones is None:
+        flood_zones = load_flood_zones()
+
+    point = Point(float(lng), float(lat))
+
+    for zone in flood_zones:
+        if zone["prepared"].intersects(point):
+            return {
+                "haz": int(zone["hazard"]),
+                "flood_var": int(zone["var"]),
+                "hazard_source": "flood_json",
+            }
+
+    return {
+        "haz": 1,
+        "flood_var": None,
+        "hazard_source": "flood_json",
+    }
 
 
 def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters):
@@ -313,6 +341,32 @@ def path_to_coords(G, route):
             "lng": float(node_data["x"])
         })
     return fallback_coords
+
+
+def extract_route_street_path(G, route):
+    street_names = []
+
+    for u, v in route_edges(route):
+        edge = get_best_edge(G, u, v)
+        if not edge:
+            continue
+
+        edge_names = edge.get("name")
+        if edge_names is None:
+            continue
+
+        if not isinstance(edge_names, list):
+            edge_names = [edge_names]
+
+        for edge_name in edge_names:
+            name = str(edge_name).strip()
+            if not name:
+                continue
+            if street_names and street_names[-1] == name:
+                continue
+            street_names.append(name)
+
+    return street_names
 
 
 def route_edges(route):
@@ -773,6 +827,7 @@ def finalize_routes(G, candidate_routes, edge_pheromone):
     for route in candidate_routes:
         route_copy = route.copy()
         route_copy["path_coordinates"] = path_to_coords(G, route_copy["path"])
+        route_copy["street_path"] = extract_route_street_path(G, route_copy["path"])
         route_copy["final_pheromone"] = round(
             route_pheromone_score(route_copy["path"], edge_pheromone),
             4,

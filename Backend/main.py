@@ -2,21 +2,37 @@ import csv
 from datetime import datetime
 
 from data import database
-from osm_routing import simulate_osm_routes, HAZARD_THRESHOLD
+from osm_routing import simulate_osm_routes, HAZARD_THRESHOLD, resolve_point_hazard
 
 
 def get_locations():
     nodes, _ = database.get_graph_data()
 
-    return [
-        {
+    locations = []
+
+    for node in nodes:
+        lat = float(node[2])
+        lng = float(node[3])
+
+        try:
+            node_hazard = resolve_point_hazard(lat, lng)
+        except Exception:
+            node_hazard = {
+                "haz": None,
+                "flood_var": None,
+                "hazard_source": None,
+            }
+        locations.append({
             "name": node[1],
-            "lat": float(node[2]),
-            "lng": float(node[3]),
-            "barangay": node[4]
-        }
-        for node in nodes
-    ]
+            "lat": lat,
+            "lng": lng,
+            "barangay": node[4],
+            "haz": node_hazard["haz"],
+            "flood_var": node_hazard["flood_var"],
+            "hazard_source": node_hazard["hazard_source"],
+        })
+
+    return locations
 
 def simulate(start, end, hazard_type="Flood"):
     if not start:
