@@ -19,14 +19,11 @@ def locations():
 def run_simulation():
     try:
         data = request.get_json() or {}
-
         start = data.get("start")
         end = data.get("end")
         hazard = data.get("hazard", "Flood")
-
         result = simulate(start, end, hazard)
         return jsonify(result)
-
     except Exception as e:
         return jsonify({
             "error": True,
