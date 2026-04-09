@@ -12,6 +12,9 @@ CONNECTION_STRING = (
     #------------------
     #DESKTOP-THN5GFN\SQLEXPRESS - jeff sql server instance name
     #DIsaster_route_simulation - jeff sql server database name
+    #------------------
+    #SERVER=localhost\SQLEXPRESS - jess sql server instance name
+    #DATABASE=aco_evacuation - jess sql server database name
 )
 
 def get_connection():
