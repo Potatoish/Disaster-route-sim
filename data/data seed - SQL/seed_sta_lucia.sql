@@ -19,38 +19,3 @@ WHERE NOT EXISTS (
       AND n.name = v.name
 );
 GO
-
--- 2. Edges (Sta. Lucia ONLY)
--- Fill the VALUES rows only after you finalize which named places are directly connected.
--- This version resolves source_id and target_id automatically from node names.
-
--- INSERT INTO edges (source_id, target_id, distance_km)
--- SELECT s.id, t.id, v.distance_km
--- FROM (VALUES
---     ('East Ortigas Mansions', 'Sta. Lucia Barangay Hall', 0.00),
---     ('Sta. Lucia Barangay Hall', 'De Castro Elementary School', 0.00),
---     ('Sta. Lucia Barangay Hall', 'Brgy. Sta. Lucia Health Center', 0.00),
---     ('Sta. Lucia Barangay Hall', 'Santa Lucia High School (Tramo St.)', 0.00),
---     ('Santa Lucia High School (Tramo St.)', 'Sta. Lucia Bliss Multipurpose Hall', 0.00)
--- ) AS v(source_name, target_name, distance_km)
--- JOIN nodes s
---   ON s.name = v.source_name AND s.barangay = 'Sta. Lucia'
--- JOIN nodes t
---   ON t.name = v.target_name AND t.barangay = 'Sta. Lucia';
--- GO
-
--- 3. Flood Hazard (Sta. Lucia ONLY)
-INSERT INTO flood_hazard (node_id, water_level_m, rainfall_scenario, hazard_level)
-SELECT n.id, v.water_level_m, v.rainfall_scenario, v.hazard_level
-FROM (VALUES
-    ('Sta. Lucia Barangay Hall',            0.00, '25yr', 5),
-    ('De Castro Elementary School',         0.00, '25yr', 5),
-    ('Sta. Lucia Bliss Multipurpose Hall',  0.00, '25yr', 5),
-    ('Santa Lucia High School (Tramo St.)', 0.00, '25yr', 3),
-    ('Brgy. Sta. Lucia Health Center',      0.00, '25yr', 5),
-    ('East Ortigas Mansions',               0.00, '25yr', 3)
-) AS v(node_name, water_level_m, rainfall_scenario, hazard_level)
-JOIN nodes n
-  ON n.name = v.node_name
- AND n.barangay = 'Sta. Lucia';
-GO
