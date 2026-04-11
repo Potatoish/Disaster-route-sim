@@ -1,4 +1,4 @@
-const BACKEND = 'http://127.0.0.1:5000';
+﻿const BACKEND = 'http://127.0.0.1:5000';
 
 let gMap = null;
 let selectedBarangay = null;
@@ -35,57 +35,6 @@ const MAP_STYLES_DARK = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
 ];
-
-function initTheme() {
-  document.body.classList.remove('dark');
-  isMapDark = false;
-  const btn = document.querySelector('.theme-toggle');
-  const mapBtn = document.getElementById('mapThemeFabIcon');
-  if (mapBtn) mapBtn.textContent = '☾';
-  if (btn) btn.textContent = '🌙';
-}
-
-function toggleTheme() {
-  document.body.classList.toggle('dark');
-  const isDark = document.body.classList.contains('dark');
-
-  const btn = document.querySelector('.theme-toggle');
-  const mapBtn = document.getElementById('mapThemeFabIcon');
-  if (btn) btn.textContent = isDark ? '☀️' : '🌙';
-
-  if (mapBtn) mapBtn.textContent = isDark ? '☀' : '☾';
-  if (gMap) gMap.setOptions({ styles: isDark ? MAP_STYLES_DARK : MAP_STYLES_LIGHT });
-}
-
-function syncMapThemeButtons() {
-  const btn = document.querySelector('.theme-toggle');
-  const mapFab = document.getElementById('mapThemeFab');
-  const mapBtn = document.getElementById('mapThemeFabIcon');
-  const icon = isMapDark ? '☀' : '☾';
-
-  if (btn) {
-    btn.textContent = icon;
-    btn.onclick = toggleMapTheme;
-  }
-
-  if (mapFab) {
-    mapFab.onclick = toggleMapTheme;
-  }
-
-  if (mapBtn) {
-    mapBtn.textContent = icon;
-  }
-}
-
-function toggleMapTheme() {
-  isMapDark = !isMapDark;
-  document.body.classList.remove('dark');
-  syncMapThemeButtons();
-
-  if (gMap) {
-    gMap.setOptions({ styles: isMapDark ? MAP_STYLES_DARK : MAP_STYLES_LIGHT });
-  }
-}
 
 function syncSiteThemeButton() {
   const btn = document.querySelector('.theme-toggle');
@@ -651,8 +600,8 @@ function drawNode(n, start, end) {
   const hazardSourceText = describeHazardSource(n);
 
   const iw = new google.maps.InfoWindow({
-    content: infoPopup('📍 ' + n.name, [
-      ['Role', n.name === start ? '🟣 START' : n.name === end ? '🔵 END' : 'Node'],
+    content: infoPopup('?? ' + n.name, [
+      ['Role', n.name === start ? '?? START' : n.name === end ? '?? END' : 'Node'],
       ['Node Flood Hazard', hazardText, col],
       ['Flood Class', floodClassText],
       ['Hazard Source', hazardSourceText],
@@ -732,8 +681,8 @@ function drawSelectedPinsOnly(start, end) {
     });
 
     const iw = new google.maps.InfoWindow({
-      content: infoPopup('📍 ' + n.name, [
-        ['Role', n.name === start ? '🟣 START' : '🔵 END'],
+      content: infoPopup('?? ' + n.name, [
+        ['Role', n.name === start ? '?? START' : '?? END'],
         ['Node Flood Hazard', hazardText, col],
         ['Flood Class', floodClassText],
         ['Hazard Source', hazardSourceText],
@@ -866,7 +815,7 @@ function onNodeChange() {
 
   if (canRun) {
     document.getElementById('infoBox').innerHTML =
-      `Ready! <strong>${start}</strong> → <strong>${end}</strong>. Click <strong>Run Simulation</strong>.`;
+      `Ready! <strong>${start}</strong> ? <strong>${end}</strong>. Click <strong>Run Simulation</strong>.`;
   } else if (!selectedHazard) {
     document.getElementById('infoBox').innerHTML =
       `Choose a <strong>disaster type</strong> to enable route testing.`;
@@ -910,7 +859,7 @@ function advanceStep(n) {
     const d = document.getElementById('sd' + i);
     const l = document.getElementById('sl' + i);
     d.className = i < n ? 'step-dot done' : i === n ? 'step-dot active' : 'step-dot';
-    d.textContent = i < n ? '✓' : i;
+    d.textContent = i < n ? '?' : i;
     if (l) l.className = i < n ? 'step-line done' : 'step-line';
   }
 }
@@ -1044,7 +993,7 @@ function showResultsPanel(result) {
       ${statBox('Best Dist.', best ? formatDistanceKm(best.distance) : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
     </div>
     <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);">
-      Hazard threshold: ≤3 &nbsp;|&nbsp; Algorithm: ACO &nbsp;|&nbsp; Rule: Lexicographic Safety-First &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
+      Hazard threshold: =3 &nbsp;|&nbsp; Algorithm: ACO &nbsp;|&nbsp; Rule: Lexicographic Safety-First &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
     </div>`;
 
   document.getElementById('resultsSummaryTxt').textContent = safe.length
@@ -1357,13 +1306,13 @@ function buildTable(routes) {
       .map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`)
       .join('');
 
-    const pathTitle = r.path_label || (Array.isArray(r.path) ? r.path.map(v => String(v)).join(' → ') : 'N/A');
+    const pathTitle = r.path_label || (Array.isArray(r.path) ? r.path.map(v => String(v)).join(' ? ') : 'N/A');
     const pathShort = r.path_label || 'N/A';
     const segmentCount = typeof r.segments === 'number'
       ? r.segments
       : (Array.isArray(r.path) ? Math.max(0, r.path.length - 1) : 'N/A');
     const streetPreview = Array.isArray(r.street_path) && r.street_path.length
-      ? r.street_path.join(' → ')
+      ? r.street_path.join(' ? ')
       : 'No named streets available';
 
     return `<tr class="route-row" data-route-no="${r.display_route_no ?? i + 1}" data-route-category="${r.category || ''}" onclick="toggleRouteFocus(${r.display_route_no ?? i + 1}, '${r.category || ''}', true)" title="Click to focus this route">
