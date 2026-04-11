@@ -10,6 +10,7 @@ let isMapDark = false;
 let mapLayers = { edges: [], nodes: [], routes: [], scopes: [], routeGroups: [], scopePoints: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
+let workflowFocusSection = null;
 const activeInfoWindowRef = { current: null };
 
 let ALL_LOCATIONS = [];
@@ -723,6 +724,7 @@ function redrawNodes(start, end) {
 
 function selectBarangay(name) {
   const nodes = getBarangayLocations(name);
+  workflowFocusSection = null;
 
   if (!nodes.length) {
     document.getElementById('infoBox').innerHTML =
@@ -803,6 +805,7 @@ function onNodeChange() {
   const start = document.getElementById('startSel').value;
   const end = document.getElementById('endSel').value;
   const canRun = !!(selectedHazard && start && end && start !== end);
+  workflowFocusSection = null;
 
   if (canRun) advanceStep(5);
   else if (!selectedHazard) advanceStep(2);
@@ -835,6 +838,7 @@ function selectHazard(name, el) {
   document.querySelectorAll('.hazard-card:not(.disabled)').forEach(c => c.classList.remove('selected', 'flood'));
   el.classList.add('selected', name.toLowerCase());
   selectedHazard = name;
+  workflowFocusSection = null;
 
   if (!selectedBarangay) {
     document.getElementById('infoBox').innerHTML =
@@ -854,19 +858,248 @@ function selectHazard(name, el) {
   }
 }
 
-function advanceStep(n) {
-  for (let i = 1; i <= 5; i++) {
-    const d = document.getElementById('sd' + i);
-    const l = document.getElementById('sl' + i);
-    d.className = i < n ? 'step-dot done' : i === n ? 'step-dot active' : 'step-dot';
-    d.textContent = i < n ? '?' : i;
-    if (l) l.className = i < n ? 'step-line done' : 'step-line';
+function getCompletedSteps() {
+  const start = document.getElementById('startSel')?.value || '';
+  const end = document.getElementById('endSel')?.value || '';
+
+  return {
+    1: !!selectedBarangay,
+    2: !!selectedHazard,
+    3: !!start,
+    4: !!end && start !== end,
+    5: !!(selectedHazard && start && end && start !== end),
+  };
+}
+
+function getMaxReachableStep() {
+  if (!selectedBarangay) return 1;
+  if (!selectedHazard) return 2;
+
+  const start = document.getElementById('startSel')?.value || '';
+  const end = document.getElementById('endSel')?.value || '';
+
+  if (!start) return 3;
+  if (!end || start === end) return 4;
+  return 5;
+}
+
+function stepToSectionKey(step) {
+  if (step <= 1) return 'barangay';
+  if (step === 2) return 'hazard';
+  if (step === 3 || step === 4) return 'route';
+  return 'run';
+}
+
+function isWorkflowSectionAvailable(sectionKey) {
+  if (sectionKey === 'barangay') return true;
+  if (sectionKey === 'hazard') return !!selectedBarangay;
+  if (sectionKey === 'route') return !!(selectedBarangay && selectedHazard);
+  if (sectionKey === 'run') return !!(selectedBarangay && selectedHazard);
+  return false;
+}
+
+function getActiveWorkflowSection(activeStep) {
+  if (workflowFocusSection && isWorkflowSectionAvailable(workflowFocusSection)) {
+    return workflowFocusSection;
   }
+
+  return stepToSectionKey(activeStep);
+}
+
+function getWorkflowCard(sectionKey) {
+  const map = {
+    barangay: document.getElementById('cardBarangay'),
+    hazard: document.getElementById('cardHazard'),
+    route: document.getElementById('cardRoute'),
+    run: document.getElementById('cardRun'),
+  };
+
+  return map[sectionKey] || null;
+}
+
+function getStepValue(step) {
+  const start = document.getElementById('startSel')?.value || '';
+  const end = document.getElementById('endSel')?.value || '';
+
+  if (step === 1) return selectedBarangay || 'Choose a barangay';
+  if (step === 2) return selectedHazard || (selectedBarangay ? 'Choose disaster type' : 'Waiting for barangay');
+  if (step === 3) return start || (selectedHazard ? 'Choose start node' : 'Waiting for disaster type');
+  if (step === 4) return end || (start ? 'Choose end node' : 'Waiting for start node');
+  if (step === 5) return selectedHazard && start && end && start !== end ? 'Ready to simulate' : 'Complete selections first';
+  return '';
+}
+
+function syncWorkflowStatus(activeStep, completed, maxReachableStep) {
+  for (let i = 1; i <= 5; i++) {
+    const stepEl = document.getElementById('sd' + i);
+    if (!stepEl) continue;
+
+    const badge = stepEl.querySelector('.workflow-step-badge');
+    const value = document.getElementById('stepValue' + i);
+
+    stepEl.className = 'workflow-step';
+    stepEl.classList.toggle('done', !!completed[i] && i !== activeStep);
+    stepEl.classList.toggle('active', i === activeStep);
+    stepEl.classList.toggle('ready', i <= maxReachableStep && !completed[i] && i !== activeStep);
+    stepEl.classList.toggle('locked', i > maxReachableStep);
+
+    if (badge) {
+      badge.textContent = completed[i] && i !== activeStep ? '✓' : String(i);
+    }
+
+    if (value) {
+      value.textContent = getStepValue(i);
+    }
+  }
+}
+
+function syncWorkflowSummaries() {
+  const start = document.getElementById('startSel')?.value || '';
+  const end = document.getElementById('endSel')?.value || '';
+  const canRun = !!(selectedHazard && start && end && start !== end);
+
+  const summaryBarangay = document.getElementById('summaryBarangay');
+  const summaryHazard = document.getElementById('summaryHazard');
+  const summaryRoute = document.getElementById('summaryRoute');
+  const summaryRun = document.getElementById('summaryRun');
+
+  if (summaryBarangay) {
+    summaryBarangay.textContent = selectedBarangay
+      ? `${selectedBarangay} is selected as the active simulation scope.`
+      : 'Select the scope you want to simulate.';
+  }
+
+  if (summaryHazard) {
+    summaryHazard.textContent = selectedHazard
+      ? `${selectedHazard} is the active hazard scenario.`
+      : selectedBarangay
+      ? 'Choose which hazard scenario to test.'
+      : 'Choose a barangay first to unlock hazard testing.';
+  }
+
+  if (summaryRoute) {
+    summaryRoute.textContent = start && end
+      ? `${shortNodeLabel(start)} → ${shortNodeLabel(end)}`
+      : start
+      ? `Start node: ${shortNodeLabel(start)}. Choose an end node next.`
+      : selectedHazard
+      ? 'Pick the origin and destination nodes inside the selected barangay.'
+      : 'Choose a barangay and disaster type before selecting nodes.';
+  }
+
+  if (summaryRun) {
+    summaryRun.textContent = canRun
+      ? 'Everything is ready. Launch the simulation when you are set.'
+      : 'Review the setup, then launch the simulation.';
+  }
+
+  const changeBarangayBtn = document.getElementById('changeBarangayBtn');
+  const changeHazardBtn = document.getElementById('changeHazardBtn');
+  const changeRouteBtn = document.getElementById('changeRouteBtn');
+  const resetRouteBtn = document.getElementById('resetRouteBtn');
+
+  if (changeBarangayBtn) {
+    changeBarangayBtn.textContent = selectedBarangay ? 'Change' : 'Select';
+  }
+
+  if (changeHazardBtn) {
+    changeHazardBtn.textContent = selectedHazard ? 'Change' : 'Select';
+    changeHazardBtn.disabled = !selectedBarangay;
+  }
+
+  if (changeRouteBtn) {
+    changeRouteBtn.disabled = !(selectedBarangay && selectedHazard);
+  }
+
+  if (resetRouteBtn) {
+    resetRouteBtn.disabled = !(start || end);
+  }
+}
+
+function syncWorkflowCards(activeStep, completed) {
+  const activeSection = getActiveWorkflowSection(activeStep);
+  const sectionCompletion = {
+    barangay: !!completed[1],
+    hazard: !!completed[2],
+    route: !!completed[4],
+    run: !!completed[5],
+  };
+
+  ['barangay', 'hazard', 'route', 'run'].forEach(sectionKey => {
+    const card = getWorkflowCard(sectionKey);
+    if (!card) return;
+
+    const isActive = sectionKey === activeSection;
+    const isCompleted = sectionCompletion[sectionKey];
+    const isEnabled = isWorkflowSectionAvailable(sectionKey);
+
+    card.classList.toggle('active', isActive);
+    card.classList.toggle('completed', isCompleted);
+    card.classList.toggle('collapsed', !isActive);
+    card.classList.toggle('disabled', !isEnabled);
+  });
+}
+
+function focusWorkflowSection(sectionKey) {
+  if (!isWorkflowSectionAvailable(sectionKey)) return;
+
+  workflowFocusSection = sectionKey;
+  advanceStep(getMaxReachableStep());
+
+  const target = getWorkflowCard(sectionKey);
+  if (target && typeof target.scrollIntoView === 'function') {
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function resetRouteSelection() {
+  if (!selectedBarangay) return;
+
+  workflowFocusSection = 'route';
+  clearBarangaySelections({ keepResults: false, keepInfoText: true });
+
+  if (selectedHazard) {
+    populateBarangayNodeSelectors(selectedBarangay);
+    setRouteSelectorsEnabled(true);
+    document.getElementById('infoBox').innerHTML =
+      `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`;
+    advanceStep(3);
+  } else {
+    document.getElementById('infoBox').innerHTML =
+      `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose a <strong>disaster type</strong> first.`;
+    advanceStep(2);
+  }
+
+  document.getElementById('emptyMap').style.display = 'none';
+  loadBarangayMapOnly(selectedBarangay);
+}
+
+function initStepNavigation() {}
+
+function goToStep() {}
+
+function advanceStep(n) {
+  const completed = getCompletedSteps();
+  const maxReachableStep = getMaxReachableStep();
+  const activeStep = Math.max(1, Math.min(n, maxReachableStep));
+  const displayStep = workflowFocusSection
+    ? ({
+        barangay: 1,
+        hazard: 2,
+        route: completed[3] ? 4 : 3,
+        run: 5,
+      }[workflowFocusSection] || activeStep)
+    : activeStep;
+
+  syncWorkflowStatus(displayStep, completed, maxReachableStep);
+  syncWorkflowSummaries();
+  syncWorkflowCards(activeStep, completed);
 }
 
 async function runSimulation() {
   const start = document.getElementById('startSel').value;
   const end = document.getElementById('endSel').value;
+  workflowFocusSection = null;
 
   if (!start || !end || start === end) return;
   if (!isBackendLive) {
@@ -1368,6 +1601,7 @@ function resetAll() {
   simData = null;
   selectedBarangay = null;
   selectedHazard = null;
+  workflowFocusSection = null;
   clearLayers();
 
   ['startSel', 'endSel'].forEach(id => {
@@ -1455,6 +1689,8 @@ window.highlightRouteRow = function highlightRouteRow(routeNo, category, switchT
 };
 
 window.clearSelectedRouteRow = clearSelectedRouteRow;
+window.focusWorkflowSection = focusWorkflowSection;
+window.resetRouteSelection = resetRouteSelection;
 
 window.toggleRouteFocus = function toggleRouteFocus(routeNo, category, switchTab = false) {
   const shouldClear = selectedRouteFocus && selectedRouteFocus.routeNo === routeNo;
@@ -1481,5 +1717,9 @@ window.focusRouteSelection = function focusRouteSelection(routeNo, category, swi
 };
 
 window.clearRouteAnimation = clearRouteAnimation;
+window.goToStep = goToStep;
 window.recenterMapView = recenterMapView;
 window.initMap = initMap;
+
+initStepNavigation();
+advanceStep(1);

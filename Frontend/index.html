@@ -13,14 +13,14 @@
 <body onload="initTheme()">
 
 <div class="topbar">
-  <div class="topbar-logo">🐜</div>
+  <div class="topbar-logo">&#128028;</div>
   <div>
     <div class="topbar-title">DISASTER MITIGATION ACO ROUTE SYSTEM</div>
-    <div class="topbar-sub">Ant Colony Optimization · Lexicographic Safety-First · Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
+    <div class="topbar-sub">Ant Colony Optimization - Lexicographic Safety-First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
   </div>
 
   <div class="topbar-right">
-    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9790;</button>
 
     <div class="status-pill">
       <div class="status-dot"></div>
@@ -38,97 +38,131 @@
     </div>
 
     <div class="panel-body">
-      <div class="steps">
-        <div class="step-dot active" id="sd1">1</div>
-        <div class="step-line" id="sl1"></div>
-        <div class="step-dot" id="sd2">2</div>
-        <div class="step-line" id="sl2"></div>
-        <div class="step-dot" id="sd3">3</div>
-        <div class="step-line" id="sl3"></div>
-        <div class="step-dot" id="sd4">4</div>
-        <div class="step-line" id="sl4"></div>
-        <div class="step-dot" id="sd5">5</div>
-      </div>
-
-      <div>
-        <div class="sec-label">Step 1 — Select Barangay</div>
-        <div class="bgy-grid">
-          <div class="bgy-card" id="bgyPbtn" data-barangay="Pinagbuhatan" onclick="selectBarangay('Pinagbuhatan')">
-            <div class="bgy-icon">🏘️</div>
-            <div class="bgy-name">Pinagbuhatan</div>
-            <div class="bgy-tag">Pasig City</div>
+      <div class="workflow-main">
+      <div class="workflow-card active" id="cardBarangay" data-workflow-card="barangay">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Barangay</div>
+            <div class="workflow-card-summary" id="summaryBarangay">Select the scope you want to simulate.</div>
           </div>
-          <div class="bgy-card" id="bgyStaBtn" data-barangay="Sta. Lucia" onclick="selectBarangay('Sta. Lucia')">
-            <div class="bgy-icon">🏘️</div>
-            <div class="bgy-name">Sta. Lucia</div>
-            <div class="bgy-tag">Pasig City</div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn" id="changeBarangayBtn" type="button" onclick="focusWorkflowSection('barangay')">Select</button>
           </div>
         </div>
-      </div>
-
-      <div>
-        <div class="sec-label">Step 2 — Disaster Type</div>
-        <div class="hazard-grid">
-          <div class="hazard-card flood" id="hFlood" onclick="selectHazard('Flood', this)">
-            <div class="hazard-icon">🌊</div>
-            <div>
-              <div class="hazard-name">Flood</div>
-              <div class="hazard-sub">Water level</div>
+        <div class="workflow-card-body">
+          <div class="bgy-grid">
+            <div class="bgy-card" id="bgyPbtn" data-barangay="Pinagbuhatan" onclick="selectBarangay('Pinagbuhatan')">
+              <div class="bgy-icon">&#127969;</div>
+              <div class="bgy-name">Pinagbuhatan</div>
+              <div class="bgy-tag">Pasig City</div>
             </div>
-          </div>
-
-          <div class="hazard-card disabled">
-            <div class="soon-badge">SOON</div>
-            <div class="hazard-icon">🔥</div>
-            <div>
-              <div class="hazard-name">Fire</div>
-              <div class="hazard-sub">Coming soon</div>
-            </div>
-          </div>
-
-          <div class="hazard-card disabled">
-            <div class="soon-badge">SOON</div>
-            <div class="hazard-icon">⚡</div>
-            <div>
-              <div class="hazard-name">Earthquake</div>
-              <div class="hazard-sub">Coming soon</div>
+            <div class="bgy-card" id="bgyStaBtn" data-barangay="Sta. Lucia" onclick="selectBarangay('Sta. Lucia')">
+              <div class="bgy-icon">&#127969;</div>
+              <div class="bgy-name">Sta. Lucia</div>
+              <div class="bgy-tag">Pasig City</div>
             </div>
           </div>
         </div>
       </div>
 
-      <div>
-        <div class="sec-label">Steps 3 & 4 — Select Route</div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div class="field">
-            <label>▲ START NODE — Safety Origin</label>
-            <select id="startSel" disabled></select>
+      <div class="workflow-card" id="cardHazard" data-workflow-card="hazard">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Disaster</div>
+            <div class="workflow-card-summary" id="summaryHazard">Choose which hazard scenario to test.</div>
           </div>
-
-          <div style="text-align:center;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--dim);">
-            ↓ &nbsp;move to&nbsp; ↓
+          <div class="workflow-card-actions">
+            <button class="card-action-btn" id="changeHazardBtn" type="button" onclick="focusWorkflowSection('hazard')">Select</button>
           </div>
+        </div>
+        <div class="workflow-card-body">
+          <div class="hazard-grid">
+            <div class="hazard-card flood" id="hFlood" onclick="selectHazard('Flood', this)">
+              <div class="hazard-icon">&#127754;</div>
+              <div>
+                <div class="hazard-name">Flood</div>
+                <div class="hazard-sub">Water level</div>
+              </div>
+            </div>
 
-          <div class="field">
-            <label>▼ END NODE — Safety Destination</label>
-            <select id="endSel" disabled></select>
+            <div class="hazard-card disabled">
+              <div class="soon-badge">SOON</div>
+              <div class="hazard-icon">&#128293;</div>
+              <div>
+                <div class="hazard-name">Fire</div>
+                <div class="hazard-sub">Coming soon</div>
+              </div>
+            </div>
+
+            <div class="hazard-card disabled">
+              <div class="soon-badge">SOON</div>
+              <div class="hazard-icon">&#9889;</div>
+              <div>
+                <div class="hazard-name">Earthquake</div>
+                <div class="hazard-sub">Coming soon</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="info-box" id="infoBox">
-        Select a <strong>barangay</strong> to begin. The ACO algorithm finds the
-        <strong>safest route</strong> using the lexicographic safety-first rule —
-        hazard level is evaluated before travel distance.
+      <div class="workflow-card" id="cardRoute" data-workflow-card="route">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Start / End</div>
+            <div class="workflow-card-summary" id="summaryRoute">Pick the origin and destination nodes inside the selected barangay.</div>
+          </div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn" id="changeRouteBtn" type="button" onclick="focusWorkflowSection('route')">Change</button>
+            <button class="card-action-btn subtle" id="resetRouteBtn" type="button" onclick="resetRouteSelection()">Reset</button>
+          </div>
+        </div>
+        <div class="workflow-card-body">
+          <div class="workflow-route-flow">
+            <div class="field">
+              <label>START NODE - Safety Origin</label>
+              <select id="startSel" disabled></select>
+            </div>
+
+            <div class="workflow-route-divider">
+              move to
+            </div>
+
+            <div class="field">
+              <label>END NODE - Safety Destination</label>
+              <select id="endSel" disabled></select>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <button class="run-btn" id="runBtn" onclick="runSimulation()" disabled>
-        ▶&nbsp; RUN SIMULATION
-      </button>
+      <div class="workflow-card" id="cardRun" data-workflow-card="run">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Run</div>
+            <div class="workflow-card-summary" id="summaryRun">Review the setup, then launch the simulation.</div>
+          </div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn subtle" id="changeRunBtn" type="button" onclick="resetAll()">Reset all</button>
+          </div>
+        </div>
+        <div class="workflow-card-body workflow-run-body">
+          <div class="info-box" id="infoBox">
+            Select a <strong>barangay</strong> to begin. The ACO algorithm finds the
+            <strong>safest route</strong> using the lexicographic safety-first rule -
+            hazard level is evaluated before travel distance.
+          </div>
 
-      <button class="reset-btn" id="resetBtn" onclick="resetAll()">
-        ↺ &nbsp;New Simulation
-      </button>
+          <button class="run-btn" id="runBtn" onclick="runSimulation()" disabled>
+            Run Simulation
+          </button>
+
+          <button class="reset-btn" id="resetBtn" onclick="resetAll()">
+            New Simulation
+          </button>
+        </div>
+      </div>
+      </div>
     </div>
   </div>
 
@@ -137,7 +171,7 @@
       <div id="map"></div>
 
       <div class="empty-map" id="emptyMap">
-        <div class="empty-map-icon">🗺️</div>
+        <div class="empty-map-icon">&#128506;</div>
         <div class="empty-map-txt">Select a barangay to load the map</div>
       </div>
 
@@ -154,7 +188,7 @@
         <div style="margin-top:5px;">
           <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
           <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
-          <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe (≤2)</span></div>
+          <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe (&le;2)</span></div>
           <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate (3)</span></div>
           <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger (>3)</span></div>
         </div>
@@ -162,10 +196,10 @@
 
       <div class="map-controls-bl" id="mapControls">
         <button class="map-fab" id="mapThemeFab" onclick="toggleTheme()" title="Switch light or dark map">
-          <span id="mapThemeFabIcon">☾</span>
+          <span id="mapThemeFabIcon">&#9790;</span>
         </button>
         <button class="map-fab" id="mapRecenterFab" onclick="recenterMapView()" title="Re-center map">
-          ⌖
+          &#8982;
         </button>
       </div>
     </div>
@@ -181,20 +215,20 @@
         <div class="ant-dot"></div>
         <div class="ant-dot"></div>
         <div class="ant-center">
-          <div class="ant-pulse-ring"><div class="ant-emoji">🐜</div></div>
+          <div class="ant-pulse-ring"><div class="ant-emoji">&#128027;</div></div>
         </div>
       </div>
       <div class="loader-text">RUNNING ACO ALGORITHM</div>
-      <div class="loader-sub" id="loaderSub">Initializing ant colony…</div>
+      <div class="loader-sub" id="loaderSub">Initializing ant colony...</div>
       <div class="loader-progress"><div class="loader-bar" id="loaderBar"></div></div>
     </div>
 
     <div class="results-panel" id="resultsPanel">
       <div class="results-inner">
         <div class="results-tabs">
-          <div class="rtab active" onclick="switchTab('safe',this)">✅ Safe Routes</div>
-          <div class="rtab" onclick="switchTab('elim',this)">❌ Eliminated Routes</div>
-          <div class="rtab" onclick="switchTab('summary',this)">📊 Summary</div>
+          <div class="rtab active" onclick="switchTab('safe',this)">Safe Routes</div>
+          <div class="rtab" onclick="switchTab('elim',this)">Eliminated Routes</div>
+          <div class="rtab" onclick="switchTab('summary',this)">Summary</div>
         </div>
         <div class="rtab-content active" id="tab-safe"></div>
         <div class="rtab-content" id="tab-elim"></div>
@@ -203,8 +237,8 @@
     </div>
 
     <div class="results-actions" id="resultsActions">
-      <button class="dl-btn primary" onclick="downloadCSV()">⬇ Download CSV</button>
-      <button class="dl-btn secondary" onclick="resetAll()">↺ New Simulation</button>
+      <button class="dl-btn primary" onclick="downloadCSV()">Download CSV</button>
+      <button class="dl-btn secondary" onclick="resetAll()">New Simulation</button>
       <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
       <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);align-self:center;" id="resultsSummaryTxt"></div>
     </div>
@@ -222,3 +256,4 @@
 
 </body>
 </html>
+

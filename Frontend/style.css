@@ -204,55 +204,249 @@ body.dark .mode-badge {
   padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
-.steps {
+.workflow-main {
   display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.workflow-status,
+.workflow-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0)),
+    var(--panel);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, .05);
+}
+
+body.dark .workflow-status,
+body.dark .workflow-card {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0)),
+    var(--panel);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, .22);
+}
+
+.workflow-status {
+  position: sticky;
+  top: 18px;
+  padding: 12px 8px;
+  border-radius: 20px;
+  z-index: 2;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 32px rgba(15, 23, 42, .10);
+}
+
+.workflow-status-label {
+  font-family: 'DM Mono', monospace;
+  font-size: .5rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.workflow-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-step {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 6px;
+  padding: 9px 6px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: rgba(148, 163, 184, .06);
+  transition: all .22s ease;
+  text-align: center;
 }
 
-.step-dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
+.workflow-step-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border2);
+  background: var(--panel);
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: .72rem;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: 'DM Mono', monospace;
-  font-size: .7rem;
-  border: 2px solid var(--border2);
-  color: var(--muted);
-  background: var(--panel);
-  transition: all .3s;
   flex-shrink: 0;
 }
 
-.step-dot.active {
-  border-color: var(--accent);
-  color: var(--accent);
+.workflow-step-copy {
+  min-width: 0;
+  width: 100%;
+}
+
+.workflow-step-name {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.05;
+}
+
+.workflow-step-value {
+  font-family: 'DM Mono', monospace;
+  font-size: .48rem;
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.2;
+}
+
+.workflow-step.active {
+  border-color: rgba(37, 99, 235, .28);
   background: rgba(37, 99, 235, .08);
 }
 
-body.dark .step-dot.active {
-  background: rgba(14, 165, 233, .1);
+.workflow-step.active .workflow-step-badge {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .14);
 }
 
-.step-dot.done {
-  border-color: var(--green);
-  color: var(--green);
+.workflow-step.done {
+  border-color: rgba(34, 197, 94, .26);
   background: rgba(34, 197, 94, .08);
 }
 
-.step-line {
-  flex: 1;
-  height: 1px;
-  background: var(--border2);
-  transition: background .3s;
+.workflow-step.done .workflow-step-badge {
+  border-color: var(--green);
+  color: var(--green);
 }
 
-.step-line.done {
-  background: var(--green);
+.workflow-step.ready {
+  border-color: rgba(148, 163, 184, .18);
+}
+
+.workflow-step.locked {
+  opacity: .55;
+}
+
+.workflow-card {
+  padding: 14px;
+  transition: border-color .22s ease, box-shadow .22s ease, background .22s ease;
+}
+
+.workflow-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.workflow-card-summary {
+  font-size: .72rem;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.workflow-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.card-action-btn {
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: .62rem;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+.card-action-btn.subtle {
+  color: var(--muted);
+}
+
+.card-action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.card-action-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.workflow-card-body {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workflow-card.collapsed .workflow-card-body {
+  display: none;
+}
+
+.workflow-card.active {
+  border-color: rgba(37, 99, 235, .34);
+  background:
+    linear-gradient(180deg, rgba(37, 99, 235, .08), rgba(37, 99, 235, .02)),
+    var(--panel);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, .12), 0 14px 30px rgba(37, 99, 235, .08);
+}
+
+.workflow-card.completed:not(.active) {
+  border-color: rgba(34, 197, 94, .20);
+}
+
+.workflow-card.disabled {
+  opacity: .82;
+}
+
+.workflow-card.collapsed .workflow-card-head {
+  margin-bottom: 0;
+}
+
+body.dark .workflow-card.active {
+  border-color: rgba(56, 189, 248, .3);
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, .10), rgba(56, 189, 248, .02)),
+    var(--panel);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, .12), 0 18px 32px rgba(2, 132, 199, .16);
+}
+
+.workflow-route-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workflow-route-divider {
+  text-align: center;
+  font-family: 'DM Mono', monospace;
+  font-size: .65rem;
+  color: var(--dim);
+}
+
+.workflow-run-body .info-box {
+  margin-top: 0;
 }
 
 .sec-label {
@@ -326,8 +520,8 @@ body.dark .bgy-card.selected {
 
 .hazard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .hazard-card {
@@ -445,11 +639,12 @@ select option {
 .info-box {
   background: rgba(37, 99, 235, .05);
   border: 1px solid rgba(37, 99, 235, .15);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 14px;
+  padding: 12px 14px;
   font-size: .7rem;
   color: var(--muted);
   line-height: 1.6;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, .06);
 }
 
 body.dark .info-box {
@@ -464,6 +659,7 @@ body.dark .info-box {
 
 .run-btn {
   width: 100%;
+  margin-top: 2px;
   padding: 13px;
   background: linear-gradient(135deg, #0369a1, var(--accent));
   border: none;
@@ -508,6 +704,7 @@ body.dark .run-btn:hover {
 
 .reset-btn {
   width: 100%;
+  margin-top: -2px;
   padding: 9px;
   background: transparent;
   border: 1.5px solid var(--border2);
