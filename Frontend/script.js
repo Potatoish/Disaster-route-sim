@@ -176,9 +176,19 @@ function clearRoutePreview(group) {
     group.previewTimer = null;
   }
 
+  if (group.previewDotsHaloLayer) {
+    group.previewDotsHaloLayer.setMap(null);
+    group.previewDotsHaloLayer = null;
+  }
+
   if (group.previewDotsLayer) {
     group.previewDotsLayer.setMap(null);
     group.previewDotsLayer = null;
+  }
+
+  if (group.previewArrowHaloLayer) {
+    group.previewArrowHaloLayer.setMap(null);
+    group.previewArrowHaloLayer = null;
   }
 
   if (group.previewArrowLayer) {
@@ -1048,7 +1058,7 @@ function getDefaultRouteVisual(group) {
       mainWeight: 5,
       mainOpacity: 0.95,
       outlineWeight: 9,
-      outlineOpacity: 0,
+      outlineOpacity: 0.92,
       glowOpacities: [0.06, 0.10],
       zIndex: 8,
     };
@@ -1059,7 +1069,7 @@ function getDefaultRouteVisual(group) {
       mainWeight: 4,
       mainOpacity: 0.85,
       outlineWeight: 8,
-      outlineOpacity: 0,
+      outlineOpacity: 0.88,
       glowOpacities: [0.04],
       zIndex: 5,
     };
@@ -1069,7 +1079,7 @@ function getDefaultRouteVisual(group) {
     mainWeight: 3,
     mainOpacity: 0.65,
     outlineWeight: 7,
-    outlineOpacity: 0,
+    outlineOpacity: 0.82,
     glowOpacities: [],
     zIndex: 4,
   };
@@ -1079,11 +1089,11 @@ function getFocusedRouteVisual(group) {
   const base = getDefaultRouteVisual(group);
   return {
     ...base,
-    mainWeight: base.mainWeight + 1,
-    mainOpacity: 1,
-    outlineWeight: base.outlineWeight + 1,
-    outlineOpacity: 0.9,
-    glowOpacities: base.glowOpacities.map(opacity => Math.min(0.18, opacity + 0.04)),
+    mainWeight: base.mainWeight,
+    mainOpacity: 0,
+    outlineWeight: base.outlineWeight + 2,
+    outlineOpacity: 0,
+    glowOpacities: base.glowOpacities.map(() => 0),
     zIndex: 12,
   };
 }
@@ -1112,6 +1122,13 @@ function getRoutePreviewPath(group) {
   return [];
 }
 
+function getRoutePreviewColor(group) {
+  if (group?.category === 'best') return '#22c55e';
+  if (group?.category === 'available') return '#f59e0b';
+  if (group?.category === 'eliminated') return '#ef4444';
+  return '#3b82f6';
+}
+
 function createRoutePreview(group) {
   if (!gMap || !group) return;
 
@@ -1119,24 +1136,57 @@ function createRoutePreview(group) {
   if (path.length < 2) return;
 
   clearRoutePreview(group);
+  const previewColor = getRoutePreviewColor(group);
+
+  const haloDotSymbol = {
+    path: google.maps.SymbolPath.CIRCLE,
+    scale: 7.6,
+    fillColor: '#ffffff',
+    fillOpacity: 0.98,
+    strokeColor: '#ffffff',
+    strokeWeight: 2.8,
+  };
 
   const dotSymbol = {
     path: google.maps.SymbolPath.CIRCLE,
-    scale: 4.2,
-    fillColor: '#ffffff',
+    scale: 5.8,
+    fillColor: previewColor,
     fillOpacity: 1,
-    strokeColor: '#3b82f6',
-    strokeWeight: 2,
+    strokeColor: '#0f172a',
+    strokeWeight: 1.8,
+  };
+
+  const haloArrowSymbol = {
+    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+    scale: 7.8,
+    fillColor: '#ffffff',
+    fillOpacity: 0.98,
+    strokeColor: '#ffffff',
+    strokeWeight: 3,
   };
 
   const arrowSymbol = {
     path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 4.5,
-    fillColor: '#2563eb',
+    scale: 6.2,
+    fillColor: previewColor,
     fillOpacity: 1,
-    strokeColor: '#ffffff',
-    strokeWeight: 2,
+    strokeColor: '#0f172a',
+    strokeWeight: 1.8,
   };
+
+  group.previewDotsHaloLayer = new google.maps.Polyline({
+    path,
+    geodesic: false,
+    strokeOpacity: 0,
+    clickable: false,
+    icons: [{
+      icon: haloDotSymbol,
+      offset: '0px',
+      repeat: '24px',
+    }],
+    map: gMap,
+    zIndex: 18,
+  });
 
   group.previewDotsLayer = new google.maps.Polyline({
     path,
@@ -1146,37 +1196,61 @@ function createRoutePreview(group) {
     icons: [{
       icon: dotSymbol,
       offset: '0px',
-      repeat: '18px',
+      repeat: '24px',
     }],
     map: gMap,
-    zIndex: 18,
+    zIndex: 19,
   });
+
+  group.previewArrowHaloLayer = new google.maps.Polyline({
+    path,
+    geodesic: false,
+    strokeOpacity: 0,
+    clickable: false,
+    icons: [{
+      icon: haloArrowSymbol,
+      offset: '0%',
+    }],
+    map: gMap,
+    zIndex: 20,
+    });
 
   group.previewArrowLayer = new google.maps.Polyline({
     path,
     geodesic: false,
     strokeOpacity: 0,
     clickable: false,
-    icons: [{
-      icon: arrowSymbol,
-      offset: '0%',
-    }],
-    map: gMap,
-    zIndex: 19,
-  });
+      icons: [{
+        icon: arrowSymbol,
+        offset: '0%',
+      }],
+      map: gMap,
+      zIndex: 21,
+    });
 
   let dotOffset = 0;
   let arrowOffset = 0;
   group.previewTimer = window.setInterval(() => {
-    if (!group.previewDotsLayer || !group.previewArrowLayer) return;
+    if (!group.previewDotsHaloLayer || !group.previewDotsLayer || !group.previewArrowHaloLayer || !group.previewArrowLayer) return;
 
-    dotOffset = (dotOffset + 1) % 18;
-    arrowOffset = (arrowOffset + 1.8) % 100;
+    dotOffset = (dotOffset + 1) % 24;
+    arrowOffset = (arrowOffset + 1.35) % 100;
+
+    group.previewDotsHaloLayer.set('icons', [{
+      icon: haloDotSymbol,
+      offset: `${dotOffset}px`,
+      repeat: '24px',
+    }]);
 
     group.previewDotsLayer.set('icons', [{
       icon: dotSymbol,
       offset: `${dotOffset}px`,
-      repeat: '18px',
+      repeat: '24px',
+    }]);
+
+    group.previewArrowHaloLayer.set('icons', [{
+      icon: haloArrowSymbol,
+      offset: `${arrowOffset}%`,
     }]);
 
     group.previewArrowLayer.set('icons', [{
@@ -1201,6 +1275,7 @@ function applyRouteGroupVisual(group, visual) {
   if (!group) return;
 
   if (group.outlineLayer) {
+    group.outlineLayer.setVisible((visual.outlineOpacity ?? 0) > 0.001);
     group.outlineLayer.setOptions({
       strokeOpacity: visual.outlineOpacity,
       strokeWeight: visual.outlineWeight,
@@ -1209,6 +1284,7 @@ function applyRouteGroupVisual(group, visual) {
   }
 
   if (group.mainLayer) {
+    group.mainLayer.setVisible((visual.mainOpacity ?? 0) > 0.001);
     group.mainLayer.setOptions({
       strokeOpacity: visual.mainOpacity,
       strokeWeight: visual.mainWeight,
@@ -1217,8 +1293,10 @@ function applyRouteGroupVisual(group, visual) {
   }
 
   (group.glowLayers || []).forEach((layer, index) => {
+    const glowOpacity = visual.glowOpacities[index] ?? 0;
+    layer.setVisible(glowOpacity > 0.001);
     layer.setOptions({
-      strokeOpacity: visual.glowOpacities[index] ?? 0,
+      strokeOpacity: glowOpacity,
       zIndex: Math.max(1, visual.zIndex - 2 - index),
     });
   });
