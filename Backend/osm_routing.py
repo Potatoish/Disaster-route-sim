@@ -36,7 +36,6 @@ UNSAFE_PENALTY = 1_000_000.0
 TOP_ACO_REINFORCERS = 3
 DEBUG = True
 
-# simple in-memory cache
 _GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
 

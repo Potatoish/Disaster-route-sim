@@ -159,6 +159,15 @@
           <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger (>3)</span></div>
         </div>
       </div>
+
+      <div class="map-controls-bl" id="mapControls">
+        <button class="map-fab" id="mapThemeFab" onclick="toggleTheme()" title="Switch light or dark map">
+          <span id="mapThemeFabIcon">☾</span>
+        </button>
+        <button class="map-fab" id="mapRecenterFab" onclick="recenterMapView()" title="Re-center map">
+          ⌖
+        </button>
+      </div>
     </div>
 
     <div id="loader">
