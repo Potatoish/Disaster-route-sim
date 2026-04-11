@@ -576,6 +576,49 @@ body.dark .map-badge {
   right: 14px;
 }
 
+.map-controls-bl {
+  position: absolute;
+  left: 14px;
+  bottom: 72px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map-fab {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, .94);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 1rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .14);
+  transition: transform .18s ease, border-color .18s ease, color .18s ease, background .18s ease;
+}
+
+body.dark .map-fab {
+  background: rgba(13, 17, 23, .94);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+}
+
+.map-fab:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.map-fab:active {
+  transform: translateY(0);
+}
+
 .legend-row {
   display: flex;
   align-items: center;
@@ -901,6 +944,10 @@ body.dark #loader {
   border-bottom: none;
 }
 
+.data-table tr.route-row {
+  cursor: pointer;
+}
+
 .data-table tr:hover td {
   background: rgba(0, 0, 0, .03);
 }
@@ -915,6 +962,16 @@ body.dark .data-table tr:hover td {
 
 body.dark .data-table tr.route-row-active td {
   background: rgba(14, 165, 233, .12);
+}
+
+.data-table tr.route-row-selected td {
+  background: rgba(37, 99, 235, .16);
+  box-shadow: inset 0 1px 0 rgba(37, 99, 235, .28), inset 0 -1px 0 rgba(37, 99, 235, .28);
+}
+
+body.dark .data-table tr.route-row-selected td {
+  background: rgba(14, 165, 233, .18);
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, .35), inset 0 -1px 0 rgba(56, 189, 248, .35);
 }
 
 .badge {

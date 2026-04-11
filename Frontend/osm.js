@@ -153,9 +153,40 @@ function buildFallbackPath(route, getLocationByName) {
   return [];
 }
 
-function addRouteGlow(route, pathCoords, gMap, mapLayers) {
+function createRouteGroup(route, cfg) {
+  return {
+    routeNo: route.display_route_no ?? null,
+    category: route.category || '',
+    route,
+    baseWeight: cfg.weight,
+    baseOpacity: cfg.opacity,
+    glowLayers: [],
+    outlineLayer: null,
+    mainLayer: null,
+  };
+}
+
+function trackRouteLayer(layer, routeGroup, mapLayers, kind) {
+  mapLayers.routes.push(layer);
+
+  if (!routeGroup) {
+    return layer;
+  }
+
+  if (kind === 'glow') {
+    routeGroup.glowLayers.push(layer);
+  } else if (kind === 'outline') {
+    routeGroup.outlineLayer = layer;
+  } else if (kind === 'main') {
+    routeGroup.mainLayer = layer;
+  }
+
+  return layer;
+}
+
+function addRouteGlow(route, pathCoords, gMap, mapLayers, routeGroup) {
   if (route.category === 'best') {
-    mapLayers.routes.push(new google.maps.Polyline({
+    trackRouteLayer(new google.maps.Polyline({
       path: pathCoords,
       geodesic: false,
       strokeColor: '#22c55e',
@@ -163,9 +194,9 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       strokeWeight: 12,
       map: gMap,
       zIndex: 0,
-    }));
+    }), routeGroup, mapLayers, 'glow');
 
-    mapLayers.routes.push(new google.maps.Polyline({
+    trackRouteLayer(new google.maps.Polyline({
       path: pathCoords,
       geodesic: false,
       strokeColor: '#86efac',
@@ -173,11 +204,11 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       strokeWeight: 7,
       map: gMap,
       zIndex: 1,
-    }));
+    }), routeGroup, mapLayers, 'glow');
   }
 
   if (route.category === 'available') {
-    mapLayers.routes.push(new google.maps.Polyline({
+    trackRouteLayer(new google.maps.Polyline({
       path: pathCoords,
       geodesic: false,
       strokeColor: '#fcd34d',
@@ -185,12 +216,24 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers) {
       strokeWeight: 4,
       map: gMap,
       zIndex: 2,
-    }));
+    }), routeGroup, mapLayers, 'glow');
   }
 }
 
-function addRoutePolyline(pathCoords, cfg, gMap, mapLayers) {
-  const poly = new google.maps.Polyline({
+function addRouteOutline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
+  return trackRouteLayer(new google.maps.Polyline({
+    path: pathCoords,
+    geodesic: false,
+    strokeColor: '#0f172a',
+    strokeOpacity: 0,
+    strokeWeight: cfg.weight + 4,
+    map: gMap,
+    zIndex: Math.max(1, cfg.zIndex - 1),
+  }), routeGroup, mapLayers, 'outline');
+}
+
+function addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
+  return trackRouteLayer(new google.maps.Polyline({
     path: pathCoords,
     geodesic: false,
     strokeColor: cfg.color,
@@ -198,10 +241,7 @@ function addRoutePolyline(pathCoords, cfg, gMap, mapLayers) {
     strokeWeight: cfg.weight,
     map: gMap,
     zIndex: cfg.zIndex,
-  });
-
-  mapLayers.routes.push(poly);
-  return poly;
+  }), routeGroup, mapLayers, 'main');
 }
 
 function extractStreetPath(osrmRoute) {
@@ -228,16 +268,17 @@ function formatStreetPath(streetPath, maxItems = 6) {
   return visible.join(' → ') + suffix;
 }
 
-function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName) {
+function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, routeGroup) {
   const pathCoords = buildFallbackPath(route, getLocationByName);
   if (pathCoords.length === 0) return null;
 
   route.render_path = pathCoords;
-  addRouteGlow(route, pathCoords, gMap, mapLayers);
-  return addRoutePolyline(pathCoords, cfg, gMap, mapLayers);
+  addRouteGlow(route, pathCoords, gMap, mapLayers, routeGroup);
+  addRouteOutline(pathCoords, cfg, gMap, mapLayers, routeGroup);
+  return addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup);
 }
 
-async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName) {
+async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName, routeGroup) {
   try {
     if (route.category !== 'best') return null;
 
@@ -269,8 +310,9 @@ async function drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName)
     if (!fullPath.length) return null;
 
     route.render_path = fullPath;
-    addRouteGlow(route, fullPath, gMap, mapLayers);
-    return addRoutePolyline(fullPath, cfg, gMap, mapLayers);
+    addRouteGlow(route, fullPath, gMap, mapLayers, routeGroup);
+    addRouteOutline(fullPath, cfg, gMap, mapLayers, routeGroup);
+    return addRoutePolyline(fullPath, cfg, gMap, mapLayers, routeGroup);
 
   } catch (error) {
     console.error('OSRM segment route error:', error, route.path);
@@ -285,34 +327,21 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     ? '✅ Available Route'
     : '❌ Eliminated';
 
-  const baseWeight = cfg.weight;
-  const baseOpacity = cfg.opacity;
-
   poly.addListener('mouseover', () => {
-    poly.setOptions({
-      strokeWeight: baseWeight + 2,
-      strokeOpacity: Math.min(1, baseOpacity + 0.1),
-    });
-
     if (typeof window.highlightRouteRow === 'function') {
       window.highlightRouteRow(route.display_route_no, route.category);
     }
   });
 
   poly.addListener('mouseout', () => {
-    poly.setOptions({
-      strokeWeight: baseWeight,
-      strokeOpacity: baseOpacity,
-    });
-
     if (typeof window.clearRouteRowHighlight === 'function') {
       window.clearRouteRowHighlight();
     }
   });
 
   poly.addListener('click', ev => {
-    if (typeof window.highlightRouteRow === 'function') {
-      window.highlightRouteRow(route.display_route_no, route.category, true);
+    if (typeof window.focusRouteSelection === 'function') {
+      window.focusRouteSelection(route.display_route_no, route.category, true);
     }
 
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
@@ -343,8 +372,13 @@ async function renderRoutesOnRoads({
   shortNodeLabel,
   activeInfoWindowRef
 }) {
+  if (typeof window.clearRouteAnimation === 'function') {
+    window.clearRouteAnimation();
+  }
+
   mapLayers.routes.forEach(l => l.setMap(null));
   mapLayers.routes = [];
+  mapLayers.routeGroups = [];
 
   const CFG = {
     best: { color: '#22c55e', weight: 5, opacity: 0.95, zIndex: 8 },
@@ -353,7 +387,6 @@ async function renderRoutesOnRoads({
   };
   const DRAW_ORDER = { eliminated: 0, available: 1, best: 2 };
 
-  const bounds = new google.maps.LatLngBounds();
   let successCount = 0;
 
   const orderedRoutes = [...routes].sort(
@@ -362,20 +395,22 @@ async function renderRoutesOnRoads({
 
   for (const route of orderedRoutes) {
     const cfg = CFG[route.category] || CFG.eliminated;
+    const routeGroup = createRouteGroup(route, cfg);
 
     let poly = null;
 
     if (USE_OSRM) {
-      poly = await drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName);
+      poly = await drawRouteWithOSRM(route, cfg, gMap, mapLayers, getLocationByName, routeGroup);
     }
 
     if (!poly) {
-      poly = drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName);
+      poly = drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, routeGroup);
     } else {
       successCount++;
     }
 
     if (poly) {
+      mapLayers.routeGroups.push(routeGroup);
       attachRouteInfo(
         poly,
         route,
@@ -387,14 +422,17 @@ async function renderRoutesOnRoads({
       );
     }
 
-    const usableCoords = Array.isArray(route.render_path) && route.render_path.length
-      ? route.render_path
-      : getRoutePoints(route, getLocationByName);
-    usableCoords.forEach(point => bounds.extend(point));
   }
 
-  if (!bounds.isEmpty()) {
-    gMap.fitBounds(bounds, 60);
+  const bestRoute = routes.find(route => route.category === 'best') || routes[0] || null;
+  const defaultCoords = Array.isArray(bestRoute?.render_path) && bestRoute.render_path.length
+    ? bestRoute.render_path
+    : getRoutePoints(bestRoute || {}, getLocationByName);
+
+  if (defaultCoords.length) {
+    const bounds = new google.maps.LatLngBounds();
+    defaultCoords.forEach(point => bounds.extend(point));
+    gMap.fitBounds(bounds, 36);
   }
 
   drawSelectedPinsOnly(start, end);
