@@ -758,6 +758,19 @@ body.dark .run-btn:hover {
   box-shadow: 0 4px 18px rgba(15, 23, 42, .08);
 }
 
+.map-legend {
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.map-legend:hover {
+  opacity: .72;
+}
+
+.map-legend.legend-collapsed {
+  opacity: .98;
+}
+
 body.dark .map-badge {
   background: rgba(7, 9, 15, .92);
   box-shadow: none;
@@ -771,6 +784,58 @@ body.dark .map-badge {
 .map-badge.tr {
   top: 14px;
   right: 14px;
+}
+
+.legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  pointer-events: none;
+}
+
+.legend-title {
+  font-family: 'DM Mono', monospace;
+  font-size: .58rem;
+  color: var(--accent);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.legend-toggle-btn {
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-family: 'DM Mono', monospace;
+  font-size: .54rem;
+  cursor: pointer;
+  transition: all .18s ease;
+  pointer-events: auto;
+}
+
+.legend-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.legend-body {
+  transition: opacity .18s ease;
+  pointer-events: none;
+}
+
+.map-legend.legend-collapsed {
+  padding: 8px 10px;
+}
+
+.map-legend.legend-collapsed .legend-head {
+  margin-bottom: 0;
+}
+
+.map-legend.legend-collapsed .legend-body {
+  display: none;
 }
 
 .map-controls-bl {

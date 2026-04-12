@@ -435,8 +435,11 @@ async function renderRoutesOnRoads({
     gMap.fitBounds(bounds, 36);
   }
 
-  drawSelectedPinsOnly(start, end);
+  drawSelectedPinsOnly(start, end, { showStartBadge: true });
   document.getElementById('mapLegend').style.display = 'block';
+  if (typeof window.syncLegendVisibility === 'function') {
+    window.syncLegendVisibility();
+  }
 
   if (USE_OSRM && successCount === 0) {
     console.warn('OSRM failed for all routes. Using fallback lines.');

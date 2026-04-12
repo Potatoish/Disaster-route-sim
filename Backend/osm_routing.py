@@ -20,7 +20,10 @@ DESTINATION_WEIGHT = 0.15
 UNSAFE_EDGE_HEURISTIC_FACTOR = 0.05
 EDGE_PHEROMONE_MIN = 0.01
 EDGE_PHEROMONE_MAX = 25.0
-ROUTE_DIVERSITY_THRESHOLD = 0.80
+ROUTE_DIVERSITY_THRESHOLD = 0.45
+ROUTE_SOFT_OVERLAP_THRESHOLD = 0.30
+MIN_ROUTE_DISTANCE_DELTA = 150.0
+MIN_ROUTE_RISK_DELTA = 75.0
 SUPPLEMENTAL_ROUTE_LIMIT = 20
 
 NUM_ANTS = 40
@@ -541,6 +544,24 @@ def route_overlap_ratio(route_a, route_b):
     return len(edges_a & edges_b) / max(1, min(len(edges_a), len(edges_b)))
 
 
+def routes_too_similar(route_a, route_b):
+    overlap = route_overlap_ratio(route_a, route_b)
+
+    if overlap >= ROUTE_DIVERSITY_THRESHOLD:
+        return True
+
+    distance_delta = abs(float(route_a.get("distance", 0)) - float(route_b.get("distance", 0)))
+    risk_delta = abs(float(route_a.get("risk_distance", 0)) - float(route_b.get("risk_distance", 0)))
+    unsafe_delta = abs(float(route_a.get("unsafe_distance", 0)) - float(route_b.get("unsafe_distance", 0)))
+
+    return (
+        overlap >= ROUTE_SOFT_OVERLAP_THRESHOLD
+        and distance_delta < MIN_ROUTE_DISTANCE_DELTA
+        and risk_delta < MIN_ROUTE_RISK_DELTA
+        and unsafe_delta < MIN_ROUTE_DISTANCE_DELTA
+    )
+
+
 def generate_supplemental_routes(G, start_node, end_node, seed_routes):
     unique_routes = {
         tuple(route["path"]): route
@@ -578,7 +599,6 @@ def generate_supplemental_routes(G, start_node, end_node, seed_routes):
 
 def select_display_routes(sorted_routes, limit):
     selected = []
-    deferred = []
 
     for route in sorted_routes:
         route["_edge_signature"] = route_edge_signature(route)
@@ -587,20 +607,10 @@ def select_display_routes(sorted_routes, limit):
         if len(selected) >= limit:
             break
 
-        if any(
-            route_overlap_ratio(route, existing) >= ROUTE_DIVERSITY_THRESHOLD
-            for existing in selected
-        ):
-            deferred.append(route)
+        if any(routes_too_similar(route, existing) for existing in selected):
             continue
 
         selected.append(route)
-
-    if len(selected) < limit:
-        for route in deferred:
-            if len(selected) >= limit:
-                break
-            selected.append(route)
 
     for route in sorted_routes:
         route.pop("_edge_signature", None)

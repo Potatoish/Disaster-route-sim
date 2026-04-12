@@ -7,6 +7,7 @@ let simData = null;
 let resultsCollapsed = false;
 let isBackendLive = false;
 let isMapDark = false;
+let isLegendCollapsed = true;
 let mapLayers = { edges: [], nodes: [], routes: [], scopes: [], routeGroups: [], scopePoints: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
@@ -80,6 +81,24 @@ function toggleMapTheme() {
   if (gMap) {
     gMap.setOptions({ styles: isMapDark ? MAP_STYLES_DARK : MAP_STYLES_LIGHT });
   }
+}
+
+function syncLegendVisibility() {
+  const legend = document.getElementById('mapLegend');
+  const toggleBtn = document.getElementById('legendToggleBtn');
+
+  if (!legend) return;
+
+  legend.classList.toggle('legend-collapsed', isLegendCollapsed);
+
+  if (toggleBtn) {
+    toggleBtn.textContent = isLegendCollapsed ? 'Show' : 'Hide';
+  }
+}
+
+function toggleLegendVisibility() {
+  isLegendCollapsed = !isLegendCollapsed;
+  syncLegendVisibility();
 }
 
 function initMap() {
@@ -303,6 +322,7 @@ function clearBarangaySelections(options = {}) {
   document.getElementById('runBtn').disabled = true;
   document.getElementById('mapInfoBadge').style.display = 'none';
   document.getElementById('mapLegend').style.display = 'none';
+  syncLegendVisibility();
 
   if (!keepResults) {
     document.getElementById('resultsPanel').classList.remove('show');
@@ -557,6 +577,7 @@ function loadBarangayMapOnly(bgyName) {
   const nodes = getBarangayLocations(bgyName);
 
   document.getElementById('mapLegend').style.display = 'none';
+  syncLegendVisibility();
   document.getElementById('mapInfoBadge').style.display = 'none';
 
   if (!nodes.length) return;
@@ -639,11 +660,11 @@ function makeNodeBadgeIcon(text) {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     scaledSize: new google.maps.Size(184, 56),
     anchor: new google.maps.Point(92, 51),
-    labelOrigin: new google.maps.Point(92, 24),
   };
 }
 
-function drawSelectedPinsOnly(start, end) {
+function drawSelectedPinsOnly(start, end, options = {}) {
+  const { showStartBadge = false } = options;
   mapLayers.nodes.forEach(m => m.setMap(null));
   mapLayers.nodes = [];
 
@@ -699,7 +720,7 @@ function drawSelectedPinsOnly(start, end) {
 
     mapLayers.nodes.push(marker);
 
-    if (n.name === start) {
+    if (showStartBadge && n.name === start) {
       const badgeMarker = new google.maps.Marker({
         position: { lat: n.lat, lng: n.lng },
         map: gMap,
@@ -710,6 +731,7 @@ function drawSelectedPinsOnly(start, end) {
 
       mapLayers.nodes.push(badgeMarker);
     }
+
   });
 }
 
@@ -1615,6 +1637,7 @@ function resetAll() {
   syncResultsVisibility(false);
   document.getElementById('mapInfoBadge').style.display = 'none';
   document.getElementById('mapLegend').style.display = 'none';
+  syncLegendVisibility();
   document.getElementById('emptyMap').style.display = 'flex';
   document.getElementById('statusTxt').textContent = 'Ready';
 
@@ -1691,6 +1714,8 @@ window.highlightRouteRow = function highlightRouteRow(routeNo, category, switchT
 window.clearSelectedRouteRow = clearSelectedRouteRow;
 window.focusWorkflowSection = focusWorkflowSection;
 window.resetRouteSelection = resetRouteSelection;
+window.toggleLegendVisibility = toggleLegendVisibility;
+window.syncLegendVisibility = syncLegendVisibility;
 
 window.toggleRouteFocus = function toggleRouteFocus(routeNo, category, switchTab = false) {
   const shouldClear = selectedRouteFocus && selectedRouteFocus.routeNo === routeNo;

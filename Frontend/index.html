@@ -179,18 +179,24 @@
         <div id="mapInfoContent"></div>
       </div>
 
-      <div class="map-badge tr" id="mapLegend" style="display:none;top:14px;right:14px;">
-        <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:var(--accent);letter-spacing:1px;margin-bottom:5px;">LEGEND</div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated</span></div>
+      <div class="map-badge tr map-legend" id="mapLegend" style="display:none;top:14px;right:14px;">
+        <div class="legend-head">
+          <div class="legend-title">Legend</div>
+          <button class="legend-toggle-btn" id="legendToggleBtn" onclick="toggleLegendVisibility()">Hide</button>
+        </div>
 
-        <div style="margin-top:5px;">
-          <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
-          <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
-          <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe (&le;2)</span></div>
-          <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate (3)</span></div>
-          <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger (>3)</span></div>
+        <div class="legend-body" id="mapLegendBody">
+          <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
+          <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
+          <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated</span></div>
+
+          <div style="margin-top:5px;">
+            <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe (&le;2)</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate (3)</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger (>3)</span></div>
+          </div>
         </div>
       </div>
 
