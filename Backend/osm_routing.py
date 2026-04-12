@@ -10,7 +10,7 @@ from shapely.prepared import prep
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
 
-DIST_METERS = 5000
+DIST_METERS = 7000
 
 ACO_MAX_ROUTE_STEPS_MULTIPLIER = 2.5
 ACO_MIN_ROUTE_STEPS = 25
@@ -20,11 +20,7 @@ DESTINATION_WEIGHT = 0.15
 UNSAFE_EDGE_HEURISTIC_FACTOR = 0.05
 EDGE_PHEROMONE_MIN = 0.01
 EDGE_PHEROMONE_MAX = 25.0
-ROUTE_DIVERSITY_THRESHOLD = 0.45
-ROUTE_SOFT_OVERLAP_THRESHOLD = 0.30
-MIN_ROUTE_DISTANCE_DELTA = 150.0
-MIN_ROUTE_RISK_DELTA = 75.0
-SUPPLEMENTAL_ROUTE_LIMIT = 20
+SUPPLEMENTAL_ROUTE_LIMIT = 100
 
 NUM_ANTS = 40
 NUM_ITERATIONS = 30
@@ -525,41 +521,8 @@ def route_pheromone_score(route, edge_pheromone):
     ) / len(path_edges)
 
 
-def route_edge_signature(route):
-    return frozenset(route_edges(route.get("path", [])))
-
-
-def route_overlap_ratio(route_a, route_b):
-    edges_a = route_a.get("_edge_signature")
-    if edges_a is None:
-        edges_a = route_edge_signature(route_a)
-
-    edges_b = route_b.get("_edge_signature")
-    if edges_b is None:
-        edges_b = route_edge_signature(route_b)
-
-    if not edges_a or not edges_b:
-        return 0.0
-
-    return len(edges_a & edges_b) / max(1, min(len(edges_a), len(edges_b)))
-
-
-def routes_too_similar(route_a, route_b):
-    overlap = route_overlap_ratio(route_a, route_b)
-
-    if overlap >= ROUTE_DIVERSITY_THRESHOLD:
-        return True
-
-    distance_delta = abs(float(route_a.get("distance", 0)) - float(route_b.get("distance", 0)))
-    risk_delta = abs(float(route_a.get("risk_distance", 0)) - float(route_b.get("risk_distance", 0)))
-    unsafe_delta = abs(float(route_a.get("unsafe_distance", 0)) - float(route_b.get("unsafe_distance", 0)))
-
-    return (
-        overlap >= ROUTE_SOFT_OVERLAP_THRESHOLD
-        and distance_delta < MIN_ROUTE_DISTANCE_DELTA
-        and risk_delta < MIN_ROUTE_RISK_DELTA
-        and unsafe_delta < MIN_ROUTE_DISTANCE_DELTA
-    )
+def route_path_signature(route):
+    return tuple(route.get("path", []))
 
 
 def generate_supplemental_routes(G, start_node, end_node, seed_routes):
@@ -598,24 +561,50 @@ def generate_supplemental_routes(G, start_node, end_node, seed_routes):
 
 
 def select_display_routes(sorted_routes, limit):
-    selected = []
+    if limit <= 0 or not sorted_routes:
+        return []
 
-    for route in sorted_routes:
-        route["_edge_signature"] = route_edge_signature(route)
+    selected = []
+    selected_paths = set()
 
     for route in sorted_routes:
         if len(selected) >= limit:
             break
 
-        if any(routes_too_similar(route, existing) for existing in selected):
+        path_signature = route_path_signature(route)
+        if path_signature in selected_paths:
             continue
 
         selected.append(route)
+        selected_paths.add(path_signature)
 
-    for route in sorted_routes:
-        route.pop("_edge_signature", None)
+    debug_print(
+        f"[OSM] Display route selection: requested={limit}, "
+        f"candidates={len(sorted_routes)}, selected={len(selected)}"
+    )
 
     return selected[:limit]
+
+
+def extend_with_duplicate_routes(routes, limit, category):
+    if len(routes) >= limit or not routes:
+        return routes
+
+    base_routes = [route.copy() for route in routes]
+    duplicate_index = 0
+
+    while len(routes) < limit and base_routes:
+        source = base_routes[duplicate_index % len(base_routes)]
+        duplicate = source.copy()
+        duplicate["is_duplicate_result"] = True
+        duplicate["duplicate_source_route_no"] = source.get("display_route_no")
+        duplicate["category"] = category
+        duplicate["status"] = "Available" if category != "eliminated" else "Eliminated"
+        duplicate["color"] = "#f59e0b" if category != "eliminated" else "#ef4444"
+        routes.append(duplicate)
+        duplicate_index += 1
+
+    return routes
 
 
 def get_ant_choices(
@@ -882,6 +871,38 @@ def finalize_routes(G, candidate_routes, edge_pheromone):
         route["status"] = "Eliminated"
         route["color"] = "#ef4444"
         final_routes.append(route)
+
+    if len(final_routes) < FINAL_ROUTES_TO_SHOW:
+        if valid_routes:
+            final_routes = extend_with_duplicate_routes(
+                final_routes,
+                FINAL_ROUTES_TO_SHOW,
+                "available",
+            )
+        elif eliminated_routes:
+            final_routes = extend_with_duplicate_routes(
+                final_routes,
+                FINAL_ROUTES_TO_SHOW,
+                "eliminated",
+            )
+
+        for idx, route in enumerate(final_routes, start=1):
+            route["display_route_no"] = idx
+            if idx == 1 and route.get("category") != "eliminated":
+                route["category"] = "best"
+                route["status"] = "Best"
+                route["color"] = "#22c55e"
+            elif route.get("category") == "eliminated":
+                route["status"] = "Eliminated"
+                route["color"] = "#ef4444"
+            else:
+                route["category"] = "available"
+                route["status"] = "Available"
+                route["color"] = "#f59e0b"
+
+    debug_print(
+        f"[OSM] Final route count: requested={FINAL_ROUTES_TO_SHOW}, returned={len(final_routes)}"
+    )
     return final_routes
 
 def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end_lng, hazard_type="Flood"):

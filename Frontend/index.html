@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Disaster Mitigation ACO</title>
+  <title>Ant Guided Navigation And Safety System</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
@@ -13,14 +13,26 @@
 <body onload="initTheme()">
 
 <div class="topbar">
-  <div class="topbar-logo">&#128028;</div>
-  <div>
-    <div class="topbar-title">DISASTER MITIGATION ACO ROUTE SYSTEM</div>
+  <div class="topbar-brand">
+    <img class="topbar-logo" src="assets/agnas-wordmark.png" alt="AGNAS logo">
+    <div class="topbar-copy">
+    <div class="topbar-title">Ant Guided Navigation And Safety System</div>
     <div class="topbar-sub">Ant Colony Optimization - Lexicographic Safety-First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
+    </div>
   </div>
 
   <div class="topbar-right">
-    <button class="theme-toggle" onclick="toggleTheme()">&#9790;</button>
+    <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" aria-label="Switch theme">
+      <span class="theme-toggle-track" aria-hidden="true">
+        <span class="theme-toggle-thumb">
+          <span class="theme-toggle-icon" id="themeToggleIcon">&#9790;</span>
+        </span>
+      </span>
+      <span class="theme-toggle-copy">
+        <span class="theme-toggle-kicker">Theme</span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light mode</span>
+      </span>
+    </button>
 
     <div class="status-pill">
       <div class="status-dot"></div>
@@ -175,11 +187,11 @@
         <div class="empty-map-txt">Select a barangay to load the map</div>
       </div>
 
-      <div class="map-badge tl" id="mapInfoBadge" style="display:none;">
+      <div class="map-badge tl" id="mapInfoBadge" style="display:none;" aria-live="polite" aria-atomic="true">
         <div id="mapInfoContent"></div>
       </div>
 
-      <div class="map-badge tr map-legend" id="mapLegend" style="display:none;top:14px;right:14px;">
+      <div class="map-badge map-legend" id="mapLegend" style="display:none;">
         <div class="legend-head">
           <div class="legend-title">Legend</div>
           <button class="legend-toggle-btn" id="legendToggleBtn" onclick="toggleLegendVisibility()">Hide</button>
@@ -200,14 +212,6 @@
         </div>
       </div>
 
-      <div class="map-controls-bl" id="mapControls">
-        <button class="map-fab" id="mapThemeFab" onclick="toggleTheme()" title="Switch light or dark map">
-          <span id="mapThemeFabIcon">&#9790;</span>
-        </button>
-        <button class="map-fab" id="mapRecenterFab" onclick="recenterMapView()" title="Re-center map">
-          &#8982;
-        </button>
-      </div>
     </div>
 
     <div id="loader">
@@ -231,14 +235,14 @@
 
     <div class="results-panel" id="resultsPanel">
       <div class="results-inner">
-        <div class="results-tabs">
-          <div class="rtab active" onclick="switchTab('safe',this)">Safe Routes</div>
-          <div class="rtab" onclick="switchTab('elim',this)">Eliminated Routes</div>
-          <div class="rtab" onclick="switchTab('summary',this)">Summary</div>
+        <div class="results-tabs" role="tablist" aria-label="Route result sections">
+          <button class="rtab active" type="button" role="tab" aria-selected="true" aria-controls="tab-safe" onclick="switchTab('safe',this)">Safe Routes</button>
+          <button class="rtab" type="button" role="tab" aria-selected="false" aria-controls="tab-elim" onclick="switchTab('elim',this)">Eliminated Routes</button>
+          <button class="rtab" type="button" role="tab" aria-selected="false" aria-controls="tab-summary" onclick="switchTab('summary',this)">Summary</button>
         </div>
-        <div class="rtab-content active" id="tab-safe"></div>
-        <div class="rtab-content" id="tab-elim"></div>
-        <div class="rtab-content" id="tab-summary"></div>
+        <div class="rtab-content active" id="tab-safe" role="tabpanel"></div>
+        <div class="rtab-content" id="tab-elim" role="tabpanel"></div>
+        <div class="rtab-content" id="tab-summary" role="tabpanel"></div>
       </div>
     </div>
 
@@ -246,7 +250,7 @@
       <button class="dl-btn primary" onclick="downloadCSV()">Download CSV</button>
       <button class="dl-btn secondary" onclick="resetAll()">New Simulation</button>
       <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
-      <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);align-self:center;" id="resultsSummaryTxt"></div>
+      <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
     </div>
 
     <button class="results-toggle-fab" id="resultsToggleFab" onclick="showResultsPanelDrawer()">Show Results</button>

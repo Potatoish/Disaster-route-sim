@@ -6,81 +6,132 @@ let selectedHazard = null;
 let simData = null;
 let resultsCollapsed = false;
 let isBackendLive = false;
-let isMapDark = false;
 let isLegendCollapsed = true;
 let mapLayers = { edges: [], nodes: [], routes: [], scopes: [], routeGroups: [], scopePoints: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
 let workflowFocusSection = null;
 const activeInfoWindowRef = { current: null };
+const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
+let mapThemeTransitionTimer = null;
 
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
 
-const MAP_STYLES_LIGHT = [
-  { elementType: 'geometry', stylers: [{ color: '#d8e0eb' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#2d3748' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#d8e0eb' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#c2cdd9' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#b0bcc9' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#a8c4e0' }] },
+const MAP_STYLES_DARK = [
+  { elementType: 'geometry', stylers: [{ color: '#0f1724' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#cbd5e1' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0b1220' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#243447' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#cdd5e0' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1f2d3d' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#31465c' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#27384a' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a2f4d' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#101b2b' }] },
 ];
 
-const MAP_STYLES_DARK = [
-  { elementType: 'geometry', stylers: [{ color: '#1a1f2e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8899aa' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1f2e' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a3244' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-];
+function getMapThemeStyles() {
+  // Keep Google's default roadmap styling in light mode so local roads remain visible.
+  return document.body.classList.contains('dark') ? MAP_STYLES_DARK : null;
+}
 
-function syncSiteThemeButton() {
-  const btn = document.querySelector('.theme-toggle');
-  const icon = document.body.classList.contains('dark') ? '\u2600' : '\u263E';
+function animateMapThemeTransition() {
+  const mapWrap = document.querySelector('.map-wrap');
+  if (!mapWrap) return;
 
-  if (btn) {
-    btn.textContent = icon;
-    btn.onclick = toggleTheme;
+  mapWrap.classList.remove('theme-transitioning');
+  void mapWrap.offsetWidth;
+  mapWrap.classList.add('theme-transitioning');
+
+  if (mapThemeTransitionTimer) {
+    window.clearTimeout(mapThemeTransitionTimer);
+  }
+
+  mapThemeTransitionTimer = window.setTimeout(() => {
+    mapWrap.classList.remove('theme-transitioning');
+    mapThemeTransitionTimer = null;
+  }, 360);
+}
+
+function syncMapTheme(animated = false) {
+  if (!gMap) return;
+
+  gMap.setOptions({
+    styles: getMapThemeStyles(),
+    backgroundColor: document.body.classList.contains('dark') ? '#08121d' : '#f8fafc',
+  });
+
+  if (animated) {
+    animateMapThemeTransition();
   }
 }
 
-function syncMapThemeButtons() {
-  const mapFab = document.getElementById('mapThemeFab');
-  const mapBtn = document.getElementById('mapThemeFabIcon');
-  const icon = isMapDark ? '\u2600' : '\u263E';
+function syncSiteThemeButton() {
+  const btn = document.getElementById('themeToggleBtn');
+  const icon = document.getElementById('themeToggleIcon');
+  const label = document.getElementById('themeToggleLabel');
+  const isDark = document.body.classList.contains('dark');
+  const nextTheme = isDark ? 'light' : 'dark';
 
-  if (mapFab) {
-    mapFab.onclick = toggleMapTheme;
+  if (btn) {
+    btn.onclick = toggleTheme;
+    btn.setAttribute('aria-label', `Switch to ${nextTheme} mode`);
+    btn.setAttribute('aria-pressed', String(isDark));
   }
 
-  if (mapBtn) {
-    mapBtn.textContent = icon;
+  if (icon) {
+    icon.textContent = isDark ? '\u2600' : '\u263E';
+  }
+
+  if (label) {
+    label.textContent = isDark ? 'Dark mode' : 'Light mode';
+  }
+}
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+  } catch (err) {
+    return 'light';
+  }
+}
+
+function applyTheme(theme) {
+  document.body.classList.toggle('dark', theme === 'dark');
+  syncSiteThemeButton();
+  syncMapTheme(true);
+
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (err) {
+    // Ignore storage failures and keep the theme in-memory only.
   }
 }
 
 function initTheme() {
-  document.body.classList.remove('dark');
-  isMapDark = false;
-  syncSiteThemeButton();
-  syncMapThemeButtons();
+  applyTheme(getStoredTheme());
 }
 
 function toggleTheme() {
-  document.body.classList.toggle('dark');
-  syncSiteThemeButton();
+  applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark');
 }
 
-function toggleMapTheme() {
-  isMapDark = !isMapDark;
-  syncMapThemeButtons();
+function syncMapOverlayLayout() {
+  const legend = document.getElementById('mapLegend');
+  const infoBadge = document.getElementById('mapInfoBadge');
 
-  if (gMap) {
-    gMap.setOptions({ styles: isMapDark ? MAP_STYLES_DARK : MAP_STYLES_LIGHT });
+  if (!legend) return;
+
+  const defaultLegendTop = 132;
+  let nextLegendTop = defaultLegendTop;
+
+  if (infoBadge && infoBadge.style.display !== 'none' && infoBadge.offsetParent !== null) {
+    nextLegendTop = Math.max(defaultLegendTop, infoBadge.offsetTop + infoBadge.offsetHeight + 12);
   }
+
+  legend.style.top = `${nextLegendTop}px`;
 }
 
 function syncLegendVisibility() {
@@ -89,10 +140,12 @@ function syncLegendVisibility() {
 
   if (!legend) return;
 
+  syncMapOverlayLayout();
   legend.classList.toggle('legend-collapsed', isLegendCollapsed);
 
   if (toggleBtn) {
     toggleBtn.textContent = isLegendCollapsed ? 'Show' : 'Hide';
+    toggleBtn.setAttribute('aria-expanded', String(!isLegendCollapsed));
   }
 }
 
@@ -108,7 +161,8 @@ function initMap() {
     tilt: 0,
     heading: 0,
     mapTypeId: google.maps.MapTypeId.ROADMAP,
-    styles: isMapDark ? MAP_STYLES_DARK : MAP_STYLES_LIGHT,
+    styles: getMapThemeStyles(),
+    backgroundColor: document.body.classList.contains('dark') ? '#08121d' : '#f8fafc',
     mapTypeControl: true,
     mapTypeControlOptions: {
       style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
@@ -121,7 +175,7 @@ function initMap() {
     rotationControl: false,
   });
 
-  syncMapThemeButtons();
+  window.addEventListener('resize', syncMapOverlayLayout);
   startApp();
 }
 
@@ -259,6 +313,106 @@ function getLocationByName(name) {
   return ALL_LOCATIONS.find(loc => loc.name === name) || null;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDistanceCompact(distanceMeters, fallback = 'N/A') {
+  const numericDistance = Number(distanceMeters);
+  if (!Number.isFinite(numericDistance)) {
+    return fallback;
+  }
+
+  if (Math.abs(numericDistance) < 1000) {
+    return `${Math.round(numericDistance)} m`;
+  }
+
+  return `${(numericDistance / 1000).toFixed(2)} km`;
+}
+
+function formatFloodClasses(route) {
+  const vars = Array.isArray(route?.flood_vars_encountered) ? route.flood_vars_encountered : [];
+  return vars.length ? vars.map(value => `Var ${value}`).join(', ') : 'None';
+}
+
+function formatHazardBreakdown(route) {
+  const entries = Object.entries(route?.hazard_breakdown || {});
+  return entries.length
+    ? entries.map(([level, count]) => `H${level}:${count}`).join(' · ')
+    : 'No hazard data';
+}
+
+function buildRouteStreetSummary(route) {
+  const streetNames = Array.isArray(route?.street_path)
+    ? route.street_path.map(name => String(name).trim()).filter(Boolean)
+    : [];
+
+  if (!streetNames.length) {
+    return route?.path_label || 'Route summary unavailable';
+  }
+
+  const visible = streetNames.slice(0, 3);
+  const suffix = streetNames.length > 3 ? ` +${streetNames.length - 3} more` : '';
+  return `Via ${visible.join(' -> ')}${suffix}`;
+}
+
+function buildRouteReason(route) {
+  if (route?.category === 'best') {
+    return 'Safest displayed route, ranked first by unsafe exposure, risk distance, and then total distance.';
+  }
+
+  if (route?.category === 'available') {
+    return 'Safe route, but ranked below the best route because it carries more exposure, longer distance, or both.';
+  }
+
+  const unsafeSegments = Number(route?.threshold_exceedance_count || 0);
+  return route?.elimination_reason
+    || `Eliminated because it passes through ${unsafeSegments} high-risk segment${unsafeSegments === 1 ? '' : 's'}.`;
+}
+
+function decorateRouteForDisplay(route) {
+  const segmentCount = typeof route?.segments === 'number'
+    ? route.segments
+    : Array.isArray(route?.path)
+    ? Math.max(0, route.path.length - 1)
+    : 0;
+  const unsafeSegmentCount = Number(route?.threshold_exceedance_count || 0);
+  const streetPreview = Array.isArray(route?.street_path) && route.street_path.length
+    ? route.street_path.join(' -> ')
+    : 'No named streets available';
+
+  return {
+    ...route,
+    display_distance: formatDistanceCompact(route?.distance),
+    display_unsafe_distance: formatDistanceCompact(route?.unsafe_distance, '0 m'),
+    display_flood_classes: formatFloodClasses(route),
+    display_hazard_breakdown: formatHazardBreakdown(route),
+    display_route_summary: buildRouteStreetSummary(route),
+    display_street_preview: streetPreview,
+    display_reason: buildRouteReason(route),
+    display_segment_count: segmentCount,
+    display_unsafe_segment_count: unsafeSegmentCount,
+  };
+}
+
+function decorateRoutesForDisplay(routes) {
+  return routes.map(route => decorateRouteForDisplay(route));
+}
+
+function getCurrentSelections() {
+  return {
+    barangay: selectedBarangay,
+    hazard: selectedHazard,
+    start: document.getElementById('startSel')?.value || '',
+    end: document.getElementById('endSel')?.value || '',
+  };
+}
+
 function setRouteSelectorsEnabled(enabled) {
   ['startSel', 'endSel'].forEach(id => {
     document.getElementById(id).disabled = !enabled;
@@ -338,6 +492,8 @@ function clearBarangaySelections(options = {}) {
       ? `<strong>Brgy. ${selectedBarangay}</strong> loaded. ${selectedHazard ? 'Choose your <strong>start</strong> and <strong>end</strong> nodes below.' : 'Choose a <strong>disaster type</strong> first.'}`
       : `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will find the <strong>safest route</strong> using the <strong>lexicographic safety-first rule</strong>.`;
   }
+
+  updateMapContextBadge();
 }
 
 function syncResultsVisibility(expanded) {
@@ -400,10 +556,72 @@ function shortNodeLabel(name) {
 }
 
 function infoPopup(title, rows) {
-  return `<div style="padding:10px 2px 4px;">
-    <div class="popup-title">${title}</div>
-    ${rows.map(([k, v, c]) => `<div class="popup-row"><span>${k}</span><span style="${c ? 'color:' + c : ''}">${v}</span></div>`).join('')}
+  return `<div class="popup-shell">
+    <div class="popup-title">${escapeHtml(title)}</div>
+    ${rows.map(([k, v, c]) => `<div class="popup-row"><span>${escapeHtml(k)}</span><span style="${c ? 'color:' + c : ''}">${escapeHtml(v)}</span></div>`).join('')}
   </div>`;
+}
+
+function updateMapContextBadge() {
+  const badge = document.getElementById('mapInfoBadge');
+  const content = document.getElementById('mapInfoContent');
+  if (!badge || !content) return;
+
+  const { barangay, hazard, start, end } = getCurrentSelections();
+  const hasSelection = Boolean(barangay || hazard || start || end || simData);
+
+  if (!hasSelection) {
+    badge.style.display = 'none';
+    content.innerHTML = '';
+    window.requestAnimationFrame(syncMapOverlayLayout);
+    return;
+  }
+
+  const routes = Array.isArray(simData?.routes) ? simData.routes : [];
+  const bestRoute = routes.find(route => route.category === 'best') || null;
+  const safeCount = routes.filter(route => route.category !== 'eliminated').length;
+  const eliminatedCount = routes.filter(route => route.category === 'eliminated').length;
+  const selectionRoute = start && end
+    ? `${shortNodeLabel(start)} -> ${shortNodeLabel(end)}`
+    : start
+    ? `${shortNodeLabel(start)} -> Choose destination`
+    : 'Select start and end nodes';
+  const stats = [
+    `${routes.length || 0} shown`,
+    `${safeCount || 0} safe`,
+  ];
+
+  if (eliminatedCount > 0) {
+    stats.push(`${eliminatedCount} eliminated`);
+  }
+
+  content.innerHTML = `
+    <div class="map-context compact">
+      <div class="map-context-head">
+        <div class="map-context-kicker">${escapeHtml((hazard || 'Route').toUpperCase())} CONTEXT</div>
+        <div class="map-context-status">${routes.length ? 'Results Ready' : 'Selection In Progress'}</div>
+      </div>
+      <div class="map-context-grid">
+        <div class="map-context-row">
+          <span>Barangay</span>
+          <strong>${escapeHtml(barangay || 'Not selected')}</strong>
+        </div>
+        <div class="map-context-row">
+          <span>Route</span>
+          <strong>${escapeHtml(selectionRoute)}</strong>
+        </div>
+        <div class="map-context-row">
+          <span>Best</span>
+          <strong>${escapeHtml(bestRoute ? bestRoute.display_distance : 'Run simulation')}</strong>
+        </div>
+      </div>
+      <div class="map-context-chips">
+        ${stats.map(value => `<span class="map-context-chip">${escapeHtml(value)}</span>`).join('')}
+      </div>
+    </div>`;
+
+  badge.style.display = 'block';
+  window.requestAnimationFrame(syncMapOverlayLayout);
 }
 
 function fitMapToLocations(locations, padding = 60) {
@@ -537,40 +755,6 @@ function fitMapToRoute(route, padding = 34) {
   return true;
 }
 
-function recenterMapView() {
-  if (!gMap) return;
-
-  if (selectedRouteFocus?.routeNo && Array.isArray(mapLayers.routeGroups)) {
-    const focusedGroup = mapLayers.routeGroups.find(group => group.routeNo === selectedRouteFocus.routeNo);
-    if (focusedGroup && fitMapToRoute(focusedGroup.route, 34)) {
-      return;
-    }
-  }
-
-  if (simData && Array.isArray(simData.routes) && simData.routes.length) {
-    const bestRoute = simData.routes.find(route => route.category === 'best') || simData.routes[0];
-    if (bestRoute && fitMapToRoute(bestRoute, 34)) {
-      return;
-    }
-  }
-
-  if (Array.isArray(mapLayers.scopePoints) && mapLayers.scopePoints.length) {
-    fitMapToScope(mapLayers.scopePoints, 70);
-    return;
-  }
-
-  if (selectedBarangay) {
-    const locations = getBarangayLocations(selectedBarangay);
-    if (locations.length) {
-      fitMapToLocations(locations, 70);
-      return;
-    }
-  }
-
-  gMap.panTo({ lat: 14.5590, lng: 121.0955 });
-  gMap.setZoom(15);
-}
-
 function loadBarangayMapOnly(bgyName) {
   clearLayers();
 
@@ -622,8 +806,8 @@ function drawNode(n, start, end) {
   const hazardSourceText = describeHazardSource(n);
 
   const iw = new google.maps.InfoWindow({
-    content: infoPopup('?? ' + n.name, [
-      ['Role', n.name === start ? '?? START' : n.name === end ? '?? END' : 'Node'],
+    content: infoPopup(n.name, [
+      ['Role', n.name === start ? 'Start point' : n.name === end ? 'End point' : 'Node'],
       ['Node Flood Hazard', hazardText, col],
       ['Flood Class', floodClassText],
       ['Hazard Source', hazardSourceText],
@@ -703,8 +887,8 @@ function drawSelectedPinsOnly(start, end, options = {}) {
     });
 
     const iw = new google.maps.InfoWindow({
-      content: infoPopup('?? ' + n.name, [
-        ['Role', n.name === start ? '?? START' : '?? END'],
+      content: infoPopup(n.name, [
+        ['Role', n.name === start ? 'Start point' : 'End point'],
         ['Node Flood Hazard', hazardText, col],
         ['Flood Class', floodClassText],
         ['Hazard Source', hazardSourceText],
@@ -751,6 +935,7 @@ function selectBarangay(name) {
   if (!nodes.length) {
     document.getElementById('infoBox').innerHTML =
       `<strong>Brgy. ${name}</strong> has no available nodes in the current database.`;
+    updateMapContextBadge();
     return;
   }
 
@@ -762,6 +947,7 @@ function selectBarangay(name) {
     document.getElementById('infoBox').innerHTML = selectedHazard
       ? `<strong>Brgy. ${name}</strong> reset. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`
       : `<strong>Brgy. ${name}</strong> loaded. Choose a <strong>disaster type</strong> to continue.`;
+    updateMapContextBadge();
     return;
   }
 
@@ -821,6 +1007,8 @@ function selectBarangay(name) {
     document.getElementById('infoBox').innerHTML =
       `<strong>Brgy. ${name}</strong> selected — map loaded. Choose your <strong>start</strong> and <strong>end</strong> nodes below.`;
   }
+
+  updateMapContextBadge();
 }
 
 function onNodeChange() {
@@ -854,6 +1042,8 @@ function onNodeChange() {
     document.getElementById('infoBox').innerHTML =
       `Choose a <strong>start node</strong> from the dropdown.`;
   }
+
+  updateMapContextBadge();
 }
 
 function selectHazard(name, el) {
@@ -866,6 +1056,7 @@ function selectHazard(name, el) {
     document.getElementById('infoBox').innerHTML =
       `Disaster type <strong>${name}</strong> selected. Now choose a <strong>barangay</strong>.`;
     advanceStep(1);
+    updateMapContextBadge();
     return;
   }
 
@@ -878,6 +1069,8 @@ function selectHazard(name, el) {
     document.getElementById('infoBox').innerHTML =
       `<strong>${name}</strong> selected for <strong>Brgy. ${selectedBarangay}</strong>. Choose your <strong>start</strong> and <strong>end</strong> nodes.`;
   }
+
+  updateMapContextBadge();
 }
 
 function getCompletedSteps() {
@@ -1140,11 +1333,11 @@ async function runSimulation() {
   statusTxt.textContent = 'Simulating…';
 
   const msgs = [
-    'Fetching graph from database…',
+    'Loading the road graph…',
     'Evaluating route options…',
     'Applying lexicographic safety-first rule…',
-    'Rendering route overlay…',
-    'Classifying results…'
+    'Rendering evaluated routes…',
+    'Classifying route evidence…'
   ];
 
   let mi = 0;
@@ -1173,7 +1366,9 @@ async function runSimulation() {
       throw new Error(result.message || result.error || 'Simulation failed');
     }
 
-    const routes = normalizeRoutes(result.routes || []);
+    const routes = decorateRoutesForDisplay(
+      normalizeRoutes(result.routes || [])
+    );
     result.routes = routes;
     simData = result;
 
@@ -1196,21 +1391,7 @@ async function runSimulation() {
     window.clearRouteRowHighlight();
     applyRouteFocusState(null);
     document.getElementById('resetBtn').classList.add('show');
-
-    const best = routes.find(r => r.category === 'best');
-    const safeCount = routes.filter(r => r.category !== 'eliminated').length;
-    const bestLabel = best ? formatDistanceKm(best.distance) : 'No safe route';
-    const bestColor = best ? 'var(--green)' : 'var(--red)';
-
-    document.getElementById('mapInfoBadge').style.display = 'block';
-    document.getElementById('mapInfoContent').innerHTML = `
-      <div style="font-family:'DM Mono',monospace;font-size:.6rem;color:var(--accent);letter-spacing:1px;margin-bottom:5px;">${selectedHazard.toUpperCase()} SIMULATION</div>
-      <div style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);line-height:1.8;">
-        From: <span style="color:var(--text)">${shortNodeLabel(start)}</span><br>
-        To: <span style="color:var(--text)">${shortNodeLabel(end)}</span><br>
-        Best: <span style="color:${bestColor}">${bestLabel}</span><br>
-        Safe routes: <span style="color:var(--text)">${safeCount}</span>
-      </div>`;
+    updateMapContextBadge();
 
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
@@ -1235,25 +1416,29 @@ function showResultsPanel(result) {
 
   document.getElementById('tab-safe').innerHTML = safe.length
     ? buildTable(safe)
-    : `<div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);padding:10px;">No safe routes found — all returned paths exceed the current hazard threshold.</div>`;
+    : `<div class="tab-section-empty">No safe routes found for this simulation.</div>`;
   document.getElementById('tab-elim').innerHTML = elim.length
     ? buildTable(elim)
-    : `<div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);padding:10px;">No eliminated routes — all paths are within safe hazard threshold.</div>`;
+    : `<div class="tab-section-empty">No eliminated routes for this run.</div>`;
 
   document.getElementById('tab-summary').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:4px 0;">
-      ${statBox('Total Routes', routes.length, 'var(--text)')}
+    <div class="results-stats-grid">
+      ${statBox('Displayed', routes.length, 'var(--ink-strong)')}
       ${statBox('Safe Routes', safe.length, 'var(--green)')}
       ${statBox('Eliminated', elim.length, 'var(--red)')}
-      ${statBox('Best Dist.', best ? formatDistanceKm(best.distance) : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
+      ${statBox('Best Dist.', best ? best.display_distance : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
     </div>
-    <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);">
-      Hazard threshold: =3 &nbsp;|&nbsp; Algorithm: ACO &nbsp;|&nbsp; Rule: Lexicographic Safety-First &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
+    <div class="summary-callout">
+    </div>
+    <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">
+      Algorithm: ACO + supplemental route-cost search &nbsp;|&nbsp; Rule: Safety-first ranking &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
     </div>`;
 
-  document.getElementById('resultsSummaryTxt').textContent = safe.length
-    ? `${safe.length} safe route${safe.length !== 1 ? 's' : ''} found · ${elim.length} eliminated`
-    : `No safe route available · ${elim.length} eliminated`;
+  document.getElementById('resultsSummaryTxt').textContent = routes.length
+    ? `Showing ${routes.length} routes · ${elim.length} eliminated`
+    : 'No route results to display';
+
+  setActiveTab('safe');
 }
 
 function getDefaultRouteVisual(group) {
@@ -1544,10 +1729,19 @@ function setSelectedRouteRow(routeNo, category, switchTab = false) {
   row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
+function handleRouteRowKey(event, routeNo, category) {
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return;
+  }
+
+  event.preventDefault();
+  window.toggleRouteFocus(routeNo, category, true);
+}
+
 function statBox(label, value, color) {
-  return `<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
-    <div style="font-family:'DM Mono',monospace;font-size:1.2rem;color:${color};font-weight:500;">${value}</div>
-    <div style="font-family:'DM Mono',monospace;font-size:.58rem;color:var(--muted);margin-top:3px;">${label}</div>
+  return `<div class="results-stat-box">
+    <div class="results-stat-value" style="color:${color};">${escapeHtml(value)}</div>
+    <div class="results-stat-label">${escapeHtml(label)}</div>
   </div>`;
 }
 
@@ -1561,53 +1755,85 @@ function buildTable(routes) {
       .map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`)
       .join('');
 
-    const pathTitle = r.path_label || (Array.isArray(r.path) ? r.path.map(v => String(v)).join(' ? ') : 'N/A');
-    const pathShort = r.path_label || 'N/A';
-    const segmentCount = typeof r.segments === 'number'
-      ? r.segments
-      : (Array.isArray(r.path) ? Math.max(0, r.path.length - 1) : 'N/A');
-    const streetPreview = Array.isArray(r.street_path) && r.street_path.length
-      ? r.street_path.join(' ? ')
-      : 'No named streets available';
+    const rowTitle = `${r.display_route_summary}. ${r.display_reason}`;
 
-    return `<tr class="route-row" data-route-no="${r.display_route_no ?? i + 1}" data-route-category="${r.category || ''}" onclick="toggleRouteFocus(${r.display_route_no ?? i + 1}, '${r.category || ''}', true)" title="Click to focus this route">
-      <td>${r.display_route_no ?? i + 1}</td>
-      <td><span class="badge badge-${r.category}">${r.status || r.category}</span></td>
-      <td>${formatDistanceKm(r.distance)}</td>
-      <td><div class="hlevel">${pips}</div> <span style="font-size:.6rem;color:var(--muted);margin-left:3px;">${r.max_hazard}/5</span></td>
-      <td>${segmentCount}</td>
-      <td><div class="path-txt" title="${pathTitle}">${pathShort}</div><div class="path-txt path-street" title="${streetPreview}">${streetPreview}</div></td>
+    return `<tr class="route-row" tabindex="0" role="button" aria-label="${escapeHtml(rowTitle)}" data-route-no="${r.display_route_no ?? i + 1}" data-route-category="${r.category || ''}" onclick="toggleRouteFocus(${r.display_route_no ?? i + 1}, '${r.category || ''}', true)" onkeydown="handleRouteRowKey(event, ${r.display_route_no ?? i + 1}, '${r.category || ''}')">
+      <td>${escapeHtml(r.display_route_no ?? i + 1)}</td>
+      <td>
+        <div class="table-status-stack">
+          <span class="badge badge-${r.category}">${escapeHtml(r.status || r.category)}</span>
+        </div>
+      </td>
+      <td>
+        <div class="metric-strong">${escapeHtml(r.display_distance)}</div>
+        <div class="metric-sub">Unsafe ${escapeHtml(r.display_unsafe_distance)}</div>
+      </td>
+      <td>
+        <div class="hlevel">${pips}</div>
+        <div class="metric-sub">Max ${escapeHtml(r.max_hazard)}/5 · ${escapeHtml(r.display_unsafe_segment_count)} unsafe segs</div>
+      </td>
+      <td>
+        <div class="path-txt route-summary" title="${escapeHtml(r.display_route_summary)}">${escapeHtml(r.display_route_summary)}</div>
+        <div class="route-reason-text">${escapeHtml(r.display_reason)}</div>
+        <div class="route-evidence-row">
+          <span class="evidence-chip">Segments ${escapeHtml(r.display_segment_count)}</span>
+          <span class="evidence-chip">Flood ${escapeHtml(r.display_flood_classes)}</span>
+          <span class="evidence-chip">Breakdown ${escapeHtml(r.display_hazard_breakdown)}</span>
+        </div>
+        <div class="path-txt path-street" title="${escapeHtml(r.display_street_preview)}">${escapeHtml(r.display_street_preview)}</div>
+      </td>
     </tr>`;
   }).join('');
 
-  return `<table class="data-table">
-    <thead><tr><th>#</th><th>Status</th><th>Distance</th><th>Max Hazard</th><th>Segments</th><th>Path</th></tr></thead>
+  return `<div class="results-table-wrap"><table class="data-table">
+    <thead><tr><th>#</th><th>Status</th><th>Distance</th><th>Risk</th><th>Details</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table></div>`;
 }
 
 function switchTab(name, el) {
-  document.querySelectorAll('.rtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.rtab').forEach(t => {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+  });
   document.querySelectorAll('.rtab-content').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
+  el.setAttribute('aria-selected', 'true');
   document.getElementById('tab-' + name).classList.add('active');
 }
 
 function downloadCSV() {
   if (!simData) return;
 
-  const rows = [['Route', 'Category', 'Status', 'Distance (km)', 'Max Hazard', 'Segments', 'Path', 'Streets']];
+  const rows = [[
+    'Route',
+    'Category',
+    'Status',
+    'Distance',
+    'Unsafe Distance',
+    'Max Hazard',
+    'Unsafe Segments',
+    'Segments',
+    'Flood Classes',
+    'Hazard Breakdown',
+    'Route Summary',
+    'Reason',
+    'Streets',
+  ]];
   (simData.routes || []).forEach((r, i) => {
     rows.push([
       r.display_route_no ?? i + 1,
       r.category || '',
       r.status || '',
-      Number.isFinite(Number(r.distance)) ? (Number(r.distance) / 1000).toFixed(2) : '',
+      r.display_distance || '',
+      r.display_unsafe_distance || '',
       r.max_hazard ?? '',
-      typeof r.segments === 'number'
-        ? r.segments
-        : (Array.isArray(r.path) ? Math.max(0, r.path.length - 1) : ''),
-      r.path_label || '',
+      r.display_unsafe_segment_count ?? '',
+      r.display_segment_count ?? '',
+      r.display_flood_classes || '',
+      r.display_hazard_breakdown || '',
+      r.display_route_summary || '',
+      r.display_reason || '',
       Array.isArray(r.street_path) ? r.street_path.join(' -> ') : ''
     ]);
   });
@@ -1623,6 +1849,7 @@ function resetAll() {
   simData = null;
   selectedBarangay = null;
   selectedHazard = null;
+  selectedRouteFocus = null;
   workflowFocusSection = null;
   clearLayers();
 
@@ -1652,6 +1879,8 @@ function resetAll() {
     gMap.panTo({ lat: 14.5590, lng: 121.0955 });
     gMap.setZoom(15);
   }
+
+  updateMapContextBadge();
 }
 
 async function checkBackend() {
@@ -1671,7 +1900,10 @@ async function checkBackend() {
 }
 
 function setActiveTab(tabName) {
-  document.querySelectorAll('.rtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.rtab').forEach(t => {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+  });
   document.querySelectorAll('.rtab-content').forEach(c => c.classList.remove('active'));
 
   const tabMap = {
@@ -1681,7 +1913,10 @@ function setActiveTab(tabName) {
   };
 
   const tab = tabMap[tabName];
-  if (tab) tab.classList.add('active');
+  if (tab) {
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
+  }
 
   const content = document.getElementById('tab-' + tabName);
   if (content) content.classList.add('active');
@@ -1743,8 +1978,8 @@ window.focusRouteSelection = function focusRouteSelection(routeNo, category, swi
 
 window.clearRouteAnimation = clearRouteAnimation;
 window.goToStep = goToStep;
-window.recenterMapView = recenterMapView;
 window.initMap = initMap;
+window.handleRouteRowKey = handleRouteRowKey;
 
 initStepNavigation();
 advanceStep(1);
