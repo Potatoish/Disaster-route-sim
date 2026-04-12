@@ -298,6 +298,18 @@ def edge_geometry_to_coords(G, u, v, edge):
     if last_dist < first_dist:
         edge_coords.reverse()
 
+    # Snap the geometry ends back onto the exact route nodes before stitching
+    # adjacent edges together. Without this, tiny geometry offsets at junctions
+    # can create short straight connector lines that appear off-road.
+    edge_coords[0] = {
+        "lat": float(G.nodes[u]["y"]),
+        "lng": float(G.nodes[u]["x"]),
+    }
+    edge_coords[-1] = {
+        "lat": float(G.nodes[v]["y"]),
+        "lng": float(G.nodes[v]["x"]),
+    }
+
     return edge_coords
 
 
