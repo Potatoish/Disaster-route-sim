@@ -7,34 +7,28 @@ let simData = null;
 let resultsCollapsed = false;
 let isBackendLive = false;
 let isLegendCollapsed = true;
-let mapLayers = { edges: [], nodes: [], routes: [], scopes: [], routeGroups: [], scopePoints: [] };
+let activeResultsTab = 'safe';
+let mapLayers = { boundaries: [], edges: [], nodes: [], routes: [], routeGroups: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
 let workflowFocusSection = null;
 const activeInfoWindowRef = { current: null };
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
+const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
+const SIMULATION_WARMUP_TIMEOUT_MS = 45000;
+const SIMULATION_REQUEST_TIMEOUT_MS = 120000;
 let mapThemeTransitionTimer = null;
+let pendingSimulationWarmup = null;
+let pendingSimulationWarmupKey = '';
+let simulationWarmupTimer = null;
+const completedSimulationWarmups = new Set();
 
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
 
-const MAP_STYLES_DARK = [
-  { elementType: 'geometry', stylers: [{ color: '#0f1724' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#cbd5e1' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0b1220' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#243447' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1f2d3d' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#31465c' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#27384a' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a2f4d' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#101b2b' }] },
-];
-
 function getMapThemeStyles() {
-  // Keep Google's default roadmap styling in light mode so local roads remain visible.
-  return document.body.classList.contains('dark') ? MAP_STYLES_DARK : null;
+  // Keep the Google map UI and base map on the default light style in all site themes.
+  return null;
 }
 
 function animateMapThemeTransition() {
@@ -60,7 +54,7 @@ function syncMapTheme(animated = false) {
 
   gMap.setOptions({
     styles: getMapThemeStyles(),
-    backgroundColor: document.body.classList.contains('dark') ? '#08121d' : '#f8fafc',
+    backgroundColor: '#ffffff',
   });
 
   if (animated) {
@@ -162,7 +156,7 @@ function initMap() {
     heading: 0,
     mapTypeId: google.maps.MapTypeId.ROADMAP,
     styles: getMapThemeStyles(),
-    backgroundColor: document.body.classList.contains('dark') ? '#08121d' : '#f8fafc',
+    backgroundColor: '#ffffff',
     mapTypeControl: true,
     mapTypeControlOptions: {
       style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
@@ -225,10 +219,16 @@ function clearRouteAnimation() {
   groups.forEach(clearRoutePreview);
 }
 
+function clearBoundaryLayers() {
+  (mapLayers.boundaries || []).forEach(layer => layer.setMap(null));
+  mapLayers.boundaries = [];
+}
+
 function clearLayers() {
   clearRouteAnimation();
-  [...mapLayers.edges, ...mapLayers.nodes, ...mapLayers.routes, ...mapLayers.scopes].forEach(o => o.setMap(null));
-  mapLayers = { edges: [], nodes: [], routes: [], scopes: [], routeGroups: [], scopePoints: [] };
+  clearBoundaryLayers();
+  [...mapLayers.edges, ...mapLayers.nodes, ...mapLayers.routes].forEach(o => o.setMap(null));
+  mapLayers = { boundaries: [], edges: [], nodes: [], routes: [], routeGroups: [] };
   selectedRouteFocus = null;
 
   if (activeInfoWindow) {
@@ -413,6 +413,189 @@ function getCurrentSelections() {
   };
 }
 
+function buildSimulationWarmupKey({ barangay, hazard, start, end }) {
+  return [barangay || '', hazard || '', start || '', end || '']
+    .map(value => String(value).trim().toLowerCase())
+    .join('::');
+}
+
+function clearPendingSimulationWarmup() {
+  if (simulationWarmupTimer) {
+    window.clearTimeout(simulationWarmupTimer);
+    simulationWarmupTimer = null;
+  }
+
+  pendingSimulationWarmup = null;
+  pendingSimulationWarmupKey = '';
+}
+
+async function parseBackendJsonResponse(res) {
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+  if (contentType.includes('application/json')) {
+    return await res.json();
+  }
+
+  const rawText = await res.text();
+  const trimmedText = rawText.trim();
+  throw new Error(
+    trimmedText
+      ? `Unexpected server response: ${trimmedText.slice(0, 180)}`
+      : `Unexpected server response (${res.status})`
+  );
+}
+
+async function postJsonWithTimeout(endpoint, payload, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(BACKEND + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const data = await parseBackendJsonResponse(response);
+    return { response, data };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function shouldRetrySimulationRequest(error, statusCode) {
+  if (statusCode >= 500) return true;
+  if (!error) return false;
+
+  return error.name === 'AbortError'
+    || /Failed to fetch/i.test(error.message || '')
+    || /NetworkError/i.test(error.message || '')
+    || /Unexpected server response/i.test(error.message || '');
+}
+
+async function sendSimulationRequest(payload) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let statusCode = 0;
+
+    try {
+      const { response, data } = await postJsonWithTimeout(
+        '/simulate',
+        payload,
+        SIMULATION_REQUEST_TIMEOUT_MS
+      );
+      statusCode = response.status;
+
+      if (!response.ok || data?.error === true) {
+        const message = data?.message || data?.error || 'Simulation failed';
+        throw new Error(message);
+      }
+
+      return data;
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === 1 || !shouldRetrySimulationRequest(error, statusCode)) {
+        break;
+      }
+
+      await new Promise(resolve => window.setTimeout(resolve, 450));
+    }
+  }
+
+  throw lastError || new Error('Simulation failed');
+}
+
+async function prewarmSimulationContext(start, end, warmupKey) {
+  try {
+    const { response, data } = await postJsonWithTimeout(
+      '/prewarm-simulation',
+      {
+        start,
+        end,
+        barangay: selectedBarangay,
+      },
+      SIMULATION_WARMUP_TIMEOUT_MS
+    );
+
+    if (response.ok && data?.error !== true) {
+      completedSimulationWarmups.add(warmupKey);
+      return true;
+    }
+
+    throw new Error(data?.message || 'Warmup failed');
+  } catch (error) {
+    console.warn('Simulation warmup skipped:', error);
+    return false;
+  }
+}
+
+function scheduleSimulationWarmup(start, end) {
+  if (!isBackendLive || !selectedBarangay || !selectedHazard || !start || !end || start === end) {
+    clearPendingSimulationWarmup();
+    return;
+  }
+
+  const warmupKey = buildSimulationWarmupKey(getCurrentSelections());
+  const hasMatchingWarmupInFlight = pendingSimulationWarmupKey === warmupKey
+    && (!!pendingSimulationWarmup || !!simulationWarmupTimer);
+
+  if (completedSimulationWarmups.has(warmupKey) || hasMatchingWarmupInFlight) {
+    return;
+  }
+
+  clearPendingSimulationWarmup();
+  pendingSimulationWarmupKey = warmupKey;
+
+  simulationWarmupTimer = window.setTimeout(() => {
+    simulationWarmupTimer = null;
+    const activeWarmupKey = warmupKey;
+
+    pendingSimulationWarmup = prewarmSimulationContext(start, end, activeWarmupKey)
+      .finally(() => {
+        if (pendingSimulationWarmupKey === activeWarmupKey) {
+          pendingSimulationWarmup = null;
+        }
+      });
+  }, SIMULATION_WARMUP_DEBOUNCE_MS);
+}
+
+async function ensureSimulationWarmup(start, end) {
+  if (!isBackendLive || !selectedBarangay || !selectedHazard || !start || !end || start === end) {
+    return false;
+  }
+
+  const warmupKey = buildSimulationWarmupKey(getCurrentSelections());
+  if (completedSimulationWarmups.has(warmupKey)) {
+    return true;
+  }
+
+  if (pendingSimulationWarmupKey === warmupKey && pendingSimulationWarmup) {
+    return await pendingSimulationWarmup;
+  }
+
+  if (pendingSimulationWarmupKey !== warmupKey) {
+    clearPendingSimulationWarmup();
+    pendingSimulationWarmupKey = warmupKey;
+  }
+
+  if (simulationWarmupTimer) {
+    window.clearTimeout(simulationWarmupTimer);
+    simulationWarmupTimer = null;
+  }
+
+  const activeWarmupKey = warmupKey;
+  pendingSimulationWarmup = prewarmSimulationContext(start, end, activeWarmupKey)
+    .finally(() => {
+      if (pendingSimulationWarmupKey === activeWarmupKey) {
+        pendingSimulationWarmup = null;
+      }
+    });
+
+  return await pendingSimulationWarmup;
+}
+
 function setRouteSelectorsEnabled(enabled) {
   ['startSel', 'endSel'].forEach(id => {
     document.getElementById(id).disabled = !enabled;
@@ -458,6 +641,7 @@ function populateBarangayNodeSelectors(name) {
 function clearBarangaySelections(options = {}) {
   const { keepResults = false, keepInfoText = false } = options;
 
+  clearPendingSimulationWarmup();
   simData = null;
   selectedRouteFocus = null;
   clearLayers();
@@ -638,83 +822,26 @@ function buildScopeBounds(points) {
   return bounds;
 }
 
-function getBarangayScopePoints(locations) {
-  const points = (locations || [])
-    .filter(loc => loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng)))
-    .map(loc => ({ lat: Number(loc.lat), lng: Number(loc.lng) }));
+function fitMapToBoundaryPaths(paths, padding = 42) {
+  const bounds = new google.maps.LatLngBounds();
+  let hasPoints = false;
 
-  if (points.length === 0) return [];
+  (paths || []).forEach(path => {
+    (path || []).forEach(point => {
+      if (!point || point.lat == null || point.lng == null) return;
 
-  if (points.length < 3) {
-    const bounds = buildScopeBounds(points);
-    const ne = bounds.getNorthEast();
-    const sw = bounds.getSouthWest();
-    const latPad = Math.max((ne.lat() - sw.lat()) * 0.18, 0.0012);
-    const lngPad = Math.max((ne.lng() - sw.lng()) * 0.18, 0.0012);
-
-    return [
-      { lat: ne.lat() + latPad, lng: sw.lng() - lngPad },
-      { lat: ne.lat() + latPad, lng: ne.lng() + lngPad },
-      { lat: sw.lat() - latPad, lng: ne.lng() + lngPad },
-      { lat: sw.lat() - latPad, lng: sw.lng() - lngPad },
-    ];
-  }
-
-  const sorted = [...points].sort((left, right) => (
-    left.lng === right.lng ? left.lat - right.lat : left.lng - right.lng
-  ));
-
-  const cross = (origin, a, b) => (
-    (a.lng - origin.lng) * (b.lat - origin.lat) -
-    (a.lat - origin.lat) * (b.lng - origin.lng)
-  );
-
-  const buildHalf = input => {
-    const hull = [];
-    input.forEach(point => {
-      while (hull.length >= 2 && cross(hull[hull.length - 2], hull[hull.length - 1], point) <= 0) {
-        hull.pop();
-      }
-      hull.push(point);
+      bounds.extend({
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+      });
+      hasPoints = true;
     });
-    return hull;
-  };
+  });
 
-  const lower = buildHalf(sorted);
-  const upper = buildHalf([...sorted].reverse());
-  const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+  if (!hasPoints) return false;
 
-  if (hull.length < 3) {
-    return getBarangayScopePoints(points.slice(0, 2));
-  }
-
-  const center = hull.reduce(
-    (accumulator, point) => ({
-      lat: accumulator.lat + point.lat / hull.length,
-      lng: accumulator.lng + point.lng / hull.length,
-    }),
-    { lat: 0, lng: 0 }
-  );
-
-  return hull.map(point => ({
-    lat: center.lat + (point.lat - center.lat) * 1.08,
-    lng: center.lng + (point.lng - center.lng) * 1.08,
-  }));
-}
-
-function drawBarangayScope(barangayName) {
-  const locations = getBarangayLocations(barangayName);
-  const scopePoints = getBarangayScopePoints(locations);
-
-  if (!scopePoints.length) return [];
-  mapLayers.scopePoints = scopePoints;
-  return scopePoints;
-}
-
-function fitMapToScope(scopePoints, padding = 70) {
-  if (!scopePoints.length) return;
-  const bounds = buildScopeBounds(scopePoints);
   gMap.fitBounds(bounds, padding);
+  return true;
 }
 
 function fitMapToRoute(route, padding = 34) {
@@ -755,7 +882,7 @@ function fitMapToRoute(route, padding = 34) {
   return true;
 }
 
-function loadBarangayMapOnly(bgyName) {
+async function loadBarangayMapOnly(bgyName) {
   clearLayers();
 
   const nodes = getBarangayLocations(bgyName);
@@ -766,10 +893,47 @@ function loadBarangayMapOnly(bgyName) {
 
   if (!nodes.length) return;
 
-  const scopePoints = drawBarangayScope(bgyName);
-  if (scopePoints.length) {
-    fitMapToScope(scopePoints, 70);
-    return;
+  try {
+    const res = await fetch(BACKEND + '/barangay-boundary?name=' + encodeURIComponent(bgyName));
+    const data = await res.json();
+
+    if (!res.ok || data.error === true) {
+      throw new Error(data.message || 'Failed to load barangay boundary');
+    }
+
+    const paths = Array.isArray(data.boundary?.paths) ? data.boundary.paths : [];
+    let hasBoundary = false;
+
+    paths.forEach(path => {
+      const normalizedPath = (path || [])
+        .filter(point => point && point.lat != null && point.lng != null)
+        .map(point => ({
+          lat: Number(point.lat),
+          lng: Number(point.lng),
+        }));
+
+      if (normalizedPath.length < 2) return;
+
+      const outline = new google.maps.Polyline({
+        path: normalizedPath,
+        geodesic: false,
+        strokeColor: '#22c55e',
+        strokeOpacity: 0.95,
+        strokeWeight: 5,
+        clickable: false,
+        map: gMap,
+        zIndex: 3,
+      });
+
+      mapLayers.boundaries.push(outline);
+      hasBoundary = true;
+    });
+
+    if (hasBoundary && fitMapToBoundaryPaths(paths, 42)) {
+      return;
+    }
+  } catch (err) {
+    console.error('Failed to load barangay boundary:', err);
   }
 
   fitMapToLocations(nodes, 70);
@@ -802,14 +966,12 @@ function drawNode(n, start, end) {
   });
 
   const hazardText = n.haz == null ? 'Unavailable' : `${n.haz} / 5`;
-  const floodClassText = describeNodeFloodClass(n);
   const hazardSourceText = describeHazardSource(n);
 
   const iw = new google.maps.InfoWindow({
     content: infoPopup(n.name, [
       ['Role', n.name === start ? 'Start point' : n.name === end ? 'End point' : 'Node'],
       ['Node Flood Hazard', hazardText, col],
-      ['Flood Class', floodClassText],
       ['Hazard Source', hazardSourceText],
       ['Barangay', n.barangay || selectedBarangay || 'N/A'],
     ])
@@ -861,7 +1023,6 @@ function drawSelectedPinsOnly(start, end, options = {}) {
 
     const col = nodeColor(n.haz, n.name, start, end);
     const hazardText = n.haz == null ? 'Unavailable' : `${n.haz} / 5`;
-    const floodClassText = describeNodeFloodClass(n);
     const hazardSourceText = describeHazardSource(n);
 
     const marker = new google.maps.Marker({
@@ -890,7 +1051,6 @@ function drawSelectedPinsOnly(start, end, options = {}) {
       content: infoPopup(n.name, [
         ['Role', n.name === start ? 'Start point' : 'End point'],
         ['Node Flood Hazard', hazardText, col],
-        ['Flood Class', floodClassText],
         ['Hazard Source', hazardSourceText],
         ['Barangay', n.barangay || selectedBarangay || 'N/A'],
       ])
@@ -928,7 +1088,7 @@ function redrawNodes(start, end) {
   getBarangayLocations(selectedBarangay).forEach(n => drawNode(n, start, end));
 }
 
-function selectBarangay(name) {
+async function selectBarangay(name) {
   const nodes = getBarangayLocations(name);
   workflowFocusSection = null;
 
@@ -941,7 +1101,7 @@ function selectBarangay(name) {
 
   if (selectedBarangay === name) {
     clearBarangaySelections({ keepResults: false, keepInfoText: true });
-    loadBarangayMapOnly(name);
+    await loadBarangayMapOnly(name);
     document.getElementById('emptyMap').style.display = 'none';
     advanceStep(selectedHazard ? 3 : 2);
     document.getElementById('infoBox').innerHTML = selectedHazard
@@ -995,7 +1155,7 @@ function selectBarangay(name) {
 
   document.getElementById('emptyMap').style.display = 'none';
 
-  loadBarangayMapOnly(name);
+  await loadBarangayMapOnly(name);
   advanceStep(selectedHazard ? 3 : 2);
 
   document.getElementById('infoBox').innerHTML =
@@ -1025,6 +1185,8 @@ function onNodeChange() {
   document.getElementById('runBtn').disabled = !canRun;
 
   if (start || end) drawSelectedPinsOnly(start, end);
+  if (canRun) scheduleSimulationWarmup(start, end);
+  else clearPendingSimulationWarmup();
 
   if (canRun) {
     document.getElementById('infoBox').innerHTML =
@@ -1267,7 +1429,7 @@ function focusWorkflowSection(sectionKey) {
   }
 }
 
-function resetRouteSelection() {
+async function resetRouteSelection() {
   if (!selectedBarangay) return;
 
   workflowFocusSection = 'route';
@@ -1286,7 +1448,7 @@ function resetRouteSelection() {
   }
 
   document.getElementById('emptyMap').style.display = 'none';
-  loadBarangayMapOnly(selectedBarangay);
+  await loadBarangayMapOnly(selectedBarangay);
 }
 
 function initStepNavigation() {}
@@ -1354,23 +1516,25 @@ async function runSimulation() {
   }
 
   try {
-    const res = await fetch(BACKEND + '/simulate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ start, end, hazard: selectedHazard })
-    });
-
-    const result = await res.json();
-
-    if (!res.ok || result.error === true) {
-      throw new Error(result.message || result.error || 'Simulation failed');
+    if (loaderSub) {
+      loaderSub.textContent = 'Preparing cached routing data…';
     }
+
+    await ensureSimulationWarmup(start, end);
+
+    const result = await sendSimulationRequest({
+      start,
+      end,
+      hazard: selectedHazard,
+      barangay: selectedBarangay,
+    });
 
     const routes = decorateRoutesForDisplay(
       normalizeRoutes(result.routes || [])
     );
     result.routes = routes;
     simData = result;
+    clearBoundaryLayers();
 
     await renderRoutesOnRoads({
       routes,
@@ -1406,8 +1570,11 @@ async function runSimulation() {
 }
 
 function showResultsPanel(result) {
+  const resultsPanel = document.getElementById('resultsPanel');
+  resultsPanel.classList.remove('fade-in');
   syncResultsVisibility(true);
-  document.getElementById('resultsPanel').classList.add('fade-in');
+  void resultsPanel.offsetWidth;
+  resultsPanel.classList.add('fade-in');
 
   const routes = result.routes || [];
   const safe = routes.filter(r => r.category !== 'eliminated');
@@ -1438,7 +1605,7 @@ function showResultsPanel(result) {
     ? `Showing ${routes.length} routes · ${elim.length} eliminated`
     : 'No route results to display';
 
-  setActiveTab('safe');
+  setActiveTab(safe.length ? 'safe' : elim.length ? 'elim' : 'summary');
 }
 
 function getDefaultRouteVisual(group) {
@@ -1660,6 +1827,36 @@ function syncRoutePreview(group, enabled) {
   createRoutePreview(group);
 }
 
+function hasVisibleSafeRouteResults() {
+  const groups = Array.isArray(mapLayers.routeGroups) ? mapLayers.routeGroups : [];
+  return groups.some(group => group.category !== 'eliminated');
+}
+
+function isRouteCategoryVisibleOnMap(category, tabName = activeResultsTab) {
+  if (!hasVisibleSafeRouteResults()) {
+    return category === 'eliminated';
+  }
+
+  return tabName === 'elim'
+    ? category === 'eliminated'
+    : category !== 'eliminated';
+}
+
+function hideRouteGroup(group) {
+  if (!group) return;
+
+  if (group.outlineLayer) {
+    group.outlineLayer.setVisible(false);
+  }
+
+  if (group.mainLayer) {
+    group.mainLayer.setVisible(false);
+  }
+
+  (group.glowLayers || []).forEach(layer => layer.setVisible(false));
+  clearRoutePreview(group);
+}
+
 function applyRouteGroupVisual(group, visual) {
   if (!group) return;
 
@@ -1696,6 +1893,11 @@ function applyRouteFocusState(routeNo) {
   const hasFocus = routeNo != null;
 
   groups.forEach(group => {
+    if (!isRouteCategoryVisibleOnMap(group.category)) {
+      hideRouteGroup(group);
+      return;
+    }
+
     const visual = !hasFocus
       ? getDefaultRouteVisual(group)
       : group.routeNo === routeNo
@@ -1705,6 +1907,23 @@ function applyRouteFocusState(routeNo) {
       applyRouteGroupVisual(group, visual);
       syncRoutePreview(group, hasFocus && group.routeNo === routeNo);
     });
+}
+
+function syncVisibleRoutesForActiveTab() {
+  const isFocusedRouteVisible = !!(
+    selectedRouteFocus
+    && isRouteCategoryVisibleOnMap(selectedRouteFocus.category)
+  );
+
+  if (!isFocusedRouteVisible && selectedRouteFocus) {
+    selectedRouteFocus = null;
+    clearSelectedRouteRow();
+    if (typeof window.clearRouteRowHighlight === 'function') {
+      window.clearRouteRowHighlight();
+    }
+  }
+
+  applyRouteFocusState(isFocusedRouteVisible ? selectedRouteFocus.routeNo : null);
 }
 
 function clearSelectedRouteRow() {
@@ -1792,14 +2011,7 @@ function buildTable(routes) {
 }
 
 function switchTab(name, el) {
-  document.querySelectorAll('.rtab').forEach(t => {
-    t.classList.remove('active');
-    t.setAttribute('aria-selected', 'false');
-  });
-  document.querySelectorAll('.rtab-content').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  el.setAttribute('aria-selected', 'true');
-  document.getElementById('tab-' + name).classList.add('active');
+  setActiveTab(name);
 }
 
 function downloadCSV() {
@@ -1846,10 +2058,12 @@ function downloadCSV() {
 }
 
 function resetAll() {
+  clearPendingSimulationWarmup();
   simData = null;
   selectedBarangay = null;
   selectedHazard = null;
   selectedRouteFocus = null;
+  activeResultsTab = 'safe';
   workflowFocusSection = null;
   clearLayers();
 
@@ -1900,6 +2114,8 @@ async function checkBackend() {
 }
 
 function setActiveTab(tabName) {
+  activeResultsTab = tabName;
+
   document.querySelectorAll('.rtab').forEach(t => {
     t.classList.remove('active');
     t.setAttribute('aria-selected', 'false');
@@ -1920,6 +2136,8 @@ function setActiveTab(tabName) {
 
   const content = document.getElementById('tab-' + tabName);
   if (content) content.classList.add('active');
+
+  syncVisibleRoutesForActiveTab();
 }
 
 window.clearRouteRowHighlight = function clearRouteRowHighlight() {

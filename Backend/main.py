@@ -2,7 +2,13 @@ import csv
 from datetime import datetime
 
 from data import database
-from osm_routing import simulate_osm_routes, HAZARD_THRESHOLD, resolve_point_hazard
+from osm_routing import (
+    simulate_osm_routes,
+    HAZARD_THRESHOLD,
+    resolve_point_hazard,
+    prepare_routing_graph,
+    warm_static_caches,
+)
 
 
 def get_locations():
@@ -34,7 +40,7 @@ def get_locations():
 
     return locations
 
-def simulate(start, end, hazard_type="Flood"):
+def simulate(start, end, hazard_type="Flood", barangay=None):
     if not start:
         return {
             "error": True,
@@ -69,6 +75,7 @@ def simulate(start, end, hazard_type="Flood"):
         }
 
     try:
+        scope_barangay = barangay or start_location.get("barangay") or end_location.get("barangay")
         result = simulate_osm_routes(
             start_name=start_location["name"],
             start_lat=start_location["lat"],
@@ -76,7 +83,8 @@ def simulate(start, end, hazard_type="Flood"):
             end_name=end_location["name"],
             end_lat=end_location["lat"],
             end_lng=end_location["lng"],
-            hazard_type=hazard_type
+            hazard_type=hazard_type,
+            barangay_name=scope_barangay,
         )
         return result
 
@@ -85,6 +93,58 @@ def simulate(start, end, hazard_type="Flood"):
             "error": True,
             "message": f"OSM routing failed: {str(e)}"
         }
+
+
+def prewarm_simulation(start, end, barangay=None):
+    if not start:
+        return {
+            "error": True,
+            "message": "Start location is required"
+        }
+
+    if not end:
+        return {
+            "error": True,
+            "message": "End location is required"
+        }
+
+    if start == end:
+        return {
+            "error": True,
+            "message": "Start and end locations must be different"
+        }
+
+    start_location = database.get_location_by_name(start)
+    end_location = database.get_location_by_name(end)
+
+    if not start_location or not end_location:
+        return {
+            "error": True,
+            "message": "Start or end location not found"
+        }
+
+    try:
+        scope_barangay = barangay or start_location.get("barangay") or end_location.get("barangay")
+        prepare_routing_graph(
+            start_location["lat"],
+            start_location["lng"],
+            end_location["lat"],
+            end_location["lng"],
+            barangay_name=scope_barangay,
+        )
+        return {
+            "error": False,
+            "message": "Simulation context prepared"
+        }
+    except Exception as e:
+        return {
+            "error": True,
+            "message": f"Warmup failed: {str(e)}"
+        }
+
+
+def warm_startup_data():
+    warm_static_caches()
 
 
 def export_csv(routes, filename=None):

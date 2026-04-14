@@ -1,4 +1,9 @@
 import pyodbc
+import time
+
+DB_CONNECT_ATTEMPTS = 2
+DB_CONNECT_RETRY_DELAY_SECONDS = 0.35
+DB_CONNECT_TIMEOUT_SECONDS = 5
 
 CONNECTION_STRING = (
     "DRIVER={ODBC Driver 18 for SQL Server};"
@@ -6,6 +11,7 @@ CONNECTION_STRING = (
     "DATABASE=DIsaster_route_simulation;"
     "Trusted_Connection=yes;"
     "TrustServerCertificate=yes;"
+    f"Connection Timeout={DB_CONNECT_TIMEOUT_SECONDS};"
     #SQL
     #disaster_route_sim - pearl sql server database name
     #PRLY04\\SQLEXPRESS - pearl sql server instance name
@@ -18,7 +24,18 @@ CONNECTION_STRING = (
 )
 
 def get_connection():
-    return pyodbc.connect(CONNECTION_STRING)
+    last_error = None
+
+    for attempt in range(DB_CONNECT_ATTEMPTS):
+        try:
+            return pyodbc.connect(CONNECTION_STRING)
+        except pyodbc.Error as e:
+            last_error = e
+            if attempt >= DB_CONNECT_ATTEMPTS - 1:
+                raise
+            time.sleep(DB_CONNECT_RETRY_DELAY_SECONDS)
+
+    raise last_error
 
 def get_graph_data():
     print("Connecting to SQL Server database...")
