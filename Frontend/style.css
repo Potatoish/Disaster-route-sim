@@ -598,6 +598,14 @@ body.dark .workflow-card.active {
   gap: 10px;
 }
 
+#earthquakeModeFlag[hidden],
+#earthquakeRoutePanel[hidden],
+#earthquakeViewSelector[hidden],
+#endField[hidden],
+#routeDivider[hidden] {
+  display: none !important;
+}
+
 .earthquake-mode-flag {
   margin-bottom: 10px;
   display: inline-flex;
