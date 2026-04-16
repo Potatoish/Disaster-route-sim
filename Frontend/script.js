@@ -29,8 +29,9 @@ const EARTHQUAKE_VIEW_META = {
   overall: 'Overall earthquake lens',
   liquefaction: 'Liquefaction lens',
   ground_shaking: 'Ground shaking lens',
-  fault_line: 'Fault line lens',
 };
+const EARTHQUAKE_CLASSIFICATION_VIEWS = ['liquefaction', 'ground_shaking'];
+const EARTHQUAKE_MIN_FOCUS_ZOOM = 13;
 let mapThemeTransitionTimer = null;
 let pendingSimulationWarmup = null;
 let pendingSimulationWarmupKey = '';
@@ -591,11 +592,11 @@ async function sendEarthquakeTestRequest(payload) {
 
   if (lastError?.name === 'AbortError') {
     throw new Error(
-      'Earthquake test timed out while preparing routing data. Keep the backend running and try again after the earthquake warmup completes.'
+      'Earthquake simulation timed out while preparing routing data. Keep the backend running and try again after the earthquake routing data finishes loading.'
     );
   }
 
-  throw lastError || new Error('Earthquake test failed');
+  throw lastError || new Error('Earthquake simulation failed');
 }
 
 async function sendEarthquakePrewarmRequest(payload) {
@@ -613,7 +614,7 @@ async function sendEarthquakePrewarmRequest(payload) {
       statusCode = response.status;
 
       if (!response.ok || data?.error === true) {
-        throw new Error(data?.message || 'Earthquake warmup failed');
+        throw new Error(data?.message || 'Earthquake routing preparation failed');
       }
 
       return data;
@@ -630,11 +631,11 @@ async function sendEarthquakePrewarmRequest(payload) {
 
   if (lastError?.name === 'AbortError') {
     throw new Error(
-      'Earthquake warmup timed out while building the routing graph. Check the backend connection and try again.'
+      'Earthquake routing preparation timed out while building the road graph. Check the backend connection and try again.'
     );
   }
 
-  throw lastError || new Error('Earthquake warmup failed');
+  throw lastError || new Error('Earthquake routing preparation failed');
 }
 
 async function prewarmEarthquakeContext(barangay, warmupKey) {
@@ -794,7 +795,8 @@ function isEarthquakeBarangaySupported(barangay = selectedBarangay) {
 }
 
 function isEarthquakeSimulationResult(result = simData) {
-  return result?.simulation_mode === 'earthquake_test';
+  return result?.simulation_mode === 'earthquake'
+    || result?.simulation_mode === 'earthquake_test';
 }
 
 function getActiveEarthquakeViewData(result = simData) {
@@ -809,7 +811,7 @@ function setRunButtonLabel() {
   const runBtn = document.getElementById('runBtn');
   if (!runBtn) return;
 
-  runBtn.textContent = isEarthquakeMode() ? 'Run Earthquake Test' : 'Run Simulation';
+  runBtn.textContent = isEarthquakeMode() ? 'Run Earthquake Simulation' : 'Run Simulation';
 }
 
 function resetEarthquakeState(options = {}) {
@@ -908,7 +910,7 @@ function syncEarthquakeRouteUi() {
     if (!isEarthquakeMode()) {
       evacStatusTxt.textContent = 'Evacuation sites are hidden.';
     } else if (unsupportedEarthquake) {
-      evacStatusTxt.textContent = 'Earthquake test mode is currently available only for Pinagbuhatan.';
+      evacStatusTxt.textContent = 'Earthquake routing is currently available only for Pinagbuhatan.';
     } else if (!earthquakeEvacSitesVisible) {
       evacStatusTxt.textContent = hasStart
         ? 'Evacuation sites are hidden.'
@@ -920,8 +922,8 @@ function syncEarthquakeRouteUi() {
 
   if (earthquakeRouteCopy) {
     earthquakeRouteCopy.innerHTML = unsupportedEarthquake
-      ? 'Earthquake test mode is limited to <strong>Pinagbuhatan</strong> for now.'
-      : 'Click <strong>Show Evacuation Sites</strong> to reveal the fixed test shelters for Pinagbuhatan.';
+      ? 'Earthquake routing is limited to <strong>Pinagbuhatan</strong> for now.'
+      : 'Click <strong>Show Evacuation Sites</strong> to reveal the available evacuation shelters for Pinagbuhatan.';
   }
 
   if (startSel && isEarthquakeMode()) {
@@ -1181,7 +1183,7 @@ function buildNodePopupRows(node, start, end) {
   if (isEarthquakeMode()) {
     return [
       ['Role', node.name === start ? 'Start point' : 'Node'],
-      ['Mode', 'Earthquake Test'],
+      ['Mode', 'Earthquake'],
       ['Barangay', node.barangay || selectedBarangay || 'N/A'],
     ];
   }
@@ -1419,12 +1421,16 @@ function getDisplayedEarthquakeRoute() {
   return simData.routes.find(route => route.category === 'best') || simData.routes[0] || null;
 }
 
+function shouldShowEarthquakeHazardOverlays(viewKey = activeEarthquakeView) {
+  return EARTHQUAKE_CLASSIFICATION_VIEWS.includes(viewKey);
+}
+
 function getEarthquakeHazardCollectionsForView(viewKey = activeEarthquakeView) {
   if (!isEarthquakeSimulationResult(simData)) {
     return [];
   }
 
-  if (viewKey === 'liquefaction' || viewKey === 'ground_shaking' || viewKey === 'fault_line') {
+  if (shouldShowEarthquakeHazardOverlays(viewKey)) {
     const collection = simData.hazard_layers?.[viewKey];
     return collection ? [collection] : [];
   }
@@ -1463,12 +1469,6 @@ function fitEarthquakeMapScope(options = {}) {
     if (activeDestination) {
       hasPoints = extendBoundsWithLngLat(bounds, activeDestination.lng, activeDestination.lat) || hasPoints;
     }
-
-    getEarthquakeHazardCollectionsForView(activeEarthquakeView).forEach(collection => {
-      (collection?.features || []).forEach(feature => {
-        hasPoints = extendBoundsWithGeoJsonGeometry(bounds, feature?.geometry) || hasPoints;
-      });
-    });
   } else {
     earthquakeEvacSites.forEach(site => {
       hasPoints = extendBoundsWithLngLat(bounds, site.lng, site.lat) || hasPoints;
@@ -1480,6 +1480,11 @@ function fitEarthquakeMapScope(options = {}) {
   }
 
   gMap.fitBounds(bounds, 52);
+  google.maps.event.addListenerOnce(gMap, 'idle', () => {
+    if (gMap.getZoom() < EARTHQUAKE_MIN_FOCUS_ZOOM) {
+      gMap.setZoom(EARTHQUAKE_MIN_FOCUS_ZOOM);
+    }
+  });
   return true;
 }
 
@@ -1693,7 +1698,7 @@ async function selectBarangay(name) {
     if (isEarthquakeMode()) {
       document.getElementById('infoBox').innerHTML = isEarthquakeBarangaySupported(name)
         ? `<strong>Brgy. ${name}</strong> reset. Choose your <strong>start node</strong>, then reveal the <strong>evacuation sites</strong>.`
-        : `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
+        : `<strong>Earthquake Routing</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
     } else {
       document.getElementById('infoBox').innerHTML = selectedHazard
         ? `<strong>Brgy. ${name}</strong> reset. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`
@@ -1756,8 +1761,8 @@ async function selectBarangay(name) {
       `<strong>Brgy. ${name}</strong> selected — map loaded. Choose a <strong>disaster type</strong> first.`;
   } else if (isEarthquakeMode()) {
     document.getElementById('infoBox').innerHTML = isEarthquakeBarangaySupported(name)
-      ? `<strong>Brgy. ${name}</strong> selected — earthquake test mode loaded. Choose a <strong>start node</strong> first.`
-      : `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
+      ? `<strong>Brgy. ${name}</strong> selected — earthquake routing is ready. Choose a <strong>start node</strong> first.`
+      : `<strong>Earthquake Routing</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
   } else {
     document.getElementById('infoBox').innerHTML =
       `<strong>Brgy. ${name}</strong> selected — map loaded. Choose your <strong>start</strong> and <strong>end</strong> nodes below.`;
@@ -1815,19 +1820,19 @@ function onNodeChange() {
 
     if (!isEarthquakeBarangaySupported()) {
       document.getElementById('infoBox').innerHTML =
-        `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
+        `<strong>Earthquake Routing</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
     } else if (canRun) {
       document.getElementById('infoBox').innerHTML =
-        `Ready! <strong>${start}</strong> will be evaluated against all visible <strong>evacuation sites</strong>. Click <strong>Run Earthquake Test</strong>.`;
+        `Ready! <strong>${start}</strong> will be evaluated against all visible <strong>evacuation sites</strong>. Click <strong>Run Earthquake Simulation</strong>.`;
     } else if (!start) {
       document.getElementById('infoBox').innerHTML =
-        `Choose a <strong>start node</strong> to begin the earthquake test flow.`;
+        `Choose a <strong>start node</strong> to begin the earthquake routing flow.`;
     } else if (!earthquakeEvacSitesVisible) {
       document.getElementById('infoBox').innerHTML =
-        `Start selected. Now click <strong>Show Evacuation Sites</strong> to load the fixed test shelters.`;
+        `Start selected. Now click <strong>Show Evacuation Sites</strong> to load the available evacuation shelters.`;
     } else {
       document.getElementById('infoBox').innerHTML =
-        `Evacuation sites are loaded. Click <strong>Run Earthquake Test</strong> when you are ready.`;
+        `Evacuation sites are loaded. Click <strong>Run Earthquake Simulation</strong> when you are ready.`;
     }
   } else {
     if (start || end) drawSelectedPinsOnly(start, end);
@@ -1867,7 +1872,7 @@ async function selectHazard(name, el) {
   if (!selectedBarangay) {
     document.getElementById('infoBox').innerHTML =
       isEarthquakeMode(name)
-        ? `<strong>${name}</strong> selected. Choose <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong> to start the earthquake test flow.`
+        ? `<strong>${name}</strong> selected. Choose <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong> to start earthquake routing.`
         : `Disaster type <strong>${name}</strong> selected. Now choose a <strong>barangay</strong>.`;
     advanceStep(1);
     syncEarthquakeRouteUi();
@@ -2038,8 +2043,8 @@ function syncWorkflowSummaries() {
     summaryHazard.textContent = selectedHazard
       ? isEarthquakeMode()
         ? isEarthquakeBarangaySupported()
-          ? `${selectedHazard} test mode is active for ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
-          : `${selectedHazard} test mode is currently limited to ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
+          ? `${selectedHazard} routing is active for ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
+          : `${selectedHazard} routing is currently limited to ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
         : `${selectedHazard} is the active hazard scenario.`
       : selectedBarangay
       ? 'Choose which hazard scenario to test.'
@@ -2069,8 +2074,8 @@ function syncWorkflowSummaries() {
   if (summaryRun) {
     summaryRun.textContent = isEarthquakeMode()
       ? canRun
-        ? 'Earthquake test setup is complete. The ACO run will compare all visible evacuation sites.'
-        : 'Review the earthquake test setup, then launch the simulation.'
+        ? 'Earthquake setup is complete. The ACO run will compare all visible evacuation sites.'
+        : 'Review the earthquake setup, then launch the simulation.'
       : canRun
       ? 'Everything is ready. Launch the simulation when you are set.'
       : 'Review the setup, then launch the simulation.';
@@ -2151,7 +2156,7 @@ async function resetRouteSelection() {
     document.getElementById('infoBox').innerHTML = isEarthquakeMode()
       ? isEarthquakeBarangaySupported()
         ? `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start node</strong>, then reveal the <strong>evacuation sites</strong> again.`
-        : `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`
+        : `<strong>Earthquake Routing</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`
       : `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`;
     advanceStep(isEarthquakeMode() && !isEarthquakeBarangaySupported() ? 2 : 3);
   } else {
@@ -2213,6 +2218,7 @@ async function renderActiveSimulationRoutes() {
   });
 
   if (isEarthquakeSimulationResult(simData)) {
+    const showHazardLayers = shouldShowEarthquakeHazardOverlays(activeEarthquakeView);
     window.earthquakeTestUI?.renderHazardLayers({
       map: gMap,
       hazardLayers: simData.hazard_layers,
@@ -2220,7 +2226,7 @@ async function renderActiveSimulationRoutes() {
     });
     window.earthquakeTestUI?.syncLegend(activeEarthquakeView, {
       showRouteKeys: true,
-      showHazardLayers: true,
+      showHazardLayers,
     });
     fitEarthquakeMapScope({ includeHazards: true });
   } else {
@@ -2231,7 +2237,7 @@ async function renderActiveSimulationRoutes() {
 async function showEvacuationSites() {
   if (!isEarthquakeMode()) return;
   if (!isEarthquakeBarangaySupported()) {
-    alert(`Earthquake test mode is currently available only for Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}.`);
+    alert(`Earthquake routing is currently available only for Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}.`);
     return;
   }
 
@@ -2263,14 +2269,17 @@ async function showEvacuationSites() {
     window.earthquakeTestUI?.syncLegend(
       activeEarthquakeView,
       hasActiveEarthquakeResult
-        ? { showRouteKeys: true, showHazardLayers: true }
+        ? {
+            showRouteKeys: true,
+            showHazardLayers: shouldShowEarthquakeHazardOverlays(activeEarthquakeView),
+          }
         : { showRouteKeys: false, showHazardLayers: false }
     );
     document.getElementById('mapLegend').style.display = 'block';
     syncLegendVisibility();
     if (!hasActiveEarthquakeResult) {
       document.getElementById('infoBox').innerHTML =
-        `<strong>${earthquakeEvacSites.length}</strong> evacuation site(s) are now visible. The earthquake graph is warming in the background, then <strong>Run Earthquake Test</strong> will be faster.`;
+        `<strong>${earthquakeEvacSites.length}</strong> evacuation site(s) are now visible. The earthquake routing graph is loading in the background, then <strong>Run Earthquake Simulation</strong> will be faster.`;
     }
     fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
     if (!hasActiveEarthquakeResult) {
@@ -2362,7 +2371,7 @@ async function runSimulation() {
   try {
     if (loaderSub) {
       loaderSub.textContent = isEarthquakeMode()
-        ? 'Preparing Pinagbuhatan earthquake test data…'
+        ? 'Preparing Pinagbuhatan earthquake routing data…'
         : 'Preparing cached routing data…';
     }
 
@@ -2474,7 +2483,7 @@ function showResultsPanel(result, options = {}) {
         ${statBox('Best Evac', earthquakeSummary?.selected_evacuation_site?.name || 'No safe route', earthquakeSummary?.selected_evacuation_site ? 'var(--accent)' : 'var(--red)')}
       </div>
       <div class="summary-callout">
-        FOR TEST ONLY. ${escapeHtml(earthquakeSummary?.description || 'Earthquake lens summary unavailable.')}
+        ${escapeHtml(earthquakeSummary?.description || 'Earthquake lens summary unavailable.')}
         ${earthquakeSummary?.selected_evacuation_site ? `<br><br>Selected evacuation site: <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>` : ''}
       </div>
       <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">

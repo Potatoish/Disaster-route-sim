@@ -223,8 +223,10 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     }
 
     const extraRows = Array.isArray(route.info_rows) ? route.info_rows : [];
-    const contextLabel = route.simulation_mode === 'earthquake_test' ? 'Hazards' : 'Flood Vars';
-    const contextValue = route.simulation_mode === 'earthquake_test'
+    const isEarthquakeRoute = route.simulation_mode === 'earthquake'
+      || route.simulation_mode === 'earthquake_test';
+    const contextLabel = isEarthquakeRoute ? 'Hazards' : 'Flood Vars';
+    const contextValue = isEarthquakeRoute
       ? (route.hazard_signature || 'N/A')
       : (route.display_flood_classes || 'None');
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();

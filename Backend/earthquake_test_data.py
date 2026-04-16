@@ -13,7 +13,6 @@ METERS_PER_DEGREE = 111_320.0
 _LAYER_FILES = {
     "liquefaction": "liquefaction.geojson",
     "ground_shaking": "ground_shaking.geojson",
-    "fault_line": "fault_line.geojson",
 }
 _DATASET_CACHE = {}
 
@@ -99,7 +98,7 @@ def _normalize_evacuation_sites(raw_sites):
             "lat": float(site["lat"]),
             "lng": float(site["lng"]),
             "address": site.get("address") or "Pinagbuhatan, Pasig City",
-            "capacity_label": site.get("capacity_label") or "FOR TEST ONLY",
+            "capacity_label": site.get("capacity_label") or "Available",
         })
     return sites
 
@@ -107,7 +106,7 @@ def _normalize_evacuation_sites(raw_sites):
 def get_earthquake_test_dataset(barangay_name):
     canonical_name = normalize_barangay_name(barangay_name)
     if canonical_name not in SUPPORTED_BARANGAYS:
-        raise ValueError("Earthquake test mode is currently available only for Pinagbuhatan.")
+        raise ValueError("Earthquake routing is currently available only for Pinagbuhatan.")
 
     cached = _DATASET_CACHE.get(canonical_name)
     if cached is not None:
@@ -141,7 +140,6 @@ def get_earthquake_test_dataset(barangay_name):
     dataset = {
         "canonical_barangay": canonical_name,
         "display_barangay": "Pinagbuhatan",
-        "for_test_only": True,
         "evacuation_sites": evacuation_sites,
         "layer_payloads": layer_payloads,
         "layer_zones": layer_zones,
@@ -154,7 +152,6 @@ def get_earthquake_test_evacuation_sites_payload(barangay_name):
     dataset = get_earthquake_test_dataset(barangay_name)
     return {
         "error": False,
-        "for_test_only": True,
         "barangay": dataset["display_barangay"],
         "evacuation_sites": dataset["evacuation_sites"],
     }

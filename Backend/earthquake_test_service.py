@@ -38,7 +38,7 @@ EARTHQUAKE_VIEW_CONFIG = {
     "overall": {
         "label": "Overall",
         "hazard_attr": "eq_overall",
-        "description": "Combined liquefaction, ground-shaking, and fault-line exposure before distance.",
+        "description": "Combined liquefaction and ground-shaking exposure before distance.",
     },
     "liquefaction": {
         "label": "Liquefaction",
@@ -49,11 +49,6 @@ EARTHQUAKE_VIEW_CONFIG = {
         "label": "Ground Shaking",
         "hazard_attr": "eq_ground_shaking",
         "description": "Ground-shaking exposure before distance.",
-    },
-    "fault_line": {
-        "label": "Fault Line",
-        "hazard_attr": "eq_fault_line",
-        "description": "Fault-line proximity exposure before distance.",
     },
 }
 
@@ -66,7 +61,6 @@ def _format_hazard_signature(maxima):
     return (
         f"L{int(maxima['liquefaction'])}"
         f" / G{int(maxima['ground_shaking'])}"
-        f" / F{int(maxima['fault_line'])}"
     )
 
 
@@ -122,15 +116,10 @@ def _annotate_graph_with_earthquake_hazards(graph, dataset):
             edge_geom,
             dataset["layer_zones"]["ground_shaking"],
         )
-        fault_line = _resolve_layer_hazard(
-            edge_geom,
-            dataset["layer_zones"]["fault_line"],
-        )
 
         edge_data["eq_liquefaction"] = liquefaction
         edge_data["eq_ground_shaking"] = ground_shaking
-        edge_data["eq_fault_line"] = fault_line
-        edge_data["eq_overall"] = max(liquefaction, ground_shaking, fault_line)
+        edge_data["eq_overall"] = max(liquefaction, ground_shaking)
 
     graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
     return graph
@@ -153,13 +142,11 @@ def _build_route_maxima(resolved_edges):
     maxima = {
         "liquefaction": 1,
         "ground_shaking": 1,
-        "fault_line": 1,
     }
 
     for _, _, _, edge_data in resolved_edges:
         maxima["liquefaction"] = max(maxima["liquefaction"], int(edge_data.get("eq_liquefaction", 1)))
         maxima["ground_shaking"] = max(maxima["ground_shaking"], int(edge_data.get("eq_ground_shaking", 1)))
-        maxima["fault_line"] = max(maxima["fault_line"], int(edge_data.get("eq_fault_line", 1)))
 
     return maxima
 
@@ -180,14 +167,12 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
     lens_unsafe_distances = {
         "liquefaction": 0.0,
         "ground_shaking": 0.0,
-        "fault_line": 0.0,
     }
 
     for _, _, _, edge_data in resolved_edges:
         length = max(float(edge_data.get("length", 0)), 1.0)
         liquefaction = int(edge_data.get("eq_liquefaction", 1))
         ground_shaking = int(edge_data.get("eq_ground_shaking", 1))
-        fault_line = int(edge_data.get("eq_fault_line", 1))
 
         total_distance += length
 
@@ -195,15 +180,12 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
             lens_unsafe_distances["liquefaction"] += length
         if ground_shaking > HAZARD_THRESHOLD:
             lens_unsafe_distances["ground_shaking"] += length
-        if fault_line > HAZARD_THRESHOLD:
-            lens_unsafe_distances["fault_line"] += length
 
         if view_key == "overall":
-            hazard_value = max(liquefaction, ground_shaking, fault_line)
+            hazard_value = max(liquefaction, ground_shaking)
             risk_distance += length * (
                 _lens_hazard_factor(liquefaction)
                 + _lens_hazard_factor(ground_shaking)
-                + _lens_hazard_factor(fault_line)
             )
         else:
             hazard_attr = EARTHQUAKE_VIEW_CONFIG[view_key]["hazard_attr"]
@@ -247,7 +229,7 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
         "destination_lng": float(evacuation_site["lng"]),
         "lens_key": view_key,
         "lens_label": EARTHQUAKE_VIEW_CONFIG[view_key]["label"],
-        "simulation_mode": "earthquake_test",
+        "simulation_mode": "earthquake",
         "hazard_signature": hazard_signature,
         "hazard_maxima": maxima,
         "lens_unsafe_distances": {
@@ -269,7 +251,7 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
             ["Hazards", hazard_signature],
         ],
         "reason": (
-            f"Earthquake test route to {evacuation_site['name']} ranked by "
+            f"Earthquake route to {evacuation_site['name']} ranked by "
             f"{EARTHQUAKE_VIEW_CONFIG[view_key]['description'].lower()}"
         ),
         "elimination_reason": (
@@ -312,7 +294,6 @@ def _build_view_summary(view_key, routes, evacuation_sites):
             else None
         ),
         "best_distance": best_route["distance"] if best_route else None,
-        "for_test_only": True,
     }
 
 
@@ -403,14 +384,13 @@ def get_earthquake_test_evacuation_sites(barangay_name):
     if not is_supported_earthquake_barangay(barangay_name):
         return {
             "error": True,
-            "message": "Earthquake test mode is currently available only for Pinagbuhatan.",
+            "message": "Earthquake routing is currently available only for Pinagbuhatan.",
         }
 
     try:
         dataset = get_earthquake_test_dataset(barangay_name)
         return {
             "error": False,
-            "for_test_only": True,
             "barangay": dataset["display_barangay"],
             "evacuation_sites": dataset["evacuation_sites"],
         }
@@ -425,7 +405,7 @@ def prewarm_earthquake_test(barangay_name):
     if not is_supported_earthquake_barangay(barangay_name):
         return {
             "error": True,
-            "message": "Earthquake test mode is currently available only for Pinagbuhatan.",
+            "message": "Earthquake routing is currently available only for Pinagbuhatan.",
         }
 
     try:
@@ -436,14 +416,13 @@ def prewarm_earthquake_test(barangay_name):
         )
         return {
             "error": False,
-            "for_test_only": True,
             "barangay": dataset["display_barangay"],
-            "message": "Earthquake test context prepared",
+            "message": "Earthquake routing context prepared",
         }
     except Exception as exc:
         return {
             "error": True,
-            "message": f"Earthquake test warmup failed: {exc}",
+            "message": f"Earthquake routing preparation failed: {exc}",
         }
 
 
@@ -457,7 +436,7 @@ def simulate_earthquake_test(start, barangay_name):
     if not is_supported_earthquake_barangay(barangay_name):
         return {
             "error": True,
-            "message": "Earthquake test mode is currently available only for Pinagbuhatan.",
+            "message": "Earthquake routing is currently available only for Pinagbuhatan.",
         }
 
     start_location = database.get_location_by_name(start)
@@ -470,7 +449,7 @@ def simulate_earthquake_test(start, barangay_name):
     if normalize_barangay_name(start_location.get("barangay")) != SUPPORTED_EARTHQUAKE_BARANGAY:
         return {
             "error": True,
-            "message": "The selected start node is outside Pinagbuhatan earthquake test coverage.",
+            "message": "The selected start node is outside Pinagbuhatan earthquake routing coverage.",
         }
 
     try:
@@ -497,8 +476,7 @@ def simulate_earthquake_test(start, barangay_name):
 
         return {
             "error": False,
-            "for_test_only": True,
-            "simulation_mode": "earthquake_test",
+            "simulation_mode": "earthquake",
             "hazard_type": "Earthquake",
             "barangay": dataset["display_barangay"],
             "start": start_location["name"],
@@ -511,5 +489,5 @@ def simulate_earthquake_test(start, barangay_name):
     except Exception as exc:
         return {
             "error": True,
-            "message": f"Earthquake test simulation failed: {exc}",
+            "message": f"Earthquake simulation failed: {exc}",
         }

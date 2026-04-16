@@ -5,7 +5,6 @@
     hazardOverlays: {
       liquefaction: [],
       ground_shaking: [],
-      fault_line: [],
     },
     activeInfoWindow: null,
   };
@@ -20,11 +19,6 @@
       label: 'Ground Shaking',
       strokeColor: '#1d4ed8',
       fillColor: '#3b82f6',
-    },
-    fault_line: {
-      label: 'Fault Line',
-      strokeColor: '#dc2626',
-      fillColor: '#ef4444',
     },
   };
 
@@ -89,7 +83,7 @@
         <div class="popup-title">${escapeHtml(site.name)}</div>
         <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Best evacuation site' : 'Evacuation site'}</span></div>
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pinagbuhatan')}</span></div>
-        <div class="popup-row"><span>Capacity</span><span>${escapeHtml(site.capacity_label || 'FOR TEST ONLY')}</span></div>
+        <div class="popup-row"><span>Capacity</span><span>${escapeHtml(site.capacity_label || 'Available')}</span></div>
       </div>`;
   }
 
@@ -151,7 +145,7 @@
       return {
         fillOpacity: 0.18,
         strokeOpacity: 0.45,
-        strokeWeight: layerKey === 'fault_line' ? 3.2 : 1.8,
+        strokeWeight: 1.8,
       };
     }
 
@@ -159,7 +153,7 @@
     return {
       fillOpacity: isActive ? 0.24 : 0.08,
       strokeOpacity: isActive ? 0.88 : 0.18,
-      strokeWeight: layerKey === 'fault_line' ? (isActive ? 4.4 : 2.4) : (isActive ? 2.4 : 1.4),
+      strokeWeight: isActive ? 2.4 : 1.4,
     };
   }
 
@@ -230,17 +224,15 @@
   function renderHazardLayers({ map, hazardLayers, activeView = 'overall' }) {
     Object.values(state.hazardOverlays).forEach(overlays => clearMapObjects(overlays));
 
-    if (!map || !hazardLayers) {
+    if (!map || !hazardLayers || activeView === 'overall' || !LAYER_STYLES[activeView]) {
       return;
     }
 
-    Object.keys(LAYER_STYLES).forEach(layerKey => {
-      const collection = hazardLayers[layerKey];
-      const features = Array.isArray(collection?.features) ? collection.features : [];
-      features.forEach(feature => {
-        const overlays = renderFeature(map, layerKey, feature, activeView);
-        state.hazardOverlays[layerKey].push(...overlays);
-      });
+    const collection = hazardLayers[activeView];
+    const features = Array.isArray(collection?.features) ? collection.features : [];
+    features.forEach(feature => {
+      const overlays = renderFeature(map, activeView, feature, activeView);
+      state.hazardOverlays[activeView].push(...overlays);
     });
   }
 
@@ -252,7 +244,6 @@
     const body = document.getElementById('mapLegendBody');
     if (!body) return;
 
-    const isOverall = activeView === 'overall';
     const routeLegend = showRouteKeys
       ? `
         <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
@@ -261,12 +252,10 @@
       `
       : '';
     const hazardLegend = showHazardLayers
-      ? `
-        <div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,${isOverall ? '0.7' : activeView === 'liquefaction' ? '1' : '0.35'});height:4px;"></div><span style="font-size:.63rem;">Liquefaction Layer</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:rgba(59,130,246,${isOverall ? '0.7' : activeView === 'ground_shaking' ? '1' : '0.35'});height:4px;"></div><span style="font-size:.63rem;">Ground Shaking Layer</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:rgba(239,68,68,${isOverall ? '0.7' : activeView === 'fault_line' ? '1' : '0.35'});height:4px;"></div><span style="font-size:.63rem;">Fault Line Layer</span></div>
-      `
-      : `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.58rem;color:var(--muted);line-height:1.5;">Hazard layers appear after the earthquake test run.</div>`;
+      ? activeView === 'liquefaction'
+        ? `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.63rem;">Liquefaction Layer</span></div>`
+        : `<div class="legend-row"><div class="legend-line" style="background:rgba(59,130,246,1);height:4px;"></div><span style="font-size:.63rem;">Ground Shaking Layer</span></div>`
+      : `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.58rem;color:var(--muted);line-height:1.5;">Select <strong>Liquefaction</strong> or <strong>Ground Shaking</strong> to view the hazard layer.</div>`;
 
     body.innerHTML = `
       ${routeLegend}

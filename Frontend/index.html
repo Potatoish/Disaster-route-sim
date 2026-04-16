@@ -120,7 +120,7 @@
           </div>
         </div>
         <div class="workflow-card-body">
-          <div class="earthquake-mode-flag" id="earthquakeModeFlag" hidden>FOR TEST ONLY | Earthquake Test Mode</div>
+          <div class="earthquake-mode-flag" id="earthquakeModeFlag" hidden>Earthquake Routing Mode</div>
           <div class="workflow-route-flow">
             <div class="field">
               <label id="startNodeLabel">START NODE - Safety Origin</label>
@@ -138,7 +138,7 @@
 
             <div class="earthquake-route-panel" id="earthquakeRoutePanel" hidden>
               <div class="earthquake-route-copy" id="earthquakeRouteCopy">
-                Click <strong>Show Evacuation Sites</strong> to reveal the fixed test shelters for Pinagbuhatan.
+                Click <strong>Show Evacuation Sites</strong> to reveal the available evacuation shelters for Pinagbuhatan.
               </div>
               <button class="earthquake-evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
                 Show Evacuation Sites
@@ -238,14 +238,13 @@
       <div class="results-inner">
         <div class="earthquake-view-switcher" id="earthquakeViewSelector" hidden>
           <div class="earthquake-view-head">
-            <span class="earthquake-view-badge">FOR TEST ONLY</span>
+            <span class="earthquake-view-badge">EARTHQUAKE</span>
             <span class="earthquake-view-copy" id="earthquakeViewCopy">Earthquake result lens</span>
           </div>
           <div class="earthquake-view-tabs" role="tablist" aria-label="Earthquake result views">
             <button class="eqtab active" id="eqView-overall" type="button" onclick="switchEarthquakeView('overall')">Overall</button>
             <button class="eqtab" id="eqView-liquefaction" type="button" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
             <button class="eqtab" id="eqView-ground_shaking" type="button" onclick="switchEarthquakeView('ground_shaking')">Ground Shaking</button>
-            <button class="eqtab" id="eqView-fault_line" type="button" onclick="switchEarthquakeView('fault_line')">Fault Line</button>
           </div>
         </div>
         <div class="results-tabs" role="tablist" aria-label="Route result sections">

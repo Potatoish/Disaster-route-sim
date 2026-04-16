@@ -1,36 +1,36 @@
 {
   "sites": [
     {
-      "id": "pinag-east-center",
-      "name": "Pinagbuhatan East Center",
-      "lat": 14.5531,
-      "lng": 121.1014,
-      "address": "Eastern Pinagbuhatan test site",
-      "capacity_label": "FOR TEST ONLY"
+      "id": "nagpayong-covered-court",
+      "name": "Nagpayong Covered Court",
+      "lat": 14.53948430566439,
+      "lng": 121.10206836750824,
+      "address": "Nagpayong Covered Court, Pinagbuhatan, Pasig City",
+      "capacity_label": "Available"
     },
     {
-      "id": "napico-hub",
-      "name": "Napico Evac Hub",
-      "lat": 14.5464,
-      "lng": 121.0944,
-      "address": "Central Pinagbuhatan test site",
-      "capacity_label": "FOR TEST ONLY"
+      "id": "ilugin-elementary-school",
+      "name": "Ilugin Elementary School",
+      "lat": 14.552775624594203,
+      "lng": 121.09992718035792,
+      "address": "Ilugin Elementary School, Pinagbuhatan, Pasig City",
+      "capacity_label": "Available"
     },
     {
-      "id": "river-shelter",
-      "name": "River Shelter Point",
-      "lat": 14.5418,
-      "lng": 121.1032,
-      "address": "Southern riverside test site",
-      "capacity_label": "FOR TEST ONLY"
+      "id": "pinagbuhatan-multi-purpose-hall",
+      "name": "Pinagbuhatan Multi Purpose Hall",
+      "lat": 14.554896147527261,
+      "lng": 121.09141623427963,
+      "address": "Pinagbuhatan Multi Purpose Hall, Pinagbuhatan, Pasig City",
+      "capacity_label": "Available"
     },
     {
-      "id": "west-covered-court",
-      "name": "West Covered Court",
-      "lat": 14.5573,
-      "lng": 121.0892,
-      "address": "Western Pinagbuhatan test site",
-      "capacity_label": "FOR TEST ONLY"
+      "id": "nagpayong-high-school",
+      "name": "Nagpayong High School",
+      "lat": 14.544851038712663,
+      "lng": 121.1030731917307,
+      "address": "Nagpayong High School, Pinagbuhatan, Pasig City",
+      "capacity_label": "Available"
     }
   ]
 }
