@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from earthquake_test_service import (
     get_earthquake_test_evacuation_sites,
+    prewarm_earthquake_test,
     simulate_earthquake_test,
 )
 from main import simulate, get_locations, prewarm_simulation, warm_startup_data
@@ -90,6 +91,20 @@ def earthquake_test_evac_sites():
     try:
         barangay = (request.args.get("barangay") or "").strip()
         result = get_earthquake_test_evacuation_sites(barangay)
+        status_code = 200 if not result.get("error") else 400
+        return jsonify(result), status_code
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+@app.route("/earthquake-test/prewarm", methods=["POST"])
+def warm_earthquake_test():
+    try:
+        data = request.get_json() or {}
+        barangay = data.get("barangay")
+        result = prewarm_earthquake_test(barangay)
         status_code = 200 if not result.get("error") else 400
         return jsonify(result), status_code
     except Exception as e:

@@ -421,6 +421,32 @@ def get_earthquake_test_evacuation_sites(barangay_name):
         }
 
 
+def prewarm_earthquake_test(barangay_name):
+    if not is_supported_earthquake_barangay(barangay_name):
+        return {
+            "error": True,
+            "message": "Earthquake test mode is currently available only for Pinagbuhatan.",
+        }
+
+    try:
+        dataset = get_earthquake_test_dataset(barangay_name)
+        _annotate_graph_with_earthquake_hazards(
+            _get_earthquake_test_graph(barangay_name),
+            dataset,
+        )
+        return {
+            "error": False,
+            "for_test_only": True,
+            "barangay": dataset["display_barangay"],
+            "message": "Earthquake test context prepared",
+        }
+    except Exception as exc:
+        return {
+            "error": True,
+            "message": f"Earthquake test warmup failed: {exc}",
+        }
+
+
 def simulate_earthquake_test(start, barangay_name):
     if not start:
         return {

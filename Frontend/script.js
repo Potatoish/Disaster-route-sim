@@ -21,6 +21,8 @@ const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
 const SIMULATION_WARMUP_TIMEOUT_MS = 45000;
 const SIMULATION_REQUEST_TIMEOUT_MS = 120000;
+const EARTHQUAKE_REQUEST_TIMEOUT_MS = 300000;
+const EARTHQUAKE_WARMUP_TIMEOUT_MS = 300000;
 const HAZARD_SELECTION_CLASSES = ['flood', 'earthquake'];
 const EARTHQUAKE_SUPPORTED_BARANGAY = 'Pinagbuhatan';
 const EARTHQUAKE_VIEW_META = {
@@ -34,6 +36,9 @@ let pendingSimulationWarmup = null;
 let pendingSimulationWarmupKey = '';
 let simulationWarmupTimer = null;
 const completedSimulationWarmups = new Set();
+let pendingEarthquakeWarmup = null;
+let pendingEarthquakeWarmupKey = '';
+const completedEarthquakeWarmups = new Set();
 
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
@@ -467,6 +472,15 @@ function clearPendingSimulationWarmup() {
   pendingSimulationWarmupKey = '';
 }
 
+function buildEarthquakeWarmupKey(barangay = selectedBarangay) {
+  return String(barangay || '').trim().toLowerCase();
+}
+
+function clearPendingEarthquakeWarmup() {
+  pendingEarthquakeWarmup = null;
+  pendingEarthquakeWarmupKey = '';
+}
+
 async function parseBackendJsonResponse(res) {
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
@@ -546,17 +560,134 @@ async function sendSimulationRequest(payload) {
 }
 
 async function sendEarthquakeTestRequest(payload) {
-  const { response, data } = await postJsonWithTimeout(
-    '/earthquake-test/simulate',
-    payload,
-    SIMULATION_REQUEST_TIMEOUT_MS
-  );
+  let lastError = null;
 
-  if (!response.ok || data?.error === true) {
-    throw new Error(data?.message || 'Earthquake test failed');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let statusCode = 0;
+
+    try {
+      const { response, data } = await postJsonWithTimeout(
+        '/earthquake-test/simulate',
+        payload,
+        EARTHQUAKE_REQUEST_TIMEOUT_MS
+      );
+      statusCode = response.status;
+
+      if (!response.ok || data?.error === true) {
+        throw new Error(data?.message || 'Earthquake test failed');
+      }
+
+      return data;
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === 1 || !shouldRetrySimulationRequest(error, statusCode)) {
+        break;
+      }
+
+      await new Promise(resolve => window.setTimeout(resolve, 450));
+    }
   }
 
-  return data;
+  if (lastError?.name === 'AbortError') {
+    throw new Error(
+      'Earthquake test timed out while preparing routing data. Keep the backend running and try again after the earthquake warmup completes.'
+    );
+  }
+
+  throw lastError || new Error('Earthquake test failed');
+}
+
+async function sendEarthquakePrewarmRequest(payload) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let statusCode = 0;
+
+    try {
+      const { response, data } = await postJsonWithTimeout(
+        '/earthquake-test/prewarm',
+        payload,
+        EARTHQUAKE_WARMUP_TIMEOUT_MS
+      );
+      statusCode = response.status;
+
+      if (!response.ok || data?.error === true) {
+        throw new Error(data?.message || 'Earthquake warmup failed');
+      }
+
+      return data;
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === 1 || !shouldRetrySimulationRequest(error, statusCode)) {
+        break;
+      }
+
+      await new Promise(resolve => window.setTimeout(resolve, 450));
+    }
+  }
+
+  if (lastError?.name === 'AbortError') {
+    throw new Error(
+      'Earthquake warmup timed out while building the routing graph. Check the backend connection and try again.'
+    );
+  }
+
+  throw lastError || new Error('Earthquake warmup failed');
+}
+
+async function prewarmEarthquakeContext(barangay, warmupKey) {
+  try {
+    await sendEarthquakePrewarmRequest({ barangay });
+    completedEarthquakeWarmups.add(warmupKey);
+    return true;
+  } catch (error) {
+    console.warn('Earthquake warmup skipped:', error);
+    return false;
+  } finally {
+    if (pendingEarthquakeWarmupKey === warmupKey) {
+      pendingEarthquakeWarmup = null;
+    }
+  }
+}
+
+function scheduleEarthquakeWarmup(barangay = selectedBarangay) {
+  if (!isEarthquakeMode() || !isEarthquakeBarangaySupported(barangay) || !earthquakeEvacSitesVisible) {
+    clearPendingEarthquakeWarmup();
+    return;
+  }
+
+  const warmupKey = buildEarthquakeWarmupKey(barangay);
+  if (!warmupKey || completedEarthquakeWarmups.has(warmupKey) || pendingEarthquakeWarmupKey === warmupKey) {
+    return;
+  }
+
+  pendingEarthquakeWarmupKey = warmupKey;
+  pendingEarthquakeWarmup = prewarmEarthquakeContext(barangay, warmupKey);
+}
+
+async function ensureEarthquakeWarmup(barangay = selectedBarangay) {
+  if (!isEarthquakeMode() || !isEarthquakeBarangaySupported(barangay)) {
+    return false;
+  }
+
+  const warmupKey = buildEarthquakeWarmupKey(barangay);
+  if (!warmupKey) {
+    return false;
+  }
+
+  if (completedEarthquakeWarmups.has(warmupKey)) {
+    return true;
+  }
+
+  if (pendingEarthquakeWarmupKey === warmupKey && pendingEarthquakeWarmup) {
+    return await pendingEarthquakeWarmup;
+  }
+
+  pendingEarthquakeWarmupKey = warmupKey;
+  pendingEarthquakeWarmup = prewarmEarthquakeContext(barangay, warmupKey);
+  return await pendingEarthquakeWarmup;
 }
 
 async function prewarmSimulationContext(start, end, warmupKey) {
@@ -950,6 +1081,7 @@ function clearBarangaySelections(options = {}) {
   const { keepResults = false, keepInfoText = false } = options;
 
   clearPendingSimulationWarmup();
+  clearPendingEarthquakeWarmup();
   resetEarthquakeState({ clearResults: !keepResults });
   simData = null;
   selectedRouteFocus = null;
@@ -2138,9 +2270,12 @@ async function showEvacuationSites() {
     syncLegendVisibility();
     if (!hasActiveEarthquakeResult) {
       document.getElementById('infoBox').innerHTML =
-        `<strong>${earthquakeEvacSites.length}</strong> evacuation site(s) are now visible. Click <strong>Run Earthquake Test</strong> to evaluate all candidate shelters.`;
+        `<strong>${earthquakeEvacSites.length}</strong> evacuation site(s) are now visible. The earthquake graph is warming in the background, then <strong>Run Earthquake Test</strong> will be faster.`;
     }
     fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
+    if (!hasActiveEarthquakeResult) {
+      scheduleEarthquakeWarmup(selectedBarangay);
+    }
   } catch (err) {
     console.error(err);
     alert('Failed to load evacuation sites: ' + err.message);
@@ -2233,6 +2368,16 @@ async function runSimulation() {
 
     let result;
     if (isEarthquakeMode()) {
+      if (loaderSub) {
+        loaderSub.textContent = 'Preparing earthquake graph and hazard cache…';
+      }
+
+      await ensureEarthquakeWarmup(selectedBarangay);
+
+      if (loaderSub) {
+        loaderSub.textContent = 'Evaluating earthquake routes to all evacuation sites…';
+      }
+
       result = await sendEarthquakeTestRequest({
         start,
         barangay: selectedBarangay,
@@ -2827,6 +2972,7 @@ function downloadCSV() {
 
 function resetAll() {
   clearPendingSimulationWarmup();
+  clearPendingEarthquakeWarmup();
   resetEarthquakeState({ clearResults: true });
   simData = null;
   selectedBarangay = null;
