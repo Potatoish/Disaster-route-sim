@@ -98,7 +98,8 @@ def _normalize_evacuation_sites(raw_sites):
             "lat": float(site["lat"]),
             "lng": float(site["lng"]),
             "address": site.get("address") or "Pinagbuhatan, Pasig City",
-            "capacity_label": site.get("capacity_label") or "Available",
+            "site_setup": site.get("site_setup") or "Open-area assembly point",
+            "surroundings": site.get("surroundings") or "No tall buildings nearby",
         })
     return sites
 

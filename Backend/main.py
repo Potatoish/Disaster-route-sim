@@ -4,7 +4,6 @@ from datetime import datetime
 from data import database
 from osm_routing import (
     simulate_osm_routes,
-    HAZARD_THRESHOLD,
     resolve_point_hazard,
     prepare_routing_graph,
     warm_static_caches,

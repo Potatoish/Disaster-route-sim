@@ -6,7 +6,7 @@
   <title>Ant Guided Navigation And Safety System</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -122,7 +122,7 @@
         <div class="workflow-card-body">
           <div class="earthquake-mode-flag" id="earthquakeModeFlag" hidden>Earthquake Routing Mode</div>
           <div class="workflow-route-flow">
-            <div class="field">
+            <div class="field route-field route-field-start" id="startField">
               <label id="startNodeLabel">START NODE - Safety Origin</label>
               <select id="startSel" disabled></select>
             </div>
@@ -131,7 +131,7 @@
               move to
             </div>
 
-            <div class="field" id="endField">
+            <div class="field route-field route-field-end" id="endField">
               <label>END NODE - Safety Destination</label>
               <select id="endSel" disabled></select>
             </div>
@@ -262,7 +262,7 @@
       <button class="dl-btn primary" onclick="downloadCSV()">Download CSV</button>
       <button class="dl-btn secondary" onclick="resetAll()">New Simulation</button>
       <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
-      <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
+      <div class="results-summary-txt" style="margin-left:auto;align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
     </div>
 
     <button class="results-toggle-fab" id="resultsToggleFab" onclick="showResultsPanelDrawer()">Show Results</button>

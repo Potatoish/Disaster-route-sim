@@ -61,19 +61,37 @@
 
   function buildEvacMarkerIcon(isHighlighted) {
     const fill = isHighlighted ? '#22c55e' : '#f59e0b';
-    const stroke = isHighlighted ? '#14532d' : '#7c2d12';
+    const stroke = isHighlighted ? '#14532d' : '#9a3412';
+    const accent = isHighlighted ? '#166534' : '#b45309';
     const label = isHighlighted ? 'BEST' : 'EVAC';
+    const halo = isHighlighted
+      ? `<circle cx="46" cy="38" r="33" fill="rgba(34,197,94,0.18)" />`
+      : '';
     const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="104" height="48" viewBox="0 0 104 48">
-        <path d="M52 4 L98 28 L78 28 L78 44 L26 44 L26 28 L6 28 Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
-        <text x="52" y="30" text-anchor="middle" font-family="DM Mono, monospace" font-size="12" font-weight="700" fill="#ffffff">${label}</text>
+      <svg xmlns="http://www.w3.org/2000/svg" width="92" height="110" viewBox="0 0 92 110">
+        <defs>
+          <filter id="evacShadow" x="-20%" y="-20%" width="140%" height="160%">
+            <feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="rgba(15,23,42,0.26)"/>
+          </filter>
+        </defs>
+        ${halo}
+        <g filter="url(#evacShadow)">
+          <path d="M46 8c-18.2 0-33 14.8-33 33 0 21.8 25.4 41.6 33 58 7.6-16.4 33-36.2 33-58 0-18.2-14.8-33-33-33z"
+            fill="${fill}" stroke="${stroke}" stroke-width="3"/>
+          <circle cx="46" cy="38" r="18" fill="#ffffff" opacity="0.98"/>
+          <path d="M34 40l12-10 12 10" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M38 40v11h16V40" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M46 45v6" fill="none" stroke="${accent}" stroke-width="3.2" stroke-linecap="round"/>
+          <rect x="18" y="63" width="56" height="18" rx="9" fill="#ffffff" opacity="0.98"/>
+          <text x="46" y="75.5" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="11" font-weight="800" fill="${accent}">${label}</text>
+        </g>
       </svg>
     `;
 
     return {
       url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-      scaledSize: new google.maps.Size(78, 36),
-      anchor: new google.maps.Point(39, 32),
+      scaledSize: new google.maps.Size(58, 70),
+      anchor: new google.maps.Point(29, 62),
     };
   }
 
@@ -83,7 +101,8 @@
         <div class="popup-title">${escapeHtml(site.name)}</div>
         <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Best evacuation site' : 'Evacuation site'}</span></div>
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pinagbuhatan')}</span></div>
-        <div class="popup-row"><span>Capacity</span><span>${escapeHtml(site.capacity_label || 'Available')}</span></div>
+        <div class="popup-row"><span>Site Setup</span><span>${escapeHtml(site.site_setup || 'Open-area assembly point')}</span></div>
+        <div class="popup-row"><span>Surroundings</span><span>${escapeHtml(site.surroundings || 'No tall buildings nearby')}</span></div>
       </div>`;
   }
 

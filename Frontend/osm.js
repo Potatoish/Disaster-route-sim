@@ -35,6 +35,51 @@ function normalizePathCoordinates(points) {
     });
 }
 
+function estimatePointGapMeters(pointA, pointB) {
+  if (!pointA || !pointB) return Number.POSITIVE_INFINITY;
+
+  const lat1 = Number(pointA.lat) * (Math.PI / 180);
+  const lat2 = Number(pointB.lat) * (Math.PI / 180);
+  const lng1 = Number(pointA.lng) * (Math.PI / 180);
+  const lng2 = Number(pointB.lng) * (Math.PI / 180);
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const a = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function buildRenderablePath(route, normalizedCoords) {
+  const renderPath = [...normalizedCoords];
+  const destinationPoint = {
+    lat: Number(route?.destination_lat),
+    lng: Number(route?.destination_lng),
+  };
+
+  if (!Number.isFinite(destinationPoint.lat) || !Number.isFinite(destinationPoint.lng)) {
+    return renderPath;
+  }
+
+  if (!renderPath.length) {
+    return [destinationPoint];
+  }
+
+  const lastPoint = renderPath[renderPath.length - 1];
+  const gapMeters = estimatePointGapMeters(lastPoint, destinationPoint);
+
+  if (gapMeters <= 3) {
+    renderPath[renderPath.length - 1] = destinationPoint;
+    return renderPath;
+  }
+
+  if (gapMeters <= 140) {
+    renderPath.push(destinationPoint);
+  }
+
+  return renderPath;
+}
+
 function getSegmentCount(route, normalizedPath, normalizedCoords) {
   if (typeof route.segments === 'number') {
     return route.segments;
@@ -55,11 +100,13 @@ function normalizeRoutes(routes) {
   return routes.map(route => {
     const normalizedPath = Array.isArray(route.path) ? dedupePath(route.path) : [];
     const normalizedCoords = normalizePathCoordinates(route.path_coordinates);
+    const renderPath = buildRenderablePath(route, normalizedCoords);
 
     return {
       ...route,
       path: normalizedPath,
       path_coordinates: normalizedCoords,
+      render_path: renderPath,
       distance: route.distance ?? 'N/A',
       max_hazard: route.max_hazard ?? 0,
       segments: getSegmentCount(route, normalizedPath, normalizedCoords),
@@ -71,6 +118,10 @@ function normalizeRoutes(routes) {
 }
 
 function getRoutePoints(route, getLocationByName) {
+  if (Array.isArray(route.render_path) && route.render_path.length) {
+    return route.render_path;
+  }
+
   if (route.path_coordinates.length) {
     return route.path_coordinates;
   }

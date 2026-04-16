@@ -32,6 +32,217 @@ const EARTHQUAKE_VIEW_META = {
 };
 const EARTHQUAKE_CLASSIFICATION_VIEWS = ['liquefaction', 'ground_shaking'];
 const EARTHQUAKE_MIN_FOCUS_ZOOM = 13;
+const HAZARD_THEME_VARIABLES = [
+  '--page-top',
+  '--page-bottom',
+  '--glow-a',
+  '--glow-b',
+  '--bg',
+  '--surface',
+  '--panel',
+  '--border',
+  '--border2',
+  '--accent',
+  '--accent2',
+  '--text',
+  '--muted',
+  '--dim',
+  '--ink-strong',
+  '--ink-soft',
+  '--map-ui-bg',
+  '--map-ui-bg-soft',
+  '--map-ui-border',
+  '--map-ui-text',
+  '--map-ui-muted',
+  '--map-ui-accent',
+  '--map-ui-chip',
+  '--accent-soft-bg',
+  '--accent-soft-border',
+  '--accent-soft-shadow',
+  '--hazard-selected-bg',
+  '--hazard-selected-border',
+  '--hazard-selected-text',
+  '--hazard-chip-bg',
+  '--hazard-chip-border',
+  '--hazard-chip-text',
+  '--hazard-panel-bg',
+  '--hazard-panel-border',
+  '--hazard-panel-strong',
+  '--hazard-button-start',
+  '--hazard-button-end',
+  '--hazard-button-shadow',
+  '--hazard-button-hover-shadow',
+];
+const HAZARD_THEME_PALETTES = {
+  flood: {
+    light: {
+      '--page-top': '#eef8ff',
+      '--page-bottom': '#d5ebfb',
+      '--glow-a': 'rgba(14, 165, 233, .16)',
+      '--glow-b': 'rgba(56, 189, 248, .12)',
+      '--bg': '#d7ebf8',
+      '--surface': '#ecf7ff',
+      '--panel': '#f8fcff',
+      '--border': '#b8d4e6',
+      '--border2': '#8cb5d2',
+      '--accent': '#0284c7',
+      '--accent2': '#38bdf8',
+      '--text': '#153247',
+      '--muted': '#5e778e',
+      '--dim': '#87a3bb',
+      '--ink-strong': '#14384f',
+      '--ink-soft': '#4e6980',
+      '--map-ui-bg': '#f4fbff',
+      '--map-ui-bg-soft': 'rgba(244, 251, 255, .92)',
+      '--map-ui-border': '#b8d4e6',
+      '--map-ui-text': '#123449',
+      '--map-ui-muted': '#607a90',
+      '--map-ui-accent': '#0284c7',
+      '--map-ui-chip': 'rgba(14, 165, 233, .08)',
+      '--accent-soft-bg': 'rgba(2, 132, 199, .06)',
+      '--accent-soft-border': 'rgba(2, 132, 199, .16)',
+      '--accent-soft-shadow': 'rgba(2, 132, 199, .08)',
+      '--hazard-selected-bg': 'rgba(56, 189, 248, .10)',
+      '--hazard-selected-border': '#38bdf8',
+      '--hazard-selected-text': '#0369a1',
+      '--hazard-chip-bg': 'rgba(2, 132, 199, .12)',
+      '--hazard-chip-border': 'rgba(2, 132, 199, .22)',
+      '--hazard-chip-text': '#075985',
+      '--hazard-panel-bg': 'rgba(2, 132, 199, .06)',
+      '--hazard-panel-border': 'rgba(2, 132, 199, .18)',
+      '--hazard-panel-strong': '#0369a1',
+      '--hazard-button-start': '#0ea5e9',
+      '--hazard-button-end': '#0284c7',
+      '--hazard-button-shadow': 'rgba(14, 165, 233, .22)',
+      '--hazard-button-hover-shadow': 'rgba(14, 165, 233, .30)',
+    },
+    dark: {
+      '--page-top': '#06111d',
+      '--page-bottom': '#04111a',
+      '--glow-a': 'rgba(14, 165, 233, .20)',
+      '--glow-b': 'rgba(56, 189, 248, .16)',
+      '--bg': '#071523',
+      '--surface': '#0b1c2b',
+      '--panel': '#102233',
+      '--border': '#1f4056',
+      '--border2': '#2f6987',
+      '--accent': '#38bdf8',
+      '--accent2': '#7dd3fc',
+      '--text': '#eaf6fe',
+      '--muted': '#94b1c6',
+      '--dim': '#62829d',
+      '--ink-strong': '#f0f8ff',
+      '--ink-soft': '#c8dceb',
+      '--map-ui-bg': '#0c1a28',
+      '--map-ui-bg-soft': 'rgba(12, 26, 40, .94)',
+      '--map-ui-border': '#23475f',
+      '--map-ui-text': '#e6f2fb',
+      '--map-ui-muted': '#9db7ca',
+      '--map-ui-accent': '#38bdf8',
+      '--map-ui-chip': 'rgba(56, 189, 248, .12)',
+      '--accent-soft-bg': 'rgba(56, 189, 248, .08)',
+      '--accent-soft-border': 'rgba(56, 189, 248, .22)',
+      '--accent-soft-shadow': 'rgba(56, 189, 248, .12)',
+      '--hazard-selected-bg': 'rgba(56, 189, 248, .12)',
+      '--hazard-selected-border': '#38bdf8',
+      '--hazard-selected-text': '#bae6fd',
+      '--hazard-chip-bg': 'rgba(56, 189, 248, .14)',
+      '--hazard-chip-border': 'rgba(56, 189, 248, .24)',
+      '--hazard-chip-text': '#bae6fd',
+      '--hazard-panel-bg': 'rgba(56, 189, 248, .08)',
+      '--hazard-panel-border': 'rgba(56, 189, 248, .20)',
+      '--hazard-panel-strong': '#bae6fd',
+      '--hazard-button-start': '#0ea5e9',
+      '--hazard-button-end': '#38bdf8',
+      '--hazard-button-shadow': 'rgba(56, 189, 248, .26)',
+      '--hazard-button-hover-shadow': 'rgba(56, 189, 248, .36)',
+    },
+  },
+  earthquake: {
+    light: {
+      '--page-top': '#fff7ef',
+      '--page-bottom': '#f0ddcf',
+      '--glow-a': 'rgba(194, 65, 12, .14)',
+      '--glow-b': 'rgba(245, 158, 11, .11)',
+      '--bg': '#f5e4d5',
+      '--surface': '#fff3e8',
+      '--panel': '#fffaf5',
+      '--border': '#dfc2a5',
+      '--border2': '#c79d79',
+      '--accent': '#b45309',
+      '--accent2': '#f59e0b',
+      '--text': '#35261c',
+      '--muted': '#786559',
+      '--dim': '#a28b7c',
+      '--ink-strong': '#3f2b1f',
+      '--ink-soft': '#6f5a4d',
+      '--map-ui-bg': '#fffaf5',
+      '--map-ui-bg-soft': 'rgba(255, 250, 245, .93)',
+      '--map-ui-border': '#dfc2a5',
+      '--map-ui-text': '#35271d',
+      '--map-ui-muted': '#7a675b',
+      '--map-ui-accent': '#b45309',
+      '--map-ui-chip': 'rgba(180, 83, 9, .08)',
+      '--accent-soft-bg': 'rgba(180, 83, 9, .06)',
+      '--accent-soft-border': 'rgba(180, 83, 9, .16)',
+      '--accent-soft-shadow': 'rgba(180, 83, 9, .08)',
+      '--hazard-selected-bg': 'rgba(245, 158, 11, .10)',
+      '--hazard-selected-border': '#f59e0b',
+      '--hazard-selected-text': '#9a3412',
+      '--hazard-chip-bg': 'rgba(180, 83, 9, .12)',
+      '--hazard-chip-border': 'rgba(180, 83, 9, .22)',
+      '--hazard-chip-text': '#9a3412',
+      '--hazard-panel-bg': 'rgba(180, 83, 9, .06)',
+      '--hazard-panel-border': 'rgba(180, 83, 9, .18)',
+      '--hazard-panel-strong': '#b45309',
+      '--hazard-button-start': '#f59e0b',
+      '--hazard-button-end': '#b45309',
+      '--hazard-button-shadow': 'rgba(180, 83, 9, .22)',
+      '--hazard-button-hover-shadow': 'rgba(180, 83, 9, .30)',
+    },
+    dark: {
+      '--page-top': '#1a0f0b',
+      '--page-bottom': '#120906',
+      '--glow-a': 'rgba(245, 158, 11, .20)',
+      '--glow-b': 'rgba(239, 68, 68, .13)',
+      '--bg': '#1a100b',
+      '--surface': '#24160f',
+      '--panel': '#2c1b13',
+      '--border': '#4c2d1a',
+      '--border2': '#7a4727',
+      '--accent': '#f59e0b',
+      '--accent2': '#fdba74',
+      '--text': '#f7ede2',
+      '--muted': '#d6b9a2',
+      '--dim': '#8f6d57',
+      '--ink-strong': '#fff4ea',
+      '--ink-soft': '#e5c7b0',
+      '--map-ui-bg': '#24160f',
+      '--map-ui-bg-soft': 'rgba(36, 22, 15, .94)',
+      '--map-ui-border': '#5a341d',
+      '--map-ui-text': '#f6eadf',
+      '--map-ui-muted': '#d0b39d',
+      '--map-ui-accent': '#f59e0b',
+      '--map-ui-chip': 'rgba(245, 158, 11, .12)',
+      '--accent-soft-bg': 'rgba(245, 158, 11, .08)',
+      '--accent-soft-border': 'rgba(245, 158, 11, .22)',
+      '--accent-soft-shadow': 'rgba(245, 158, 11, .12)',
+      '--hazard-selected-bg': 'rgba(245, 158, 11, .14)',
+      '--hazard-selected-border': '#f59e0b',
+      '--hazard-selected-text': '#fde68a',
+      '--hazard-chip-bg': 'rgba(245, 158, 11, .14)',
+      '--hazard-chip-border': 'rgba(245, 158, 11, .24)',
+      '--hazard-chip-text': '#fde68a',
+      '--hazard-panel-bg': 'rgba(245, 158, 11, .08)',
+      '--hazard-panel-border': 'rgba(245, 158, 11, .20)',
+      '--hazard-panel-strong': '#fde68a',
+      '--hazard-button-start': '#f59e0b',
+      '--hazard-button-end': '#fb923c',
+      '--hazard-button-shadow': 'rgba(245, 158, 11, .28)',
+      '--hazard-button-hover-shadow': 'rgba(245, 158, 11, .38)',
+    },
+  },
+};
 let mapThemeTransitionTimer = null;
 let pendingSimulationWarmup = null;
 let pendingSimulationWarmupKey = '';
@@ -47,6 +258,45 @@ let LOCATIONS_BY_BARANGAY = {};
 function getMapThemeStyles() {
   // Keep the Google map UI and base map on the default light style in all site themes.
   return null;
+}
+
+function applyHazardTheme() {
+  const modeKey = document.body.classList.contains('dark') ? 'dark' : 'light';
+  const hazardKey = String(selectedHazard || '').trim().toLowerCase();
+  const palette = HAZARD_THEME_PALETTES[hazardKey]?.[modeKey] || null;
+
+  HAZARD_THEME_VARIABLES.forEach(variableName => {
+    document.body.style.removeProperty(variableName);
+  });
+
+  if (!palette) {
+    document.body.dataset.hazardTheme = 'default';
+    return;
+  }
+
+  Object.entries(palette).forEach(([variableName, value]) => {
+    document.body.style.setProperty(variableName, value);
+  });
+  document.body.dataset.hazardTheme = hazardKey;
+}
+
+function getThemeColorValue(variableName, fallback) {
+  const bodyValue = getComputedStyle(document.body).getPropertyValue(variableName).trim();
+  if (bodyValue) return bodyValue;
+
+  const rootValue = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+  return rootValue || fallback;
+}
+
+function getBarangayBoundaryStrokeColor() {
+  return getThemeColorValue('--accent', '#1d4ed8');
+}
+
+function syncBarangayBoundaryTheme() {
+  const strokeColor = getBarangayBoundaryStrokeColor();
+  (mapLayers.boundaries || []).forEach(layer => {
+    layer.setOptions({ strokeColor });
+  });
 }
 
 function animateMapThemeTransition() {
@@ -74,6 +324,7 @@ function syncMapTheme(animated = false) {
     styles: getMapThemeStyles(),
     backgroundColor: '#ffffff',
   });
+  syncBarangayBoundaryTheme();
 
   if (animated) {
     animateMapThemeTransition();
@@ -112,6 +363,7 @@ function getStoredTheme() {
 
 function applyTheme(theme) {
   document.body.classList.toggle('dark', theme === 'dark');
+  applyHazardTheme();
   syncSiteThemeButton();
   syncMapTheme(true);
 
@@ -387,6 +639,15 @@ function formatHazardBreakdown(route) {
     : 'No hazard data';
 }
 
+function isEarthquakeRouteRecord(route) {
+  return route?.simulation_mode === 'earthquake' || route?.simulation_mode === 'earthquake_test';
+}
+
+function formatUnsafeSectionLabel(count) {
+  const numericCount = Number(count || 0);
+  return `${numericCount} unsafe section${numericCount === 1 ? '' : 's'}`;
+}
+
 function buildRouteStreetSummary(route) {
   const streetNames = Array.isArray(route?.street_path)
     ? route.street_path.map(name => String(name).trim()).filter(Boolean)
@@ -402,21 +663,83 @@ function buildRouteStreetSummary(route) {
 }
 
 function buildRouteReason(route) {
-  if (route?.reason) {
-    return route.reason;
+  const isEarthquakeRoute = isEarthquakeRouteRecord(route);
+  const unsafeSections = Number(route?.threshold_exceedance_count || 0);
+
+  if (route?.category === 'eliminated') {
+    const destinationNote = isEarthquakeRoute && route?.destination_name
+      ? ` to ${route.destination_name}`
+      : '';
+
+    return unsafeSections > 0
+      ? `Not recommended${destinationNote}. ${formatUnsafeSectionLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
+      : `Not recommended${destinationNote} because it crosses high-risk road sections.`;
   }
 
   if (route?.category === 'best') {
-    return 'Safest displayed route, ranked first by unsafe exposure, risk distance, and then total distance.';
+    return isEarthquakeRoute && route?.destination_name
+      ? `Best route to ${route.destination_name}. It keeps risk lowest before distance.`
+      : 'Best route. It keeps hazard exposure lowest before distance.';
   }
 
   if (route?.category === 'available') {
-    return 'Safe route, but ranked below the best route because it carries more exposure, longer distance, or both.';
+    return isEarthquakeRoute
+      ? 'Usable route, but another shelter route is safer or shorter.'
+      : 'Usable route, but another route is safer or shorter.';
   }
 
-  const unsafeSegments = Number(route?.threshold_exceedance_count || 0);
-  return route?.elimination_reason
-    || `Eliminated because it passes through ${unsafeSegments} high-risk segment${unsafeSegments === 1 ? '' : 's'}.`;
+  return route?.reason || 'Route explanation unavailable.';
+}
+
+function buildRouteEvidenceChips(route) {
+  if (isEarthquakeRouteRecord(route)) {
+    return [
+      route?.destination_name ? { label: 'Shelter', value: route.destination_name } : null,
+      { label: 'View', value: route?.lens_label || 'Overall' },
+      { label: 'Peak Risk', value: `${route?.max_hazard ?? 'N/A'}/5` },
+    ].filter(Boolean);
+  }
+
+  return [
+    { label: 'Flood Zones', value: route?.display_flood_classes || 'None' },
+    { label: 'Peak Risk', value: `${route?.max_hazard ?? 'N/A'}/5` },
+    { label: 'Road Sections', value: `${route?.display_segment_count ?? 0}` },
+  ];
+}
+
+function getFriendlyEarthquakeViewDescription(viewKey) {
+  switch (viewKey) {
+    case 'liquefaction':
+      return 'This view favors routes with lower liquefaction risk before distance.';
+    case 'ground_shaking':
+      return 'This view favors routes with lower ground-shaking risk before distance.';
+    case 'overall':
+    default:
+      return 'Overall checks both liquefaction and ground shaking first, then distance.';
+  }
+}
+
+function buildSummaryCallout(result, safeRoutes, bestRoute, earthquakeSummary) {
+  if (isEarthquakeSimulationResult(result)) {
+    if (!safeRoutes.length) {
+      return 'No safe route was found in this view. All shown options cross road sections above the safety limit.';
+    }
+
+    const base = getFriendlyEarthquakeViewDescription(
+      earthquakeSummary?.view_key || result.active_view || 'overall'
+    );
+    return earthquakeSummary?.selected_evacuation_site
+      ? `${base}<br><br>Recommended shelter: <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>`
+      : base;
+  }
+
+  if (!safeRoutes.length) {
+    return 'No safe flood route was found. All shown options cross road sections above the safety limit.';
+  }
+
+  return bestRoute
+    ? 'The top flood route has the lowest hazard exposure before distance.'
+    : 'Route summary unavailable.';
 }
 
 function decorateRouteForDisplay(route) {
@@ -1237,7 +1560,7 @@ function updateMapContextBadge() {
   const selectionRoute = isEarthquakeMode()
     ? start
       ? earthquakeEvacSitesVisible
-        ? `${shortNodeLabel(start)} -> ${earthquakeSummary?.selected_evacuation_site?.name || 'Candidate evacuation sites'}`
+        ? `${shortNodeLabel(start)} -> ${earthquakeSummary?.selected_evacuation_site?.name || (routes.length ? 'No safe evacuation site' : 'Candidate evacuation sites')}`
         : `${shortNodeLabel(start)} -> Reveal evacuation sites`
       : 'Select a start node'
     : start && end
@@ -1271,7 +1594,7 @@ function updateMapContextBadge() {
         </div>
         <div class="map-context-row">
           <span>Best</span>
-          <strong>${escapeHtml(bestRoute ? (bestRoute.destination_name || bestRoute.display_distance) : 'Run simulation')}</strong>
+          <strong>${escapeHtml(bestRoute ? (bestRoute.destination_name || bestRoute.display_distance) : (routes.length ? 'No safe route' : 'Run simulation'))}</strong>
         </div>
       </div>
       <div class="map-context-chips">
@@ -1523,7 +1846,7 @@ async function loadBarangayMapOnly(bgyName) {
       const outline = new google.maps.Polyline({
         path: normalizedPath,
         geodesic: false,
-        strokeColor: '#22c55e',
+        strokeColor: getBarangayBoundaryStrokeColor(),
         strokeOpacity: 0.95,
         strokeWeight: 5,
         clickable: false,
@@ -1548,27 +1871,32 @@ async function loadBarangayMapOnly(bgyName) {
 function drawNode(n, start, end) {
   const col = nodeColor(n.haz, n.name, start, end);
   const special = n.name === start || n.name === end;
+  const role = n.name === start ? 'start' : n.name === end ? 'end' : null;
 
   const marker = new google.maps.Marker({
     position: { lat: n.lat, lng: n.lng },
     map: gMap,
     title: n.name,
     zIndex: 10,
-    icon: {
-      path: google.maps.SymbolPath.CIRCLE,
-      scale: special ? 13 : 10,
-      fillColor: col,
-      fillOpacity: 0.95,
-      strokeColor: '#ffffff',
-      strokeWeight: 2.5,
-    },
-    label: {
-      text: shortNodeLabel(n.name),
-      color: '#ffffff',
-      fontSize: '10px',
-      fontFamily: 'DM Mono, monospace',
-      fontWeight: 'bold'
-    }
+    icon: special
+      ? makeRouteEndpointPinIcon(role)
+      : {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: col,
+          fillOpacity: 0.95,
+          strokeColor: '#ffffff',
+          strokeWeight: 2.5,
+        },
+    label: special
+      ? undefined
+      : {
+          text: shortNodeLabel(n.name),
+          color: '#ffffff',
+          fontSize: '10px',
+          fontFamily: 'Plus Jakarta Sans, Nunito, sans-serif',
+          fontWeight: '700'
+        }
   });
 
   const iw = new google.maps.InfoWindow({
@@ -1607,6 +1935,39 @@ function makeNodeBadgeIcon(text) {
   };
 }
 
+function makeRouteEndpointPinIcon(kind = 'start') {
+  const isStart = kind === 'start';
+  const fill = isStart ? '#a855f7' : '#06b6d4';
+  const stroke = isStart ? '#6b21a8' : '#155e75';
+  const halo = isStart ? 'rgba(168,85,247,0.18)' : 'rgba(6,182,212,0.18)';
+  const glyph = isStart ? 'S' : 'E';
+  const label = isStart ? 'START' : 'END';
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="88" height="104" viewBox="0 0 88 104">
+      <defs>
+        <filter id="nodePinShadow" x="-20%" y="-20%" width="140%" height="160%">
+          <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="rgba(15,23,42,0.24)"/>
+        </filter>
+      </defs>
+      <circle cx="44" cy="34" r="28" fill="${halo}" />
+      <g filter="url(#nodePinShadow)">
+        <path d="M44 8C27.4 8 14 21.4 14 38c0 20.7 22.7 36 30 50 7.3-14 30-29.3 30-50C74 21.4 60.6 8 44 8z"
+          fill="${fill}" stroke="${stroke}" stroke-width="3"/>
+        <circle cx="44" cy="37" r="17" fill="#ffffff" opacity="0.98"/>
+        <text x="44" y="43" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="16" font-weight="800" fill="${stroke}">${glyph}</text>
+        <rect x="18" y="73" width="52" height="16" rx="8" fill="#ffffff" opacity="0.98"/>
+        <text x="44" y="84" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="8.5" font-weight="800" fill="${stroke}">${label}</text>
+      </g>
+    </svg>
+  `;
+
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new google.maps.Size(48, 58),
+    anchor: new google.maps.Point(24, 51),
+  };
+}
+
 function drawSelectedPinsOnly(start, end, options = {}) {
   const { showStartBadge = false } = options;
   mapLayers.nodes.forEach(m => m.setMap(null));
@@ -1626,21 +1987,7 @@ function drawSelectedPinsOnly(start, end, options = {}) {
       map: gMap,
       title: n.name,
       zIndex: 20,
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 11,
-        fillColor: col,
-        fillOpacity: 0.95,
-        strokeColor: '#ffffff',
-        strokeWeight: 2,
-      },
-      label: {
-        text: n.name === start ? 'S' : 'E',
-        color: '#ffffff',
-        fontSize: '10px',
-        fontFamily: 'DM Mono, monospace',
-        fontWeight: 'bold'
-      }
+      icon: makeRouteEndpointPinIcon(n.name === start ? 'start' : 'end')
     });
 
     const iw = new google.maps.InfoWindow({
@@ -1866,6 +2213,7 @@ async function selectHazard(name, el) {
   resetEarthquakeState({ clearResults: true });
   el.classList.add('selected', name.toLowerCase());
   selectedHazard = name;
+  applyHazardTheme();
   workflowFocusSection = null;
   document.getElementById('endSel').value = '';
 
@@ -2483,11 +2831,10 @@ function showResultsPanel(result, options = {}) {
         ${statBox('Best Evac', earthquakeSummary?.selected_evacuation_site?.name || 'No safe route', earthquakeSummary?.selected_evacuation_site ? 'var(--accent)' : 'var(--red)')}
       </div>
       <div class="summary-callout">
-        ${escapeHtml(earthquakeSummary?.description || 'Earthquake lens summary unavailable.')}
-        ${earthquakeSummary?.selected_evacuation_site ? `<br><br>Selected evacuation site: <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>` : ''}
+        ${buildSummaryCallout(result, safe, best, earthquakeSummary)}
       </div>
-      <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">
-        Algorithm: ACO + supplemental route-cost search &nbsp;|&nbsp; Rule: Safety-first ranking &nbsp;|&nbsp; View: ${escapeHtml(result.active_view_label || 'Overall')}
+      <div class="summary-meta" style="margin-top:10px;">
+        Ranking rule: lower risk first, shorter distance second. &nbsp;|&nbsp; View: ${escapeHtml(result.active_view_label || 'Overall')}
       </div>`;
   } else {
     document.getElementById('tab-summary').innerHTML = `
@@ -2498,9 +2845,10 @@ function showResultsPanel(result, options = {}) {
         ${statBox('Best Dist.', best ? best.display_distance : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
       </div>
       <div class="summary-callout">
+        ${buildSummaryCallout(result, safe, best, null)}
       </div>
-      <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">
-        Algorithm: ACO + supplemental route-cost search &nbsp;|&nbsp; Rule: Safety-first ranking &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
+      <div class="summary-meta" style="margin-top:10px;">
+        Ranking rule: lower risk first, shorter distance second. &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
       </div>`;
   }
 
@@ -2888,15 +3236,9 @@ function buildTable(routes) {
       .join('');
 
     const rowTitle = `${r.display_route_summary}. ${r.display_reason}`;
-    const evidenceChips = Array.isArray(r.evidence_chips) && r.evidence_chips.length
-      ? r.evidence_chips
-          .map(chip => `<span class="evidence-chip">${escapeHtml(chip.label)} ${escapeHtml(chip.value)}</span>`)
-          .join('')
-      : `
-          <span class="evidence-chip">Segments ${escapeHtml(r.display_segment_count)}</span>
-          <span class="evidence-chip">Flood ${escapeHtml(r.display_flood_classes)}</span>
-          <span class="evidence-chip">Breakdown ${escapeHtml(r.display_hazard_breakdown)}</span>
-        `;
+    const evidenceChips = buildRouteEvidenceChips(r)
+      .map(chip => `<span class="evidence-chip">${escapeHtml(chip.label)}: ${escapeHtml(chip.value)}</span>`)
+      .join('');
 
     return `<tr class="route-row" tabindex="0" role="button" aria-label="${escapeHtml(rowTitle)}" data-route-no="${r.display_route_no ?? i + 1}" data-route-category="${r.category || ''}" onclick="toggleRouteFocus(${r.display_route_no ?? i + 1}, '${r.category || ''}', true)" onkeydown="handleRouteRowKey(event, ${r.display_route_no ?? i + 1}, '${r.category || ''}')">
       <td>${escapeHtml(r.display_route_no ?? i + 1)}</td>
@@ -2907,11 +3249,11 @@ function buildTable(routes) {
       </td>
       <td>
         <div class="metric-strong">${escapeHtml(r.display_distance)}</div>
-        <div class="metric-sub">Unsafe ${escapeHtml(r.display_unsafe_distance)}</div>
+        <div class="metric-sub">High-risk ${escapeHtml(r.display_unsafe_distance)}</div>
       </td>
       <td>
         <div class="hlevel">${pips}</div>
-        <div class="metric-sub">Max ${escapeHtml(r.max_hazard)}/5 · ${escapeHtml(r.display_unsafe_segment_count)} unsafe segs</div>
+        <div class="metric-sub">Peak ${escapeHtml(r.max_hazard)}/5 · ${escapeHtml(formatUnsafeSectionLabel(r.display_unsafe_segment_count))}</div>
       </td>
       <td>
         <div class="path-txt route-summary" title="${escapeHtml(r.display_route_summary)}">${escapeHtml(r.display_route_summary)}</div>
@@ -2986,6 +3328,7 @@ function resetAll() {
   simData = null;
   selectedBarangay = null;
   selectedHazard = null;
+  applyHazardTheme();
   selectedRouteFocus = null;
   activeResultsTab = 'safe';
   workflowFocusSection = null;

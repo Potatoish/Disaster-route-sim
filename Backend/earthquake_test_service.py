@@ -274,7 +274,6 @@ def _view_sort_key(route):
 
 def _build_view_summary(view_key, routes, evacuation_sites):
     best_route = next((route for route in routes if route["category"] != "eliminated"), None)
-    active_destination = best_route or (routes[0] if routes else None)
 
     return {
         "view_key": view_key,
@@ -285,12 +284,12 @@ def _build_view_summary(view_key, routes, evacuation_sites):
         "eliminated_route_count": sum(1 for route in routes if route["category"] == "eliminated"),
         "selected_evacuation_site": (
             {
-                "id": active_destination["destination_id"],
-                "name": active_destination["destination_name"],
-                "lat": active_destination["destination_lat"],
-                "lng": active_destination["destination_lng"],
+                "id": best_route["destination_id"],
+                "name": best_route["destination_name"],
+                "lat": best_route["destination_lat"],
+                "lng": best_route["destination_lng"],
             }
-            if active_destination
+            if best_route
             else None
         ),
         "best_distance": best_route["distance"] if best_route else None,
