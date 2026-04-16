@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "fault-main-trace",
+        "name": "Main Test Fault Trace",
+        "severity": 5,
+        "buffer_m": 70
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.0888, 14.5606],
+          [121.0946, 14.5537],
+          [121.1018, 14.5473],
+          [121.1068, 14.5409]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "fault-west-branch",
+        "name": "West Branch Trace",
+        "severity": 4,
+        "buffer_m": 60
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [121.0904, 14.5587],
+          [121.0937, 14.5516],
+          [121.0961, 14.5443]
+        ]
+      }
+    }
+  ]
+}
