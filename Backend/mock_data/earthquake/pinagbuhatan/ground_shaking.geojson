@@ -1,0 +1,65 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "shake-west-corridor",
+        "name": "West Corridor",
+        "severity": 4
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.0868, 14.5588],
+            [121.0945, 14.5588],
+            [121.0945, 14.5514],
+            [121.0868, 14.5514],
+            [121.0868, 14.5588]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "shake-central-pocket",
+        "name": "Central Pocket",
+        "severity": 3
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.0924, 14.5502],
+            [121.0989, 14.5502],
+            [121.0989, 14.5444],
+            [121.0924, 14.5444],
+            [121.0924, 14.5502]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "shake-north-east-arc",
+        "name": "North East Arc",
+        "severity": 5
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.0992, 14.5594],
+            [121.1059, 14.5594],
+            [121.1059, 14.5536],
+            [121.0992, 14.5536],
+            [121.0992, 14.5594]
+          ]
+        ]
+      }
+    }
+  ]
+}

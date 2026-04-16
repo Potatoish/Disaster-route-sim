@@ -598,11 +598,97 @@ body.dark .workflow-card.active {
   gap: 10px;
 }
 
+.earthquake-mode-flag {
+  margin-bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 158, 11, .25);
+  background: rgba(245, 158, 11, .12);
+  color: #9a3412;
+  font-family: 'DM Mono', monospace;
+  font-size: .54rem;
+  letter-spacing: .6px;
+}
+
+body.dark .earthquake-mode-flag {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, .24);
+  background: rgba(251, 191, 36, .10);
+}
+
 .workflow-route-divider {
   text-align: center;
   font-family: 'DM Mono', monospace;
   font-size: .65rem;
   color: var(--dim);
+}
+
+.earthquake-route-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed rgba(245, 158, 11, .28);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, .07);
+}
+
+body.dark .earthquake-route-panel {
+  border-color: rgba(251, 191, 36, .24);
+  background: rgba(251, 191, 36, .08);
+}
+
+.earthquake-route-copy {
+  color: var(--muted);
+  font-size: .68rem;
+  line-height: 1.55;
+}
+
+.earthquake-route-copy strong {
+  color: #b45309;
+  font-family: 'DM Mono', monospace;
+}
+
+body.dark .earthquake-route-copy strong {
+  color: #fbbf24;
+}
+
+.earthquake-evac-btn {
+  appearance: none;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .6px;
+  cursor: pointer;
+  transition: transform .2s, box-shadow .2s, opacity .2s;
+  box-shadow: 0 6px 20px rgba(217, 119, 6, .22);
+}
+
+.earthquake-evac-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(217, 119, 6, .28);
+}
+
+.earthquake-evac-btn:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.earthquake-route-status {
+  font-family: 'DM Mono', monospace;
+  font-size: .58rem;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .workflow-run-body .info-box {
@@ -706,6 +792,11 @@ body.dark .bgy-card.selected {
   background: rgba(59, 130, 246, .08);
 }
 
+.hazard-card.selected.earthquake {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, .10);
+}
+
 .hazard-card.disabled {
   opacity: .35;
   cursor: not-allowed;
@@ -730,6 +821,14 @@ body.dark .bgy-card.selected {
 
 body.dark .hazard-card.selected.flood .hazard-name {
   color: #60a5fa;
+}
+
+.hazard-card.selected.earthquake .hazard-name {
+  color: #b45309;
+}
+
+body.dark .hazard-card.selected.earthquake .hazard-name {
+  color: #fbbf24;
 }
 
 .hazard-sub {
@@ -1348,6 +1447,94 @@ body.dark .run-btn:hover {
   color: var(--text);
 }
 
+.earthquake-view-switcher {
+  margin-bottom: 10px;
+  padding: 10px 10px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, .18);
+  background: rgba(245, 158, 11, .06);
+}
+
+body.dark .earthquake-view-switcher {
+  border-color: rgba(251, 191, 36, .18);
+  background: rgba(251, 191, 36, .07);
+}
+
+.earthquake-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.earthquake-view-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 158, 11, .24);
+  background: rgba(245, 158, 11, .12);
+  color: #9a3412;
+  font-family: 'DM Mono', monospace;
+  font-size: .5rem;
+  letter-spacing: .8px;
+}
+
+body.dark .earthquake-view-badge {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, .22);
+  background: rgba(251, 191, 36, .1);
+}
+
+.earthquake-view-copy {
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: .56rem;
+  letter-spacing: .4px;
+  text-align: right;
+}
+
+.earthquake-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.eqtab {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,.65);
+  color: var(--muted);
+  font-family: 'DM Mono', monospace;
+  font-size: .57rem;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+body.dark .eqtab {
+  background: rgba(15, 23, 42, .36);
+}
+
+.eqtab:hover {
+  color: var(--text);
+  border-color: rgba(245, 158, 11, .34);
+}
+
+.eqtab.active {
+  color: #9a3412;
+  border-color: rgba(245, 158, 11, .34);
+  background: rgba(245, 158, 11, .16);
+}
+
+body.dark .eqtab.active {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, .34);
+  background: rgba(251, 191, 36, .12);
+}
+
 .rtab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -1358,6 +1545,8 @@ body.dark .run-btn:hover {
 .legend-toggle-btn:focus-visible,
 .card-action-btn:focus-visible,
 .run-btn:focus-visible,
+.earthquake-evac-btn:focus-visible,
+.eqtab:focus-visible,
 .reset-btn:focus-visible,
 .dl-btn:focus-visible,
 .results-toggle-fab:focus-visible,

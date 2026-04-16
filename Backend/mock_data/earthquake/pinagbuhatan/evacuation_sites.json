@@ -1,0 +1,36 @@
+{
+  "sites": [
+    {
+      "id": "pinag-east-center",
+      "name": "Pinagbuhatan East Center",
+      "lat": 14.5531,
+      "lng": 121.1014,
+      "address": "Eastern Pinagbuhatan test site",
+      "capacity_label": "FOR TEST ONLY"
+    },
+    {
+      "id": "napico-hub",
+      "name": "Napico Evac Hub",
+      "lat": 14.5464,
+      "lng": 121.0944,
+      "address": "Central Pinagbuhatan test site",
+      "capacity_label": "FOR TEST ONLY"
+    },
+    {
+      "id": "river-shelter",
+      "name": "River Shelter Point",
+      "lat": 14.5418,
+      "lng": 121.1032,
+      "address": "Southern riverside test site",
+      "capacity_label": "FOR TEST ONLY"
+    },
+    {
+      "id": "west-covered-court",
+      "name": "West Covered Court",
+      "lat": 14.5573,
+      "lng": 121.0892,
+      "address": "Western Pinagbuhatan test site",
+      "capacity_label": "FOR TEST ONLY"
+    }
+  ]
+}

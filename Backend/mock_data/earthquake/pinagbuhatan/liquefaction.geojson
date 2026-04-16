@@ -1,0 +1,65 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "liq-east-basin",
+        "name": "East Basin",
+        "severity": 5
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.0996, 14.5554],
+            [121.1062, 14.5554],
+            [121.1062, 14.5487],
+            [121.0996, 14.5487],
+            [121.0996, 14.5554]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "liq-river-band",
+        "name": "River Band",
+        "severity": 4
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.1024, 14.5468],
+            [121.1081, 14.5468],
+            [121.1081, 14.5386],
+            [121.1024, 14.5386],
+            [121.1024, 14.5468]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "liq-north-pocket",
+        "name": "North Pocket",
+        "severity": 3
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [121.0934, 14.5604],
+            [121.0988, 14.5604],
+            [121.0988, 14.5562],
+            [121.0934, 14.5562],
+            [121.0934, 14.5604]
+          ]
+        ]
+      }
+    }
+  ]
+}

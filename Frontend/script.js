@@ -1,4 +1,5 @@
 ﻿const BACKEND = 'http://127.0.0.1:5000';
+window.BACKEND_BASE = BACKEND;
 
 let gMap = null;
 let selectedBarangay = null;
@@ -8,6 +9,9 @@ let resultsCollapsed = false;
 let isBackendLive = false;
 let isLegendCollapsed = true;
 let activeResultsTab = 'safe';
+let activeEarthquakeView = 'overall';
+let earthquakeEvacSites = [];
+let earthquakeEvacSitesVisible = false;
 let mapLayers = { boundaries: [], edges: [], nodes: [], routes: [], routeGroups: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
@@ -17,6 +21,14 @@ const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
 const SIMULATION_WARMUP_TIMEOUT_MS = 45000;
 const SIMULATION_REQUEST_TIMEOUT_MS = 120000;
+const HAZARD_SELECTION_CLASSES = ['flood', 'earthquake'];
+const EARTHQUAKE_SUPPORTED_BARANGAY = 'Pinagbuhatan';
+const EARTHQUAKE_VIEW_META = {
+  overall: 'Overall earthquake lens',
+  liquefaction: 'Liquefaction lens',
+  ground_shaking: 'Ground shaking lens',
+  fault_line: 'Fault line lens',
+};
 let mapThemeTransitionTimer = null;
 let pendingSimulationWarmup = null;
 let pendingSimulationWarmupKey = '';
@@ -247,6 +259,28 @@ function clearLayers() {
   if (typeof window.clearRouteRowHighlight === 'function') {
     window.clearRouteRowHighlight();
   }
+
+  if (window.earthquakeTestUI?.reset) {
+    window.earthquakeTestUI.reset();
+  }
+}
+
+function clearRenderedRoutesOnly() {
+  clearRouteAnimation();
+  mapLayers.routes.forEach(layer => layer.setMap(null));
+  mapLayers.routes = [];
+  mapLayers.routeGroups = [];
+  selectedRouteFocus = null;
+
+  if (activeInfoWindowRef.current) {
+    activeInfoWindowRef.current.close();
+    activeInfoWindowRef.current = null;
+  }
+
+  clearSelectedRouteRow();
+  if (typeof window.clearRouteRowHighlight === 'function') {
+    window.clearRouteRowHighlight();
+  }
 }
 
 function normalizeLocation(loc) {
@@ -362,6 +396,10 @@ function buildRouteStreetSummary(route) {
 }
 
 function buildRouteReason(route) {
+  if (route?.reason) {
+    return route.reason;
+  }
+
   if (route?.category === 'best') {
     return 'Safest displayed route, ranked first by unsafe exposure, risk distance, and then total distance.';
   }
@@ -507,6 +545,20 @@ async function sendSimulationRequest(payload) {
   throw lastError || new Error('Simulation failed');
 }
 
+async function sendEarthquakeTestRequest(payload) {
+  const { response, data } = await postJsonWithTimeout(
+    '/earthquake-test/simulate',
+    payload,
+    SIMULATION_REQUEST_TIMEOUT_MS
+  );
+
+  if (!response.ok || data?.error === true) {
+    throw new Error(data?.message || 'Earthquake test failed');
+  }
+
+  return data;
+}
+
 async function prewarmSimulationContext(start, end, warmupKey) {
   try {
     const { response, data } = await postJsonWithTimeout(
@@ -602,6 +654,262 @@ function setRouteSelectorsEnabled(enabled) {
   });
 }
 
+function isEarthquakeMode(hazard = selectedHazard) {
+  return hazard === 'Earthquake';
+}
+
+function isEarthquakeBarangaySupported(barangay = selectedBarangay) {
+  return barangay === EARTHQUAKE_SUPPORTED_BARANGAY;
+}
+
+function isEarthquakeSimulationResult(result = simData) {
+  return result?.simulation_mode === 'earthquake_test';
+}
+
+function getActiveEarthquakeViewData(result = simData) {
+  if (!isEarthquakeSimulationResult(result)) {
+    return null;
+  }
+
+  return result?.views?.[activeEarthquakeView] || result?.views?.overall || null;
+}
+
+function setRunButtonLabel() {
+  const runBtn = document.getElementById('runBtn');
+  if (!runBtn) return;
+
+  runBtn.textContent = isEarthquakeMode() ? 'Run Earthquake Test' : 'Run Simulation';
+}
+
+function resetEarthquakeState(options = {}) {
+  const { clearResults = true, clearCache = false } = options;
+
+  earthquakeEvacSites = [];
+  earthquakeEvacSitesVisible = false;
+  activeEarthquakeView = 'overall';
+
+  if (clearResults && isEarthquakeSimulationResult(simData)) {
+    simData = null;
+  }
+
+  if (window.earthquakeTestUI?.reset) {
+    window.earthquakeTestUI.reset({ clearCache });
+  }
+}
+
+function getCurrentStartValue() {
+  return document.getElementById('startSel')?.value || '';
+}
+
+function getCurrentEndValue() {
+  return document.getElementById('endSel')?.value || '';
+}
+
+function canRunFloodSimulation(start = getCurrentStartValue(), end = getCurrentEndValue()) {
+  return !!(selectedHazard === 'Flood' && start && end && start !== end);
+}
+
+function canRunEarthquakeSimulation(start = getCurrentStartValue()) {
+  return !!(
+    isEarthquakeMode()
+    && isEarthquakeBarangaySupported()
+    && start
+    && earthquakeEvacSitesVisible
+  );
+}
+
+function canRunCurrentSimulation(start = getCurrentStartValue(), end = getCurrentEndValue()) {
+  return isEarthquakeMode()
+    ? canRunEarthquakeSimulation(start)
+    : canRunFloodSimulation(start, end);
+}
+
+function syncEarthquakeRouteUi() {
+  const routeCardLabel = document.getElementById('routeCardLabel');
+  const startNodeLabel = document.getElementById('startNodeLabel');
+  const endField = document.getElementById('endField');
+  const routeDivider = document.getElementById('routeDivider');
+  const earthquakeModeFlag = document.getElementById('earthquakeModeFlag');
+  const earthquakeRoutePanel = document.getElementById('earthquakeRoutePanel');
+  const earthquakeRouteCopy = document.getElementById('earthquakeRouteCopy');
+  const showEvacBtn = document.getElementById('showEvacBtn');
+  const evacStatusTxt = document.getElementById('evacStatusTxt');
+  const startSel = document.getElementById('startSel');
+  const endSel = document.getElementById('endSel');
+  const unsupportedEarthquake = isEarthquakeMode() && !isEarthquakeBarangaySupported();
+  const hasStart = !!getCurrentStartValue();
+
+  if (routeCardLabel) {
+    routeCardLabel.textContent = isEarthquakeMode() ? 'Start / Evacuation' : 'Start / End';
+  }
+
+  if (startNodeLabel) {
+    startNodeLabel.textContent = isEarthquakeMode()
+      ? 'START NODE - Earthquake Origin'
+      : 'START NODE - Safety Origin';
+  }
+
+  if (endField) {
+    endField.hidden = isEarthquakeMode();
+  }
+
+  if (routeDivider) {
+    routeDivider.hidden = isEarthquakeMode();
+  }
+
+  if (earthquakeModeFlag) {
+    earthquakeModeFlag.hidden = !isEarthquakeMode();
+  }
+
+  if (earthquakeRoutePanel) {
+    earthquakeRoutePanel.hidden = !isEarthquakeMode();
+  }
+
+  if (showEvacBtn) {
+    showEvacBtn.disabled = !(
+      isEarthquakeMode()
+      && isEarthquakeBarangaySupported()
+      && hasStart
+    );
+  }
+
+  if (evacStatusTxt) {
+    if (!isEarthquakeMode()) {
+      evacStatusTxt.textContent = 'Evacuation sites are hidden.';
+    } else if (unsupportedEarthquake) {
+      evacStatusTxt.textContent = 'Earthquake test mode is currently available only for Pinagbuhatan.';
+    } else if (!earthquakeEvacSitesVisible) {
+      evacStatusTxt.textContent = hasStart
+        ? 'Evacuation sites are hidden.'
+        : 'Select a start node before revealing evacuation sites.';
+    } else {
+      evacStatusTxt.textContent = `${earthquakeEvacSites.length} evacuation site(s) loaded on the map.`;
+    }
+  }
+
+  if (earthquakeRouteCopy) {
+    earthquakeRouteCopy.innerHTML = unsupportedEarthquake
+      ? 'Earthquake test mode is limited to <strong>Pinagbuhatan</strong> for now.'
+      : 'Click <strong>Show Evacuation Sites</strong> to reveal the fixed test shelters for Pinagbuhatan.';
+  }
+
+  if (startSel && isEarthquakeMode()) {
+    startSel.disabled = unsupportedEarthquake;
+  }
+
+  if (endSel && isEarthquakeMode()) {
+    endSel.disabled = true;
+  }
+
+  setRunButtonLabel();
+}
+
+function syncEarthquakeViewSelector() {
+  const selector = document.getElementById('earthquakeViewSelector');
+  const copy = document.getElementById('earthquakeViewCopy');
+  const isVisible = isEarthquakeSimulationResult(simData);
+
+  if (selector) {
+    selector.hidden = !isVisible;
+  }
+
+  if (copy) {
+    copy.textContent = isVisible
+      ? (EARTHQUAKE_VIEW_META[activeEarthquakeView] || 'Earthquake result lens')
+      : 'Earthquake result lens';
+  }
+
+  Object.keys(EARTHQUAKE_VIEW_META).forEach(viewKey => {
+    const button = document.getElementById(`eqView-${viewKey}`);
+    if (!button) return;
+
+    button.classList.toggle('active', activeEarthquakeView === viewKey);
+    button.setAttribute('aria-pressed', String(activeEarthquakeView === viewKey));
+  });
+}
+
+function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
+  if (!isEarthquakeSimulationResult(simData)) {
+    return null;
+  }
+
+  const nextView = simData.views?.[viewKey] || simData.views?.overall || null;
+  if (!nextView) {
+    return null;
+  }
+
+  activeEarthquakeView = viewKey;
+  simData.active_view = viewKey;
+  simData.routes = Array.isArray(nextView.routes) ? nextView.routes : [];
+  simData.active_summary = nextView.summary || null;
+  simData.active_view_label = nextView.view_label || 'Overall';
+  return nextView;
+}
+
+function setFloodLegendContent() {
+  const body = document.getElementById('mapLegendBody');
+  if (!body) return;
+
+  body.innerHTML = `
+    <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
+    <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
+    <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated</span></div>
+    <div style="margin-top:5px;">
+      <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
+      <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
+      <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe (&le;2)</span></div>
+      <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate (3)</span></div>
+      <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger (>3)</span></div>
+    </div>`;
+}
+
+function clearEarthquakeSimulationOutput() {
+  if (!isEarthquakeSimulationResult(simData)) {
+    return;
+  }
+
+  clearRenderedRoutesOnly();
+  simData = null;
+  activeEarthquakeView = 'overall';
+  activeResultsTab = 'safe';
+
+  if (window.earthquakeTestUI?.renderHazardLayers) {
+    window.earthquakeTestUI.renderHazardLayers({
+      map: gMap,
+      hazardLayers: null,
+      activeView: activeEarthquakeView,
+    });
+  }
+
+  if (earthquakeEvacSitesVisible && earthquakeEvacSites.length && gMap) {
+    window.earthquakeTestUI?.drawEvacuationSites({
+      map: gMap,
+      sites: earthquakeEvacSites,
+    });
+    window.earthquakeTestUI?.syncLegend(activeEarthquakeView, {
+      showRouteKeys: false,
+      showHazardLayers: false,
+    });
+    document.getElementById('mapLegend').style.display = 'block';
+    syncLegendVisibility();
+  } else {
+    document.getElementById('mapLegend').style.display = 'none';
+    syncLegendVisibility();
+  }
+
+  document.getElementById('resultsSummaryTxt').textContent = '';
+  document.getElementById('resetBtn').classList.remove('show');
+  document.getElementById('statusTxt').textContent = 'Ready';
+  syncResultsVisibility(false);
+  syncEarthquakeViewSelector();
+}
+
+function clearHazardSelectionState() {
+  document.querySelectorAll('.hazard-card:not(.disabled)').forEach(card => {
+    card.classList.remove('selected', ...HAZARD_SELECTION_CLASSES);
+  });
+}
+
 function populateBarangayNodeSelectors(name) {
   const nodes = getBarangayLocations(name);
   const locs = nodes.map(n => n.name);
@@ -642,6 +950,7 @@ function clearBarangaySelections(options = {}) {
   const { keepResults = false, keepInfoText = false } = options;
 
   clearPendingSimulationWarmup();
+  resetEarthquakeState({ clearResults: !keepResults });
   simData = null;
   selectedRouteFocus = null;
   clearLayers();
@@ -677,6 +986,8 @@ function clearBarangaySelections(options = {}) {
       : `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will find the <strong>safest route</strong> using the <strong>lexicographic safety-first rule</strong>.`;
   }
 
+  syncEarthquakeViewSelector();
+  syncEarthquakeRouteUi();
   updateMapContextBadge();
 }
 
@@ -734,6 +1045,27 @@ function describeHazardSource(node) {
   return 'Unavailable';
 }
 
+function buildNodePopupRows(node, start, end) {
+  if (isEarthquakeMode()) {
+    return [
+      ['Role', node.name === start ? 'Start point' : 'Node'],
+      ['Mode', 'Earthquake Test'],
+      ['Barangay', node.barangay || selectedBarangay || 'N/A'],
+    ];
+  }
+
+  const col = nodeColor(node.haz, node.name, start, end);
+  const hazardText = node.haz == null ? 'Unavailable' : `${node.haz} / 5`;
+  const hazardSourceText = describeHazardSource(node);
+
+  return [
+    ['Role', node.name === start ? 'Start point' : node.name === end ? 'End point' : 'Node'],
+    ['Node Flood Hazard', hazardText, col],
+    ['Hazard Source', hazardSourceText],
+    ['Barangay', node.barangay || selectedBarangay || 'N/A'],
+  ];
+}
+
 function shortNodeLabel(name) {
   if (name == null) return 'N/A';
   return String(name).split(',')[0].split(' ').slice(0, 2).join(' ');
@@ -765,7 +1097,16 @@ function updateMapContextBadge() {
   const bestRoute = routes.find(route => route.category === 'best') || null;
   const safeCount = routes.filter(route => route.category !== 'eliminated').length;
   const eliminatedCount = routes.filter(route => route.category === 'eliminated').length;
-  const selectionRoute = start && end
+  const earthquakeSummary = isEarthquakeSimulationResult(simData)
+    ? simData?.active_summary || getActiveEarthquakeViewData(simData)?.summary || null
+    : null;
+  const selectionRoute = isEarthquakeMode()
+    ? start
+      ? earthquakeEvacSitesVisible
+        ? `${shortNodeLabel(start)} -> ${earthquakeSummary?.selected_evacuation_site?.name || 'Candidate evacuation sites'}`
+        : `${shortNodeLabel(start)} -> Reveal evacuation sites`
+      : 'Select a start node'
+    : start && end
     ? `${shortNodeLabel(start)} -> ${shortNodeLabel(end)}`
     : start
     ? `${shortNodeLabel(start)} -> Choose destination`
@@ -796,7 +1137,7 @@ function updateMapContextBadge() {
         </div>
         <div class="map-context-row">
           <span>Best</span>
-          <strong>${escapeHtml(bestRoute ? bestRoute.display_distance : 'Run simulation')}</strong>
+          <strong>${escapeHtml(bestRoute ? (bestRoute.destination_name || bestRoute.display_distance) : 'Run simulation')}</strong>
         </div>
       </div>
       <div class="map-context-chips">
@@ -879,6 +1220,134 @@ function fitMapToRoute(route, padding = 34) {
     }
   });
 
+  return true;
+}
+
+function extendBoundsWithLngLat(bounds, lng, lat) {
+  const numericLng = Number(lng);
+  const numericLat = Number(lat);
+
+  if (!Number.isFinite(numericLng) || !Number.isFinite(numericLat)) {
+    return false;
+  }
+
+  bounds.extend({ lat: numericLat, lng: numericLng });
+  return true;
+}
+
+function extendBoundsWithGeoJsonGeometry(bounds, geometry) {
+  if (!geometry || !geometry.type) {
+    return false;
+  }
+
+  const { type, coordinates } = geometry;
+  let hasPoints = false;
+
+  const extendCoordinate = coordinate => {
+    if (!Array.isArray(coordinate) || coordinate.length < 2) {
+      return;
+    }
+
+    hasPoints = extendBoundsWithLngLat(bounds, coordinate[0], coordinate[1]) || hasPoints;
+  };
+
+  if (type === 'Point') {
+    extendCoordinate(coordinates);
+    return hasPoints;
+  }
+
+  if (type === 'LineString' || type === 'MultiPoint') {
+    (coordinates || []).forEach(extendCoordinate);
+    return hasPoints;
+  }
+
+  if (type === 'Polygon' || type === 'MultiLineString') {
+    (coordinates || []).forEach(path => {
+      (path || []).forEach(extendCoordinate);
+    });
+    return hasPoints;
+  }
+
+  if (type === 'MultiPolygon') {
+    (coordinates || []).forEach(polygon => {
+      (polygon || []).forEach(path => {
+        (path || []).forEach(extendCoordinate);
+      });
+    });
+  }
+
+  return hasPoints;
+}
+
+function getDisplayedEarthquakeRoute() {
+  if (!isEarthquakeSimulationResult(simData) || !Array.isArray(simData.routes)) {
+    return null;
+  }
+
+  return simData.routes.find(route => route.category === 'best') || simData.routes[0] || null;
+}
+
+function getEarthquakeHazardCollectionsForView(viewKey = activeEarthquakeView) {
+  if (!isEarthquakeSimulationResult(simData)) {
+    return [];
+  }
+
+  if (viewKey === 'liquefaction' || viewKey === 'ground_shaking' || viewKey === 'fault_line') {
+    const collection = simData.hazard_layers?.[viewKey];
+    return collection ? [collection] : [];
+  }
+
+  return [];
+}
+
+function fitEarthquakeMapScope(options = {}) {
+  const { includeHazards = false } = options;
+
+  if (!gMap || !selectedBarangay || !isEarthquakeMode()) {
+    return false;
+  }
+
+  const bounds = new google.maps.LatLngBounds();
+  let hasPoints = false;
+
+  const startNode = getLocationByName(getCurrentStartValue());
+  if (startNode) {
+    hasPoints = extendBoundsWithLngLat(bounds, startNode.lng, startNode.lat) || hasPoints;
+  }
+
+  if (includeHazards && isEarthquakeSimulationResult(simData)) {
+    const activeRoute = getDisplayedEarthquakeRoute();
+    const routePoints = Array.isArray(activeRoute?.render_path) && activeRoute.render_path.length
+      ? activeRoute.render_path
+      : Array.isArray(activeRoute?.path_coordinates)
+      ? activeRoute.path_coordinates
+      : [];
+
+    routePoints.forEach(point => {
+      hasPoints = extendBoundsWithLngLat(bounds, point?.lng, point?.lat) || hasPoints;
+    });
+
+    const activeDestination = simData?.active_summary?.selected_evacuation_site;
+    if (activeDestination) {
+      hasPoints = extendBoundsWithLngLat(bounds, activeDestination.lng, activeDestination.lat) || hasPoints;
+    }
+
+    getEarthquakeHazardCollectionsForView(activeEarthquakeView).forEach(collection => {
+      (collection?.features || []).forEach(feature => {
+        hasPoints = extendBoundsWithGeoJsonGeometry(bounds, feature?.geometry) || hasPoints;
+      });
+    });
+  } else {
+    earthquakeEvacSites.forEach(site => {
+      hasPoints = extendBoundsWithLngLat(bounds, site.lng, site.lat) || hasPoints;
+    });
+  }
+
+  if (!hasPoints) {
+    return false;
+  }
+
+  gMap.fitBounds(bounds, 52);
   return true;
 }
 
@@ -965,16 +1434,8 @@ function drawNode(n, start, end) {
     }
   });
 
-  const hazardText = n.haz == null ? 'Unavailable' : `${n.haz} / 5`;
-  const hazardSourceText = describeHazardSource(n);
-
   const iw = new google.maps.InfoWindow({
-    content: infoPopup(n.name, [
-      ['Role', n.name === start ? 'Start point' : n.name === end ? 'End point' : 'Node'],
-      ['Node Flood Hazard', hazardText, col],
-      ['Hazard Source', hazardSourceText],
-      ['Barangay', n.barangay || selectedBarangay || 'N/A'],
-    ])
+    content: infoPopup(n.name, buildNodePopupRows(n, start, end))
   });
 
   marker.addListener('click', () => {
@@ -1022,8 +1483,6 @@ function drawSelectedPinsOnly(start, end, options = {}) {
     if (n.name !== start && n.name !== end) return;
 
     const col = nodeColor(n.haz, n.name, start, end);
-    const hazardText = n.haz == null ? 'Unavailable' : `${n.haz} / 5`;
-    const hazardSourceText = describeHazardSource(n);
 
     const marker = new google.maps.Marker({
       position: { lat: n.lat, lng: n.lng },
@@ -1048,12 +1507,7 @@ function drawSelectedPinsOnly(start, end, options = {}) {
     });
 
     const iw = new google.maps.InfoWindow({
-      content: infoPopup(n.name, [
-        ['Role', n.name === start ? 'Start point' : 'End point'],
-        ['Node Flood Hazard', hazardText, col],
-        ['Hazard Source', hazardSourceText],
-        ['Barangay', n.barangay || selectedBarangay || 'N/A'],
-      ])
+      content: infoPopup(n.name, buildNodePopupRows(n, start, end))
     });
 
     marker.addListener('click', () => {
@@ -1104,9 +1558,16 @@ async function selectBarangay(name) {
     await loadBarangayMapOnly(name);
     document.getElementById('emptyMap').style.display = 'none';
     advanceStep(selectedHazard ? 3 : 2);
-    document.getElementById('infoBox').innerHTML = selectedHazard
-      ? `<strong>Brgy. ${name}</strong> reset. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`
-      : `<strong>Brgy. ${name}</strong> loaded. Choose a <strong>disaster type</strong> to continue.`;
+    if (isEarthquakeMode()) {
+      document.getElementById('infoBox').innerHTML = isEarthquakeBarangaySupported(name)
+        ? `<strong>Brgy. ${name}</strong> reset. Choose your <strong>start node</strong>, then reveal the <strong>evacuation sites</strong>.`
+        : `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
+    } else {
+      document.getElementById('infoBox').innerHTML = selectedHazard
+        ? `<strong>Brgy. ${name}</strong> reset. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`
+        : `<strong>Brgy. ${name}</strong> loaded. Choose a <strong>disaster type</strong> to continue.`;
+    }
+    syncEarthquakeRouteUi();
     updateMapContextBadge();
     return;
   }
@@ -1158,80 +1619,150 @@ async function selectBarangay(name) {
   await loadBarangayMapOnly(name);
   advanceStep(selectedHazard ? 3 : 2);
 
-  document.getElementById('infoBox').innerHTML =
-    `<strong>Brgy. ${name}</strong> selected — map loaded. Choose your <strong>start</strong> and <strong>end</strong> nodes below.`;
   if (!selectedHazard) {
     document.getElementById('infoBox').innerHTML =
       `<strong>Brgy. ${name}</strong> selected — map loaded. Choose a <strong>disaster type</strong> first.`;
+  } else if (isEarthquakeMode()) {
+    document.getElementById('infoBox').innerHTML = isEarthquakeBarangaySupported(name)
+      ? `<strong>Brgy. ${name}</strong> selected — earthquake test mode loaded. Choose a <strong>start node</strong> first.`
+      : `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
   } else {
     document.getElementById('infoBox').innerHTML =
       `<strong>Brgy. ${name}</strong> selected — map loaded. Choose your <strong>start</strong> and <strong>end</strong> nodes below.`;
   }
 
+  syncEarthquakeRouteUi();
   updateMapContextBadge();
 }
 
 function onNodeChange() {
   const start = document.getElementById('startSel').value;
   const end = document.getElementById('endSel').value;
-  const canRun = !!(selectedHazard && start && end && start !== end);
+  const canRun = canRunCurrentSimulation(start, end);
   workflowFocusSection = null;
 
-  if (canRun) advanceStep(5);
-  else if (!selectedHazard) advanceStep(2);
-  else if (start || end) advanceStep(4);
-  else advanceStep(3);
+  if (isEarthquakeMode()) {
+    if (isEarthquakeSimulationResult(simData) && simData.start !== start) {
+      clearEarthquakeSimulationOutput();
+    }
+
+    if (!selectedHazard) advanceStep(2);
+    else if (!isEarthquakeBarangaySupported()) advanceStep(2);
+    else if (!start) advanceStep(3);
+    else if (!earthquakeEvacSitesVisible) advanceStep(4);
+    else advanceStep(5);
+  } else {
+    if (canRun) advanceStep(5);
+    else if (!selectedHazard) advanceStep(2);
+    else if (start || end) advanceStep(4);
+    else advanceStep(3);
+  }
 
   document.getElementById('runBtn').disabled = !canRun;
 
-  if (start || end) drawSelectedPinsOnly(start, end);
-  if (canRun) scheduleSimulationWarmup(start, end);
-  else clearPendingSimulationWarmup();
+  if (isEarthquakeMode()) {
+    if (start) {
+      drawSelectedPinsOnly(start, null);
+      if (earthquakeEvacSitesVisible && earthquakeEvacSites.length) {
+        window.earthquakeTestUI?.drawEvacuationSites({
+          map: gMap,
+          sites: earthquakeEvacSites,
+          highlightedSiteId: simData?.active_summary?.selected_evacuation_site?.id || null,
+        });
+      }
+    } else {
+      drawSelectedPinsOnly('', null);
+      if (earthquakeEvacSitesVisible && earthquakeEvacSites.length) {
+        window.earthquakeTestUI?.drawEvacuationSites({
+          map: gMap,
+          sites: earthquakeEvacSites,
+        });
+      }
+    }
+    clearPendingSimulationWarmup();
 
-  if (canRun) {
-    document.getElementById('infoBox').innerHTML =
-      `Ready! <strong>${start}</strong> ? <strong>${end}</strong>. Click <strong>Run Simulation</strong>.`;
-  } else if (!selectedHazard) {
-    document.getElementById('infoBox').innerHTML =
-      `Choose a <strong>disaster type</strong> to enable route testing.`;
-  } else if (start && !end) {
-    document.getElementById('infoBox').innerHTML =
-      `Start selected. Now choose an <strong>end node</strong>.`;
-  } else if (!start && end) {
-    document.getElementById('infoBox').innerHTML =
-      `End selected. Now choose a <strong>start node</strong>.`;
+    if (!isEarthquakeBarangaySupported()) {
+      document.getElementById('infoBox').innerHTML =
+        `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`;
+    } else if (canRun) {
+      document.getElementById('infoBox').innerHTML =
+        `Ready! <strong>${start}</strong> will be evaluated against all visible <strong>evacuation sites</strong>. Click <strong>Run Earthquake Test</strong>.`;
+    } else if (!start) {
+      document.getElementById('infoBox').innerHTML =
+        `Choose a <strong>start node</strong> to begin the earthquake test flow.`;
+    } else if (!earthquakeEvacSitesVisible) {
+      document.getElementById('infoBox').innerHTML =
+        `Start selected. Now click <strong>Show Evacuation Sites</strong> to load the fixed test shelters.`;
+    } else {
+      document.getElementById('infoBox').innerHTML =
+        `Evacuation sites are loaded. Click <strong>Run Earthquake Test</strong> when you are ready.`;
+    }
   } else {
-    document.getElementById('infoBox').innerHTML =
-      `Choose a <strong>start node</strong> from the dropdown.`;
+    if (start || end) drawSelectedPinsOnly(start, end);
+    if (canRun) scheduleSimulationWarmup(start, end);
+    else clearPendingSimulationWarmup();
+
+    if (canRun) {
+      document.getElementById('infoBox').innerHTML =
+        `Ready! <strong>${start}</strong> to <strong>${end}</strong>. Click <strong>Run Simulation</strong>.`;
+    } else if (!selectedHazard) {
+      document.getElementById('infoBox').innerHTML =
+        `Choose a <strong>disaster type</strong> to enable route testing.`;
+    } else if (start && !end) {
+      document.getElementById('infoBox').innerHTML =
+        `Start selected. Now choose an <strong>end node</strong>.`;
+    } else if (!start && end) {
+      document.getElementById('infoBox').innerHTML =
+        `End selected. Now choose a <strong>start node</strong>.`;
+    } else {
+      document.getElementById('infoBox').innerHTML =
+        `Choose a <strong>start node</strong> from the dropdown.`;
+    }
   }
 
+  syncEarthquakeRouteUi();
   updateMapContextBadge();
 }
 
-function selectHazard(name, el) {
-  document.querySelectorAll('.hazard-card:not(.disabled)').forEach(c => c.classList.remove('selected', 'flood'));
+async function selectHazard(name, el) {
+  clearHazardSelectionState();
+  resetEarthquakeState({ clearResults: true });
   el.classList.add('selected', name.toLowerCase());
   selectedHazard = name;
   workflowFocusSection = null;
+  document.getElementById('endSel').value = '';
 
   if (!selectedBarangay) {
     document.getElementById('infoBox').innerHTML =
-      `Disaster type <strong>${name}</strong> selected. Now choose a <strong>barangay</strong>.`;
+      isEarthquakeMode(name)
+        ? `<strong>${name}</strong> selected. Choose <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong> to start the earthquake test flow.`
+        : `Disaster type <strong>${name}</strong> selected. Now choose a <strong>barangay</strong>.`;
     advanceStep(1);
+    syncEarthquakeRouteUi();
     updateMapContextBadge();
     return;
   }
 
+  clearBarangaySelections({ keepResults: false, keepInfoText: true });
+  document.getElementById('emptyMap').style.display = 'none';
+  await loadBarangayMapOnly(selectedBarangay);
+
   populateBarangayNodeSelectors(selectedBarangay);
-  setRouteSelectorsEnabled(true);
+  setRouteSelectorsEnabled(!isEarthquakeMode());
+  document.getElementById('startSel').disabled = isEarthquakeMode() && !isEarthquakeBarangaySupported();
   advanceStep(3);
   onNodeChange();
 
   if (!document.getElementById('startSel').value && !document.getElementById('endSel').value) {
     document.getElementById('infoBox').innerHTML =
-      `<strong>${name}</strong> selected for <strong>Brgy. ${selectedBarangay}</strong>. Choose your <strong>start</strong> and <strong>end</strong> nodes.`;
+      isEarthquakeMode(name)
+        ? isEarthquakeBarangaySupported()
+          ? `<strong>${name}</strong> selected for <strong>Brgy. ${selectedBarangay}</strong>. Choose a <strong>start node</strong> first.`
+          : `<strong>${name}</strong> is limited to <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong> for now.`
+        : `<strong>${name}</strong> selected for <strong>Brgy. ${selectedBarangay}</strong>. Choose your <strong>start</strong> and <strong>end</strong> nodes.`;
   }
 
+  syncEarthquakeRouteUi();
   updateMapContextBadge();
 }
 
@@ -1243,8 +1774,12 @@ function getCompletedSteps() {
     1: !!selectedBarangay,
     2: !!selectedHazard,
     3: !!start,
-    4: !!end && start !== end,
-    5: !!(selectedHazard && start && end && start !== end),
+    4: isEarthquakeMode()
+      ? earthquakeEvacSitesVisible
+      : !!end && start !== end,
+    5: isEarthquakeMode()
+      ? canRunEarthquakeSimulation(start)
+      : canRunFloodSimulation(start, end),
   };
 }
 
@@ -1254,6 +1789,13 @@ function getMaxReachableStep() {
 
   const start = document.getElementById('startSel')?.value || '';
   const end = document.getElementById('endSel')?.value || '';
+
+  if (isEarthquakeMode()) {
+    if (!isEarthquakeBarangaySupported()) return 2;
+    if (!start) return 3;
+    if (!earthquakeEvacSitesVisible) return 4;
+    return 5;
+  }
 
   if (!start) return 3;
   if (!end || start === end) return 4;
@@ -1271,7 +1813,11 @@ function isWorkflowSectionAvailable(sectionKey) {
   if (sectionKey === 'barangay') return true;
   if (sectionKey === 'hazard') return !!selectedBarangay;
   if (sectionKey === 'route') return !!(selectedBarangay && selectedHazard);
-  if (sectionKey === 'run') return !!(selectedBarangay && selectedHazard);
+  if (sectionKey === 'run') {
+    return isEarthquakeMode()
+      ? !!(selectedBarangay && selectedHazard && isEarthquakeBarangaySupported())
+      : !!(selectedBarangay && selectedHazard);
+  }
   return false;
 }
 
@@ -1301,8 +1847,18 @@ function getStepValue(step) {
   if (step === 1) return selectedBarangay || 'Choose a barangay';
   if (step === 2) return selectedHazard || (selectedBarangay ? 'Choose disaster type' : 'Waiting for barangay');
   if (step === 3) return start || (selectedHazard ? 'Choose start node' : 'Waiting for disaster type');
-  if (step === 4) return end || (start ? 'Choose end node' : 'Waiting for start node');
-  if (step === 5) return selectedHazard && start && end && start !== end ? 'Ready to simulate' : 'Complete selections first';
+  if (step === 4) {
+    if (isEarthquakeMode()) {
+      return earthquakeEvacSitesVisible ? 'Evacuation sites shown' : (start ? 'Show evacuation sites' : 'Waiting for start node');
+    }
+    return end || (start ? 'Choose end node' : 'Waiting for start node');
+  }
+  if (step === 5) {
+    if (isEarthquakeMode()) {
+      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Complete earthquake setup';
+    }
+    return selectedHazard && start && end && start !== end ? 'Ready to simulate' : 'Complete selections first';
+  }
   return '';
 }
 
@@ -1333,7 +1889,7 @@ function syncWorkflowStatus(activeStep, completed, maxReachableStep) {
 function syncWorkflowSummaries() {
   const start = document.getElementById('startSel')?.value || '';
   const end = document.getElementById('endSel')?.value || '';
-  const canRun = !!(selectedHazard && start && end && start !== end);
+  const canRun = canRunCurrentSimulation(start, end);
 
   const summaryBarangay = document.getElementById('summaryBarangay');
   const summaryHazard = document.getElementById('summaryHazard');
@@ -1348,24 +1904,42 @@ function syncWorkflowSummaries() {
 
   if (summaryHazard) {
     summaryHazard.textContent = selectedHazard
-      ? `${selectedHazard} is the active hazard scenario.`
+      ? isEarthquakeMode()
+        ? isEarthquakeBarangaySupported()
+          ? `${selectedHazard} test mode is active for ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
+          : `${selectedHazard} test mode is currently limited to ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
+        : `${selectedHazard} is the active hazard scenario.`
       : selectedBarangay
       ? 'Choose which hazard scenario to test.'
       : 'Choose a barangay first to unlock hazard testing.';
   }
 
   if (summaryRoute) {
-    summaryRoute.textContent = start && end
-      ? `${shortNodeLabel(start)} → ${shortNodeLabel(end)}`
-      : start
-      ? `Start node: ${shortNodeLabel(start)}. Choose an end node next.`
-      : selectedHazard
-      ? 'Pick the origin and destination nodes inside the selected barangay.'
-      : 'Choose a barangay and disaster type before selecting nodes.';
+    if (isEarthquakeMode()) {
+      summaryRoute.textContent = !isEarthquakeBarangaySupported()
+        ? `Earthquake routing is currently locked outside ${EARTHQUAKE_SUPPORTED_BARANGAY}.`
+        : earthquakeEvacSitesVisible && start
+        ? `Start node: ${shortNodeLabel(start)}. ${earthquakeEvacSites.length} evacuation site(s) are visible.`
+        : start
+        ? `Start node: ${shortNodeLabel(start)}. Reveal the evacuation sites next.`
+        : 'Pick the earthquake start node inside the selected barangay.';
+    } else {
+      summaryRoute.textContent = start && end
+        ? `${shortNodeLabel(start)} → ${shortNodeLabel(end)}`
+        : start
+        ? `Start node: ${shortNodeLabel(start)}. Choose an end node next.`
+        : selectedHazard
+        ? 'Pick the origin and destination nodes inside the selected barangay.'
+        : 'Choose a barangay and disaster type before selecting nodes.';
+    }
   }
 
   if (summaryRun) {
-    summaryRun.textContent = canRun
+    summaryRun.textContent = isEarthquakeMode()
+      ? canRun
+        ? 'Earthquake test setup is complete. The ACO run will compare all visible evacuation sites.'
+        : 'Review the earthquake test setup, then launch the simulation.'
+      : canRun
       ? 'Everything is ready. Launch the simulation when you are set.'
       : 'Review the setup, then launch the simulation.';
   }
@@ -1389,8 +1963,12 @@ function syncWorkflowSummaries() {
   }
 
   if (resetRouteBtn) {
-    resetRouteBtn.disabled = !(start || end);
+    resetRouteBtn.disabled = isEarthquakeMode()
+      ? !(start || earthquakeEvacSitesVisible)
+      : !(start || end);
   }
+
+  syncEarthquakeRouteUi();
 }
 
 function syncWorkflowCards(activeStep, completed) {
@@ -1437,10 +2015,13 @@ async function resetRouteSelection() {
 
   if (selectedHazard) {
     populateBarangayNodeSelectors(selectedBarangay);
-    setRouteSelectorsEnabled(true);
-    document.getElementById('infoBox').innerHTML =
-      `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`;
-    advanceStep(3);
+    setRouteSelectorsEnabled(!isEarthquakeMode());
+    document.getElementById('infoBox').innerHTML = isEarthquakeMode()
+      ? isEarthquakeBarangaySupported()
+        ? `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start node</strong>, then reveal the <strong>evacuation sites</strong> again.`
+        : `<strong>Earthquake Test Mode</strong> is currently available only for <strong>Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}</strong>.`
+      : `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`;
+    advanceStep(isEarthquakeMode() && !isEarthquakeBarangaySupported() ? 2 : 3);
   } else {
     document.getElementById('infoBox').innerHTML =
       `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose a <strong>disaster type</strong> first.`;
@@ -1449,6 +2030,7 @@ async function resetRouteSelection() {
 
   document.getElementById('emptyMap').style.display = 'none';
   await loadBarangayMapOnly(selectedBarangay);
+  syncEarthquakeRouteUi();
 }
 
 function initStepNavigation() {}
@@ -1473,12 +2055,139 @@ function advanceStep(n) {
   syncWorkflowCards(activeStep, completed);
 }
 
+async function renderActiveSimulationRoutes() {
+  if (!simData || !Array.isArray(simData.routes)) return;
+
+  await renderRoutesOnRoads({
+    routes: simData.routes,
+    gMap,
+    mapLayers,
+    getLocationByName,
+    drawSelectedPinsOnly,
+    start: getCurrentStartValue(),
+    end: isEarthquakeSimulationResult(simData) ? '' : getCurrentEndValue(),
+    infoPopup,
+    shortNodeLabel,
+    activeInfoWindowRef,
+    afterDrawPins: isEarthquakeSimulationResult(simData)
+      ? () => {
+          window.earthquakeTestUI?.drawEvacuationSites({
+            map: gMap,
+            sites: earthquakeEvacSites,
+            highlightedSiteId: simData?.active_summary?.selected_evacuation_site?.id || null,
+          });
+        }
+      : null,
+  });
+
+  if (isEarthquakeSimulationResult(simData)) {
+    window.earthquakeTestUI?.renderHazardLayers({
+      map: gMap,
+      hazardLayers: simData.hazard_layers,
+      activeView: activeEarthquakeView,
+    });
+    window.earthquakeTestUI?.syncLegend(activeEarthquakeView, {
+      showRouteKeys: true,
+      showHazardLayers: true,
+    });
+    fitEarthquakeMapScope({ includeHazards: true });
+  } else {
+    setFloodLegendContent();
+  }
+}
+
+async function showEvacuationSites() {
+  if (!isEarthquakeMode()) return;
+  if (!isEarthquakeBarangaySupported()) {
+    alert(`Earthquake test mode is currently available only for Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}.`);
+    return;
+  }
+
+  const start = getCurrentStartValue();
+  if (!start) {
+    alert('Select a start node first.');
+    return;
+  }
+
+  const statusTxt = document.getElementById('statusTxt');
+  const previousStatus = statusTxt?.textContent || 'Ready';
+  const hasActiveEarthquakeResult = isEarthquakeSimulationResult(simData) && simData.start === start;
+
+  try {
+    if (statusTxt) {
+      statusTxt.textContent = 'Loading evacuation sites...';
+    }
+
+    earthquakeEvacSites = await window.earthquakeTestUI.loadEvacuationSites(selectedBarangay);
+    earthquakeEvacSitesVisible = true;
+
+    window.earthquakeTestUI?.drawEvacuationSites({
+      map: gMap,
+      sites: earthquakeEvacSites,
+      highlightedSiteId: hasActiveEarthquakeResult
+        ? simData?.active_summary?.selected_evacuation_site?.id || null
+        : null,
+    });
+    window.earthquakeTestUI?.syncLegend(
+      activeEarthquakeView,
+      hasActiveEarthquakeResult
+        ? { showRouteKeys: true, showHazardLayers: true }
+        : { showRouteKeys: false, showHazardLayers: false }
+    );
+    document.getElementById('mapLegend').style.display = 'block';
+    syncLegendVisibility();
+    if (!hasActiveEarthquakeResult) {
+      document.getElementById('infoBox').innerHTML =
+        `<strong>${earthquakeEvacSites.length}</strong> evacuation site(s) are now visible. Click <strong>Run Earthquake Test</strong> to evaluate all candidate shelters.`;
+    }
+    fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
+  } catch (err) {
+    console.error(err);
+    alert('Failed to load evacuation sites: ' + err.message);
+  } finally {
+    if (statusTxt) {
+      statusTxt.textContent = previousStatus;
+    }
+  }
+
+  if (hasActiveEarthquakeResult) {
+    syncEarthquakeRouteUi();
+    updateMapContextBadge();
+    return;
+  }
+
+  onNodeChange();
+}
+
+async function switchEarthquakeView(viewKey) {
+  if (!isEarthquakeSimulationResult(simData)) return;
+
+  const nextView = hydrateActiveEarthquakeView(viewKey);
+  if (!nextView) return;
+
+  syncEarthquakeViewSelector();
+  await renderActiveSimulationRoutes();
+  showResultsPanel(simData, { preserveActiveTab: true });
+  selectedRouteFocus = null;
+  clearSelectedRouteRow();
+  window.clearRouteRowHighlight();
+  applyRouteFocusState(null);
+  updateMapContextBadge();
+}
+
 async function runSimulation() {
   const start = document.getElementById('startSel').value;
   const end = document.getElementById('endSel').value;
   workflowFocusSection = null;
 
-  if (!start || !end || start === end) return;
+  if (isEarthquakeMode()) {
+    if (!canRunEarthquakeSimulation(start)) {
+      return;
+    }
+  } else {
+    if (!start || !end || start === end) return;
+  }
+
   if (!isBackendLive) {
     alert('Backend is not connected.');
     return;
@@ -1517,39 +2226,56 @@ async function runSimulation() {
 
   try {
     if (loaderSub) {
-      loaderSub.textContent = 'Preparing cached routing data…';
+      loaderSub.textContent = isEarthquakeMode()
+        ? 'Preparing Pinagbuhatan earthquake test data…'
+        : 'Preparing cached routing data…';
     }
 
-    await ensureSimulationWarmup(start, end);
+    let result;
+    if (isEarthquakeMode()) {
+      result = await sendEarthquakeTestRequest({
+        start,
+        barangay: selectedBarangay,
+        hazard: selectedHazard,
+      });
 
-    const result = await sendSimulationRequest({
-      start,
-      end,
-      hazard: selectedHazard,
-      barangay: selectedBarangay,
-    });
+      result.hazard_layers = result.hazard_layers || {};
+      Object.entries(result.views || {}).forEach(([viewKey, viewData]) => {
+        const routes = decorateRoutesForDisplay(
+          normalizeRoutes(viewData.routes || [])
+        );
+        viewData.routes = routes;
+      });
 
-    const routes = decorateRoutesForDisplay(
-      normalizeRoutes(result.routes || [])
-    );
-    result.routes = routes;
-    simData = result;
-    clearBoundaryLayers();
+      simData = result;
+      hydrateActiveEarthquakeView(result.active_view || 'overall');
+      earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
+      earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
+      syncEarthquakeViewSelector();
+      clearBoundaryLayers();
+      await renderActiveSimulationRoutes();
+      showResultsPanel(simData);
+    } else {
+      await ensureSimulationWarmup(start, end);
 
-    await renderRoutesOnRoads({
-      routes,
-      gMap,
-      mapLayers,
-      getLocationByName,
-      drawSelectedPinsOnly,
-      start,
-      end,
-      infoPopup,
-      shortNodeLabel,
-      activeInfoWindowRef
-    });
+      result = await sendSimulationRequest({
+        start,
+        end,
+        hazard: selectedHazard,
+        barangay: selectedBarangay,
+      });
 
-    showResultsPanel(result);
+      const routes = decorateRoutesForDisplay(
+        normalizeRoutes(result.routes || [])
+      );
+      result.routes = routes;
+      simData = result;
+      clearBoundaryLayers();
+      setFloodLegendContent();
+      await renderActiveSimulationRoutes();
+      showResultsPanel(result);
+    }
+
     selectedRouteFocus = null;
     clearSelectedRouteRow();
     window.clearRouteRowHighlight();
@@ -1569,7 +2295,8 @@ async function runSimulation() {
   }
 }
 
-function showResultsPanel(result) {
+function showResultsPanel(result, options = {}) {
+  const { preserveActiveTab = false } = options;
   const resultsPanel = document.getElementById('resultsPanel');
   resultsPanel.classList.remove('fade-in');
   syncResultsVisibility(true);
@@ -1580,6 +2307,11 @@ function showResultsPanel(result) {
   const safe = routes.filter(r => r.category !== 'eliminated');
   const elim = routes.filter(r => r.category === 'eliminated');
   const best = routes.find(r => r.category === 'best');
+  const earthquakeSummary = isEarthquakeSimulationResult(result)
+    ? result.active_summary || getActiveEarthquakeViewData(result)?.summary || null
+    : null;
+
+  syncEarthquakeViewSelector();
 
   document.getElementById('tab-safe').innerHTML = safe.length
     ? buildTable(safe)
@@ -1588,24 +2320,51 @@ function showResultsPanel(result) {
     ? buildTable(elim)
     : `<div class="tab-section-empty">No eliminated routes for this run.</div>`;
 
-  document.getElementById('tab-summary').innerHTML = `
-    <div class="results-stats-grid">
-      ${statBox('Displayed', routes.length, 'var(--ink-strong)')}
-      ${statBox('Safe Routes', safe.length, 'var(--green)')}
-      ${statBox('Eliminated', elim.length, 'var(--red)')}
-      ${statBox('Best Dist.', best ? best.display_distance : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
-    </div>
-    <div class="summary-callout">
-    </div>
-    <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">
-      Algorithm: ACO + supplemental route-cost search &nbsp;|&nbsp; Rule: Safety-first ranking &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
-    </div>`;
+  if (isEarthquakeSimulationResult(result)) {
+    document.getElementById('tab-summary').innerHTML = `
+      <div class="results-stats-grid">
+        ${statBox('Displayed', routes.length, 'var(--ink-strong)')}
+        ${statBox('Safe Routes', safe.length, 'var(--green)')}
+        ${statBox('Eliminated', elim.length, 'var(--red)')}
+        ${statBox('Best Evac', earthquakeSummary?.selected_evacuation_site?.name || 'No safe route', earthquakeSummary?.selected_evacuation_site ? 'var(--accent)' : 'var(--red)')}
+      </div>
+      <div class="summary-callout">
+        FOR TEST ONLY. ${escapeHtml(earthquakeSummary?.description || 'Earthquake lens summary unavailable.')}
+        ${earthquakeSummary?.selected_evacuation_site ? `<br><br>Selected evacuation site: <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>` : ''}
+      </div>
+      <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">
+        Algorithm: ACO + supplemental route-cost search &nbsp;|&nbsp; Rule: Safety-first ranking &nbsp;|&nbsp; View: ${escapeHtml(result.active_view_label || 'Overall')}
+      </div>`;
+  } else {
+    document.getElementById('tab-summary').innerHTML = `
+      <div class="results-stats-grid">
+        ${statBox('Displayed', routes.length, 'var(--ink-strong)')}
+        ${statBox('Safe Routes', safe.length, 'var(--green)')}
+        ${statBox('Eliminated', elim.length, 'var(--red)')}
+        ${statBox('Best Dist.', best ? best.display_distance : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
+      </div>
+      <div class="summary-callout">
+      </div>
+      <div style="margin-top:10px;font-family:'DM Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6;">
+        Algorithm: ACO + supplemental route-cost search &nbsp;|&nbsp; Rule: Safety-first ranking &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
+      </div>`;
+  }
 
   document.getElementById('resultsSummaryTxt').textContent = routes.length
-    ? `Showing ${routes.length} routes · ${elim.length} eliminated`
+    ? isEarthquakeSimulationResult(result)
+      ? `${result.active_view_label || 'Overall'} · ${routes.length} routes · ${elim.length} eliminated`
+      : `Showing ${routes.length} routes · ${elim.length} eliminated`
     : 'No route results to display';
 
-  setActiveTab(safe.length ? 'safe' : elim.length ? 'elim' : 'summary');
+  const nextTab = preserveActiveTab
+    ? activeResultsTab
+    : safe.length
+    ? 'safe'
+    : elim.length
+    ? 'elim'
+    : 'summary';
+
+  setActiveTab(nextTab);
 }
 
 function getDefaultRouteVisual(group) {
@@ -1975,6 +2734,15 @@ function buildTable(routes) {
       .join('');
 
     const rowTitle = `${r.display_route_summary}. ${r.display_reason}`;
+    const evidenceChips = Array.isArray(r.evidence_chips) && r.evidence_chips.length
+      ? r.evidence_chips
+          .map(chip => `<span class="evidence-chip">${escapeHtml(chip.label)} ${escapeHtml(chip.value)}</span>`)
+          .join('')
+      : `
+          <span class="evidence-chip">Segments ${escapeHtml(r.display_segment_count)}</span>
+          <span class="evidence-chip">Flood ${escapeHtml(r.display_flood_classes)}</span>
+          <span class="evidence-chip">Breakdown ${escapeHtml(r.display_hazard_breakdown)}</span>
+        `;
 
     return `<tr class="route-row" tabindex="0" role="button" aria-label="${escapeHtml(rowTitle)}" data-route-no="${r.display_route_no ?? i + 1}" data-route-category="${r.category || ''}" onclick="toggleRouteFocus(${r.display_route_no ?? i + 1}, '${r.category || ''}', true)" onkeydown="handleRouteRowKey(event, ${r.display_route_no ?? i + 1}, '${r.category || ''}')">
       <td>${escapeHtml(r.display_route_no ?? i + 1)}</td>
@@ -1995,9 +2763,7 @@ function buildTable(routes) {
         <div class="path-txt route-summary" title="${escapeHtml(r.display_route_summary)}">${escapeHtml(r.display_route_summary)}</div>
         <div class="route-reason-text">${escapeHtml(r.display_reason)}</div>
         <div class="route-evidence-row">
-          <span class="evidence-chip">Segments ${escapeHtml(r.display_segment_count)}</span>
-          <span class="evidence-chip">Flood ${escapeHtml(r.display_flood_classes)}</span>
-          <span class="evidence-chip">Breakdown ${escapeHtml(r.display_hazard_breakdown)}</span>
+          ${evidenceChips}
         </div>
         <div class="path-txt path-street" title="${escapeHtml(r.display_street_preview)}">${escapeHtml(r.display_street_preview)}</div>
       </td>
@@ -2026,7 +2792,7 @@ function downloadCSV() {
     'Max Hazard',
     'Unsafe Segments',
     'Segments',
-    'Flood Classes',
+    ...(isEarthquakeSimulationResult(simData) ? ['View', 'Destination', 'Hazards'] : ['Flood Classes']),
     'Hazard Breakdown',
     'Route Summary',
     'Reason',
@@ -2042,7 +2808,9 @@ function downloadCSV() {
       r.max_hazard ?? '',
       r.display_unsafe_segment_count ?? '',
       r.display_segment_count ?? '',
-      r.display_flood_classes || '',
+      ...(isEarthquakeSimulationResult(simData)
+        ? [simData.active_view_label || 'Overall', r.destination_name || '', r.hazard_signature || '']
+        : [r.display_flood_classes || '']),
       r.display_hazard_breakdown || '',
       r.display_route_summary || '',
       r.display_reason || '',
@@ -2059,6 +2827,7 @@ function downloadCSV() {
 
 function resetAll() {
   clearPendingSimulationWarmup();
+  resetEarthquakeState({ clearResults: true });
   simData = null;
   selectedBarangay = null;
   selectedHazard = null;
@@ -2086,7 +2855,10 @@ function resetAll() {
     `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will find the <strong>safest route</strong> using the <strong>lexicographic safety-first rule</strong>.`;
 
   document.querySelectorAll('.bgy-card').forEach(c => c.classList.remove('selected'));
-  document.querySelectorAll('.hazard-card:not(.disabled)').forEach(c => c.classList.remove('selected', 'flood'));
+  clearHazardSelectionState();
+  setFloodLegendContent();
+  syncEarthquakeViewSelector();
+  syncEarthquakeRouteUi();
   advanceStep(1);
 
   if (gMap) {
@@ -2198,6 +2970,11 @@ window.clearRouteAnimation = clearRouteAnimation;
 window.goToStep = goToStep;
 window.initMap = initMap;
 window.handleRouteRowKey = handleRouteRowKey;
+window.showEvacuationSites = showEvacuationSites;
+window.switchEarthquakeView = switchEarthquakeView;
 
 initStepNavigation();
+setFloodLegendContent();
+syncEarthquakeRouteUi();
+syncEarthquakeViewSelector();
 advanceStep(1);

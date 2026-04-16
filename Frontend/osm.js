@@ -222,6 +222,11 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
       window.focusRouteSelection(route.display_route_no, route.category, true);
     }
 
+    const extraRows = Array.isArray(route.info_rows) ? route.info_rows : [];
+    const contextLabel = route.simulation_mode === 'earthquake_test' ? 'Hazards' : 'Flood Vars';
+    const contextValue = route.simulation_mode === 'earthquake_test'
+      ? (route.hazard_signature || 'N/A')
+      : (route.display_flood_classes || 'None');
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
     activeInfoWindowRef.current = new google.maps.InfoWindow({
       content: infoPopup(label, [
@@ -232,8 +237,9 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
         ['Unsafe Segs', route.display_unsafe_segment_count ?? 0],
         ['Summary', route.display_route_summary || route.path_label || 'N/A'],
         ['Why', route.display_reason || 'No explanation available'],
-        ['Flood Vars', route.display_flood_classes || 'None'],
+        [contextLabel, contextValue],
         ['Streets', formatStreetPath(route.street_path)],
+        ...extraRows,
       ]),
       position: ev.latLng,
     });
@@ -251,7 +257,8 @@ async function renderRoutesOnRoads({
   end,
   infoPopup,
   shortNodeLabel,
-  activeInfoWindowRef
+  activeInfoWindowRef,
+  afterDrawPins = null,
 }) {
   if (typeof window.clearRouteAnimation === 'function') {
     window.clearRouteAnimation();
@@ -304,6 +311,9 @@ async function renderRoutesOnRoads({
   }
 
   drawSelectedPinsOnly(start, end, { showStartBadge: true });
+  if (typeof afterDrawPins === 'function') {
+    afterDrawPins();
+  }
   document.getElementById('mapLegend').style.display = 'block';
   if (typeof window.syncLegendVisibility === 'function') {
     window.syncLegendVisibility();
