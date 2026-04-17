@@ -206,9 +206,9 @@
           <div style="margin-top:5px;">
             <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
             <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe (&le;2)</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate (3)</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger (>3)</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger</span></div>
           </div>
         </div>
       </div>
@@ -234,7 +234,25 @@
       <div class="loader-progress"><div class="loader-bar" id="loaderBar"></div></div>
     </div>
 
+    <div class="warning-modal-backdrop" id="fallbackWarningModal" hidden>
+      <div class="warning-modal" role="dialog" aria-modal="true" aria-labelledby="fallbackWarningTitle" aria-describedby="fallbackWarningCopy">
+        <div class="warning-modal-kicker">Route Warning</div>
+        <div class="warning-modal-title" id="fallbackWarningTitle">No safe route found</div>
+        <div class="warning-modal-copy" id="fallbackWarningCopy">
+          These options still exceed the safety threshold. You can still review the least-risk routes below.
+        </div>
+        <div class="warning-modal-actions">
+          <label class="warning-modal-check">
+            <input class="warning-modal-checkbox" id="fallbackWarningSuppress" type="checkbox">
+            <span>Don't show me again</span>
+          </label>
+          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Okay</button>
+        </div>
+      </div>
+    </div>
+
     <div class="results-panel" id="resultsPanel">
+      <div class="results-resize-handle" id="resultsResizeHandle" onmousedown="startResultsResize(event)" title="Drag to resize results"></div>
       <div class="results-inner">
         <div class="earthquake-view-switcher" id="earthquakeViewSelector" hidden>
           <div class="earthquake-view-head">
@@ -248,12 +266,10 @@
           </div>
         </div>
         <div class="results-tabs" role="tablist" aria-label="Route result sections">
-          <button class="rtab active" type="button" role="tab" aria-selected="true" aria-controls="tab-safe" onclick="switchTab('safe',this)">Safe Routes</button>
-          <button class="rtab" type="button" role="tab" aria-selected="false" aria-controls="tab-elim" onclick="switchTab('elim',this)">Eliminated Routes</button>
+          <button class="rtab active" type="button" role="tab" aria-selected="true" aria-controls="tab-routes" onclick="switchTab('routes',this)">Route List</button>
           <button class="rtab" type="button" role="tab" aria-selected="false" aria-controls="tab-summary" onclick="switchTab('summary',this)">Summary</button>
         </div>
-        <div class="rtab-content active" id="tab-safe" role="tabpanel"></div>
-        <div class="rtab-content" id="tab-elim" role="tabpanel"></div>
+        <div class="rtab-content active" id="tab-routes" role="tabpanel"></div>
         <div class="rtab-content" id="tab-summary" role="tabpanel"></div>
       </div>
     </div>
