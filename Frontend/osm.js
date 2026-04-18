@@ -276,16 +276,20 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     const extraRows = Array.isArray(route.info_rows) ? route.info_rows : [];
     const isEarthquakeRoute = route.simulation_mode === 'earthquake'
       || route.simulation_mode === 'earthquake_test';
-    const contextLabel = isEarthquakeRoute ? 'Hazards' : 'Flood Vars';
+    const contextLabel = isEarthquakeRoute ? 'Hazards' : 'Flood Zones';
     const contextValue = isEarthquakeRoute
       ? (route.hazard_signature || 'N/A')
       : (route.display_flood_classes || 'None');
+    const peakRiskLabel = !isEarthquakeRoute && typeof window.formatFloodPeakRisk === 'function'
+      ? `${window.formatFloodPeakRisk(route)} (${route.max_hazard ?? 'N/A'}/5)`
+      : null;
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
     activeInfoWindowRef.current = new google.maps.InfoWindow({
       content: infoPopup(label, [
         ['Route No.', `#${route.display_route_no ?? 'N/A'}`],
         ['Distance', route.display_distance || formatDistanceKm(route.distance)],
         ['Max Hazard', route.max_hazard + '/5', cfg.color],
+        ...(peakRiskLabel ? [['Water Risk', peakRiskLabel]] : []),
         ['Unsafe Dist.', route.display_unsafe_distance || '0 m'],
         ['Unsafe Segs', route.display_unsafe_segment_count ?? 0],
         ['Summary', route.display_route_summary || route.path_label || 'N/A'],
@@ -363,7 +367,7 @@ async function renderRoutesOnRoads({
     gMap.fitBounds(bounds, 36);
   }
 
-  drawSelectedPinsOnly(start, end, { showStartBadge: true });
+  drawSelectedPinsOnly(start, end);
   if (typeof afterDrawPins === 'function') {
     afterDrawPins();
   }

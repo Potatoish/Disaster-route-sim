@@ -215,38 +215,53 @@
 
     </div>
 
-    <div id="loader">
-      <div class="ant-track">
-        <div class="ant-orbit"></div>
-        <div class="ant-orbit"></div>
-        <div class="ant-orbit"></div>
-        <div class="ant-dot"></div>
-        <div class="ant-dot"></div>
-        <div class="ant-dot"></div>
-        <div class="ant-dot"></div>
-        <div class="ant-dot"></div>
-        <div class="ant-center">
-          <div class="ant-pulse-ring"><div class="ant-emoji">&#128028;</div></div>
+    <div id="loader" aria-live="polite">
+      <div class="loader-card">
+        <div class="loader-kicker" id="loaderKicker">Please wait</div>
+        <div class="ant-track">
+          <div class="ant-orbit"></div>
+          <div class="ant-orbit"></div>
+          <div class="ant-orbit"></div>
+          <div class="ant-dot"></div>
+          <div class="ant-dot"></div>
+          <div class="ant-dot"></div>
+          <div class="ant-dot"></div>
+          <div class="ant-dot"></div>
+          <div class="ant-center">
+            <div class="ant-pulse-ring"><div class="ant-emoji">&#128028;</div></div>
+          </div>
         </div>
+        <div class="loader-text" id="loaderTitle">Finding your best route</div>
+        <div class="loader-sub" id="loaderSub">Getting everything ready...</div>
+        <div class="loader-stage-list" id="loaderStageList" aria-hidden="true">
+          <div class="loader-stage is-active" id="loaderStage-prepare">Get Ready</div>
+          <div class="loader-stage" id="loaderStage-compute">Check Routes</div>
+          <div class="loader-stage" id="loaderStage-render">Show Results</div>
+        </div>
+        <div class="loader-meta">
+          <div class="loader-phase" id="loaderPhase">Preparing your route</div>
+          <div class="loader-pct" id="loaderPct">0%</div>
+        </div>
+        <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="loader-bar" id="loaderBar"></div>
+        </div>
+        <div class="loader-note" id="loaderNote">The bar finishes only when your route results are fully ready.</div>
       </div>
-      <div class="loader-text">RUNNING ACO ALGORITHM</div>
-      <div class="loader-sub" id="loaderSub">Initializing ant colony...</div>
-      <div class="loader-progress"><div class="loader-bar" id="loaderBar"></div></div>
     </div>
 
     <div class="warning-modal-backdrop" id="fallbackWarningModal" hidden>
       <div class="warning-modal" role="dialog" aria-modal="true" aria-labelledby="fallbackWarningTitle" aria-describedby="fallbackWarningCopy">
-        <div class="warning-modal-kicker">Route Warning</div>
-        <div class="warning-modal-title" id="fallbackWarningTitle">No safe route found</div>
+        <div class="warning-modal-kicker" id="fallbackWarningKicker">Warning</div>
+        <div class="warning-modal-title" id="fallbackWarningTitle">Proceed with caution</div>
         <div class="warning-modal-copy" id="fallbackWarningCopy">
-          These options still exceed the safety threshold. You can still review the least-risk routes below.
+          No fully safe route is available right now. We will show the possible routes below so you can review the lower-risk options first.
         </div>
         <div class="warning-modal-actions">
           <label class="warning-modal-check">
             <input class="warning-modal-checkbox" id="fallbackWarningSuppress" type="checkbox">
             <span>Don't show me again</span>
           </label>
-          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Okay</button>
+          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Continue</button>
         </div>
       </div>
     </div>
@@ -276,7 +291,7 @@
 
     <div class="results-actions" id="resultsActions">
       <button class="dl-btn primary" onclick="downloadCSV()">Download CSV</button>
-      <button class="dl-btn secondary" onclick="resetAll()">New Simulation</button>
+      <button class="dl-btn secondary" id="resultsNewSimulationBtn" onclick="resetAll()">New Simulation</button>
       <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
       <div class="results-summary-txt" style="margin-left:auto;align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
     </div>
@@ -286,6 +301,7 @@
 </div>
 
 <script src="osm.js"></script>
+<script src="flood.js"></script>
 <script src="earthquake.js"></script>
 <script src="script.js"></script>
 

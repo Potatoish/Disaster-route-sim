@@ -6,7 +6,7 @@ from earthquake_test_service import (
     simulate_earthquake_test,
 )
 from main import simulate, get_locations, prewarm_simulation, warm_startup_data
-from osm_routing import get_barangay_boundary_payload
+from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
 
 app = Flask(__name__)
 CORS(app)
@@ -47,6 +47,51 @@ def barangay_boundary():
         return jsonify({
             "error": False,
             "boundary": boundary
+        })
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+@app.route("/flood-hazard-layers", methods=["GET"])
+def flood_hazard_layers():
+    try:
+        barangay = (request.args.get("barangay") or "").strip()
+        scope = (request.args.get("scope") or "barangay_buffer").strip().lower()
+        vars_param = (request.args.get("vars") or "").strip()
+        vars_filter = [
+            int(value)
+            for value in vars_param.split(",")
+            if value.strip().isdigit()
+        ] if vars_param else None
+
+        if scope == "city":
+            payload = build_flood_hazard_layer_payload(
+                vars_filter=vars_filter,
+                clip_scope="city",
+            )
+        else:
+            if not barangay:
+                return jsonify({
+                    "error": True,
+                    "message": "Barangay name is required"
+                }), 400
+
+            payload = build_flood_hazard_layer_payload(
+                barangay,
+                vars_filter=vars_filter,
+                clip_scope="barangay_buffer" if scope == "barangay_buffer" else "barangay",
+            )
+        if payload is None:
+            return jsonify({
+                "error": True,
+                "message": f"No flood hazard layers found for '{barangay or 'Pasig City'}'"
+            }), 404
+
+        return jsonify({
+            "error": False,
+            **payload,
         })
     except Exception as e:
         return jsonify({

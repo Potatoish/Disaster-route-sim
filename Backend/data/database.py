@@ -7,8 +7,8 @@ DB_CONNECT_TIMEOUT_SECONDS = 5
 
 CONNECTION_STRING = (
     "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=PRLY04\\SQLEXPRESS;" 
-    "DATABASE=disaster_route_sim;"
+    "SERVER=DESKTOP-THN5GFN\\SQLEXPRESS;" 
+    "DATABASE=DIsaster_route_simulation;"
     "Trusted_Connection=yes;"
     "TrustServerCertificate=yes;"
     f"Connection Timeout={DB_CONNECT_TIMEOUT_SECONDS};"

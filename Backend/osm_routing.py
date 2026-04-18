@@ -6,7 +6,7 @@ from threading import RLock
 
 import networkx as nx
 import osmnx as ox
-from shapely.geometry import LineString, Point, shape
+from shapely.geometry import LineString, Point, mapping, shape
 from shapely.prepared import prep
 from shapely.ops import unary_union
 
@@ -55,6 +55,7 @@ DISCOURAGED_ENDPOINT_ACCESS_VALUES = {"private", "no"}
 
 _GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
+_FLOOD_LAYER_PAYLOAD_CACHE = {}
 _BARANGAY_BOUNDARIES_CACHE = None
 _GRAPH_PREP_LOCK = RLock()
 
@@ -76,6 +77,16 @@ VAR_TO_HAZARD = {
     2: 3,
     3: 5,
 }
+FLOOD_VAR_RISK_LABELS = {
+    1: "Low",
+    2: "Moderate",
+    3: "High",
+}
+METERS_PER_DEGREE = 111_320.0
+FLOOD_LAYER_BUFFER_METERS = 450.0
+FLOOD_LAYER_SIMPLIFY_TOLERANCE = 0.00003
+FLOOD_LAYER_SIMPLIFY_TOLERANCE_BUFFER = 0.00008
+FLOOD_LAYER_SIMPLIFY_TOLERANCE_CITY = 0.00018
 
 def debug_print(*args):
     if DEBUG:
@@ -315,6 +326,107 @@ def get_barangay_boundary_payload(name):
         "canonical_name": boundary["canonical_name"],
         "paths": geometry_exterior_paths(boundary["geometry"]),
     }
+
+
+def get_flood_var_risk_label(var_value):
+    return FLOOD_VAR_RISK_LABELS.get(int(var_value), "Low")
+
+
+def get_polygonal_geometry(geometry):
+    if geometry.is_empty:
+        return geometry
+
+    if geometry.geom_type in {"Polygon", "MultiPolygon"}:
+        return geometry
+
+    polygon_geometries = []
+    for sub_geometry in getattr(geometry, "geoms", []):
+        polygon_geometry = get_polygonal_geometry(sub_geometry)
+        if polygon_geometry.is_empty:
+            continue
+
+        if polygon_geometry.geom_type == "Polygon":
+            polygon_geometries.append(polygon_geometry)
+        elif polygon_geometry.geom_type == "MultiPolygon":
+            polygon_geometries.extend(list(polygon_geometry.geoms))
+
+    return unary_union(polygon_geometries) if polygon_geometries else Point().buffer(0)
+
+
+def build_flood_hazard_layer_payload(name=None, vars_filter=None, clip_scope="barangay"):
+    canonical_name = normalize_barangay_name(name) if clip_scope != "city" else "pasig_city"
+    normalized_vars = tuple(
+        sorted({
+            int(var_value)
+            for var_value in (vars_filter or [])
+            if str(var_value).strip()
+        })
+    )
+    cache_key = (canonical_name, normalized_vars, clip_scope)
+    cached_payload = _FLOOD_LAYER_PAYLOAD_CACHE.get(cache_key)
+    if cached_payload is not None:
+        return cached_payload
+
+    boundary = get_barangay_boundary(canonical_name) if clip_scope != "city" else None
+    if clip_scope != "city" and boundary is None:
+        return None
+
+    flood_zones = load_flood_zones()
+    if clip_scope == "barangay_buffer" and boundary is not None:
+        boundary_geometry = boundary["geometry"].buffer(FLOOD_LAYER_BUFFER_METERS / METERS_PER_DEGREE)
+    else:
+        boundary_geometry = boundary["geometry"] if boundary is not None else None
+    features = []
+
+    for zone in sorted(flood_zones, key=lambda item: int(item["var"])):
+        zone_var = int(zone["var"])
+        if normalized_vars and zone_var not in normalized_vars:
+            continue
+
+        clipped_geometry = get_polygonal_geometry(
+            zone["geometry"].intersection(boundary_geometry)
+        ) if boundary_geometry is not None else get_polygonal_geometry(zone["geometry"])
+        if clipped_geometry.is_empty:
+            continue
+
+        simplified_geometry = clipped_geometry.simplify(
+            FLOOD_LAYER_SIMPLIFY_TOLERANCE
+            if clip_scope == "barangay"
+            else FLOOD_LAYER_SIMPLIFY_TOLERANCE_BUFFER
+            if clip_scope == "barangay_buffer"
+            else FLOOD_LAYER_SIMPLIFY_TOLERANCE_CITY,
+            preserve_topology=True,
+        )
+        if simplified_geometry.is_empty:
+            simplified_geometry = clipped_geometry
+
+        var_value = zone_var
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "flood_var": var_value,
+                "hazard_level": int(zone["hazard"]),
+                "risk_label": get_flood_var_risk_label(var_value),
+                "label": f"{get_flood_var_risk_label(var_value)} Water Risk",
+            },
+            "geometry": mapping(simplified_geometry),
+        })
+
+    payload = {
+        "name": (
+            f"{boundary['display_name']} + nearby area"
+            if clip_scope == "barangay_buffer" and boundary is not None
+            else boundary["display_name"] if boundary is not None
+            else "Pasig City"
+        ),
+        "canonical_name": canonical_name,
+        "hazard_layers": {
+            "type": "FeatureCollection",
+            "features": features,
+        },
+    }
+    _FLOOD_LAYER_PAYLOAD_CACHE[cache_key] = payload
+    return payload
 
 
 def warm_static_caches():

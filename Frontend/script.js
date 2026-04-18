@@ -17,7 +17,16 @@ let activeInfoWindow = null;
 let selectedRouteFocus = null;
 let workflowFocusSection = null;
 let simulationConfigLocked = false;
+let simulationInProgress = false;
+let floodHazardOverlayMode = 'none';
 const activeInfoWindowRef = { current: null };
+const loaderState = {
+  current: 0,
+  target: 0,
+  frameId: null,
+  driftTimer: null,
+  stage: 'prepare',
+};
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const FALLBACK_WARNING_SUPPRESS_KEY = 'disaster-route-sim-hide-fallback-warning';
 const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
@@ -34,6 +43,28 @@ const EARTHQUAKE_VIEW_META = {
 };
 const EARTHQUAKE_CLASSIFICATION_VIEWS = ['liquefaction', 'ground_shaking'];
 const EARTHQUAKE_MIN_FOCUS_ZOOM = 13;
+const FLOOD_OVERLAY_VIEWS = {
+  none: {
+    label: 'Hidden',
+    vars: [],
+    copy: 'Choose a flood layer below to display it on the map. Click the active layer again to return to the default map view.',
+  },
+  high: {
+    label: 'High',
+    vars: [3],
+    copy: 'Showing only the high flood-risk areas around the selected barangay. This is a map view only.',
+  },
+  moderate: {
+    label: 'Moderate',
+    vars: [2],
+    copy: 'Showing only the moderate flood-risk areas around the selected barangay. This is a map view only.',
+  },
+  low: {
+    label: 'Low',
+    vars: [1],
+    copy: 'Showing only the low flood-risk areas around the selected barangay. This is a map view only.',
+  },
+};
 const HAZARD_THEME_VARIABLES = [
   '--page-top',
   '--page-bottom',
@@ -449,8 +480,29 @@ function hideFallbackWarningModal() {
 
 function showFallbackWarningModal() {
   const modal = document.getElementById('fallbackWarningModal');
+  const kicker = document.getElementById('fallbackWarningKicker');
+  const title = document.getElementById('fallbackWarningTitle');
+  const copy = document.getElementById('fallbackWarningCopy');
   const suppress = document.getElementById('fallbackWarningSuppress');
   if (!modal) return;
+
+  const earthquakeMode = isEarthquakeSimulationResult(simData);
+  const activeDestination = simData?.active_summary?.selected_evacuation_site?.name || 'the evacuation site';
+
+  if (kicker) {
+    kicker.textContent = 'Warning';
+  }
+
+  if (title) {
+    title.textContent = 'Proceed with caution';
+  }
+
+  if (copy) {
+    copy.textContent = earthquakeMode
+      ? `No fully safe route is available right now. The routes shown below are possible options only. Review them carefully and use them at your own risk. Faster routes to ${activeDestination} are listed first.`
+      : 'No fully safe route is available right now. The routes shown below are possible options only. Review them carefully and use them at your own risk. Shorter routes are listed first.';
+  }
+
   if (suppress) {
     suppress.checked = false;
   }
@@ -465,24 +517,56 @@ function acknowledgeFallbackWarning() {
   hideFallbackWarningModal();
 }
 
+function isSimulationInteractionLocked() {
+  return simulationConfigLocked || simulationInProgress;
+}
+
 function syncSimulationConfigLock() {
-  const locked = simulationConfigLocked;
+  const interactionLocked = isSimulationInteractionLocked();
+  const configLocked = simulationConfigLocked;
 
   document.querySelectorAll('.bgy-card[data-barangay], .hazard-card').forEach(card => {
-    card.classList.toggle('interaction-locked', locked);
+    card.classList.toggle('interaction-locked', interactionLocked);
   });
 
   ['startSel', 'endSel', 'showEvacBtn', 'runBtn', 'changeBarangayBtn', 'changeHazardBtn', 'changeRouteBtn', 'resetRouteBtn']
     .forEach(id => {
       const el = document.getElementById(id);
-      if (el) {
-        el.disabled = locked || el.disabled;
+      if (!el) return;
+
+      if (interactionLocked) {
+        if (!Object.prototype.hasOwnProperty.call(el.dataset, 'lockPrevDisabled')) {
+          el.dataset.lockPrevDisabled = el.disabled ? '1' : '0';
+        }
+        el.disabled = true;
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(el.dataset, 'lockPrevDisabled')) {
+        el.disabled = el.dataset.lockPrevDisabled === '1';
+        delete el.dataset.lockPrevDisabled;
+      }
+
+      if (configLocked) {
+        el.disabled = true;
       }
     });
+
+  ['changeRunBtn', 'resetBtn', 'resultsNewSimulationBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = simulationInProgress || (id === 'resetBtn' && !configLocked);
+  });
 }
 
 function setSimulationConfigLocked(locked) {
   simulationConfigLocked = !!locked;
+  advanceStep(getMaxReachableStep());
+  syncSimulationConfigLock();
+}
+
+function setSimulationInProgress(running) {
+  simulationInProgress = !!running;
   advanceStep(getMaxReachableStep());
   syncSimulationConfigLock();
 }
@@ -543,9 +627,56 @@ function startResultsResize(event) {
 
 function setLoaderProgress(percent) {
   const loaderBar = document.getElementById('loaderBar');
-  if (!loaderBar) return;
+  const loaderPct = document.getElementById('loaderPct');
+  const loaderProgress = document.getElementById('loaderProgress');
   const clamped = Math.max(0, Math.min(percent, 100));
+
+  if (!loaderBar) return;
   loaderBar.style.width = `${clamped}%`;
+
+  if (loaderPct) {
+    loaderPct.textContent = `${Math.round(clamped)}%`;
+  }
+
+  if (loaderProgress) {
+    loaderProgress.setAttribute('aria-valuenow', String(Math.round(clamped)));
+  }
+}
+
+function stepLoaderProgress() {
+  loaderState.frameId = null;
+  const delta = loaderState.target - loaderState.current;
+
+  if (Math.abs(delta) < 0.35) {
+    loaderState.current = loaderState.target;
+    setLoaderProgress(loaderState.current);
+    return;
+  }
+
+  loaderState.current += delta * 0.18 + Math.sign(delta) * 0.35;
+  loaderState.current = Math.max(0, Math.min(loaderState.current, 100));
+  setLoaderProgress(loaderState.current);
+  loaderState.frameId = window.requestAnimationFrame(stepLoaderProgress);
+}
+
+function updateLoaderProgress(percent, options = {}) {
+  const { immediate = false } = options;
+  const clamped = Math.max(0, Math.min(percent, 100));
+  loaderState.target = clamped;
+
+  if (immediate) {
+    if (loaderState.frameId) {
+      window.cancelAnimationFrame(loaderState.frameId);
+      loaderState.frameId = null;
+    }
+    loaderState.current = clamped;
+    setLoaderProgress(clamped);
+    return;
+  }
+
+  if (!loaderState.frameId) {
+    loaderState.frameId = window.requestAnimationFrame(stepLoaderProgress);
+  }
 }
 
 function setLoaderSubtext(message) {
@@ -553,6 +684,91 @@ function setLoaderSubtext(message) {
   if (loaderSub) {
     loaderSub.textContent = message;
   }
+}
+
+function setLoaderTitle(message) {
+  const loaderTitle = document.getElementById('loaderTitle');
+  if (loaderTitle) {
+    loaderTitle.textContent = message;
+  }
+}
+
+function setLoaderKicker(message) {
+  const loaderKicker = document.getElementById('loaderKicker');
+  if (loaderKicker) {
+    loaderKicker.textContent = message;
+  }
+}
+
+function setLoaderNote(message) {
+  const loaderNote = document.getElementById('loaderNote');
+  if (loaderNote) {
+    loaderNote.textContent = message;
+  }
+}
+
+function setLoaderPhase(message) {
+  const loaderPhase = document.getElementById('loaderPhase');
+  if (loaderPhase) {
+    loaderPhase.textContent = message;
+  }
+}
+
+function setLoaderStage(stageKey) {
+  loaderState.stage = stageKey;
+  const stageOrder = ['prepare', 'compute', 'render'];
+
+  stageOrder.forEach((key, index) => {
+    const element = document.getElementById(`loaderStage-${key}`);
+    if (!element) return;
+
+    const currentIndex = stageOrder.indexOf(stageKey);
+    const isDone = stageKey === 'done' || (currentIndex > index && currentIndex !== -1);
+    const isActive = key === stageKey;
+
+    element.classList.toggle('is-done', isDone);
+    element.classList.toggle('is-active', isActive);
+  });
+}
+
+function stopLoaderProgressDrift() {
+  if (loaderState.driftTimer) {
+    window.clearInterval(loaderState.driftTimer);
+    loaderState.driftTimer = null;
+  }
+}
+
+function startLoaderProgressDrift(maxPercent, intervalMs = 1000) {
+  stopLoaderProgressDrift();
+
+  loaderState.driftTimer = window.setInterval(() => {
+    const nextTarget = Math.min(maxPercent, loaderState.target + (loaderState.target < 60 ? 2.4 : 1.2));
+    if (nextTarget > loaderState.target) {
+      updateLoaderProgress(nextTarget);
+    }
+  }, intervalMs);
+
+  return stopLoaderProgressDrift;
+}
+
+function resetLoaderState() {
+  stopLoaderProgressDrift();
+
+  if (loaderState.frameId) {
+    window.cancelAnimationFrame(loaderState.frameId);
+    loaderState.frameId = null;
+  }
+
+  loaderState.current = 0;
+  loaderState.target = 0;
+  loaderState.stage = 'prepare';
+  setLoaderStage('prepare');
+  setLoaderKicker('Please wait');
+  setLoaderTitle('Finding your best route');
+  setLoaderSubtext('Getting everything ready...');
+  setLoaderPhase('Preparing your route');
+  setLoaderNote('The bar finishes only when your route results are fully ready.');
+  updateLoaderProgress(0, { immediate: true });
 }
 
 function startLoaderPhaseCycle(messages, intervalMs = 1700) {
@@ -680,6 +896,10 @@ function clearLayers() {
   if (window.earthquakeTestUI?.reset) {
     window.earthquakeTestUI.reset();
   }
+
+  if (window.floodHazardUI?.reset) {
+    window.floodHazardUI.reset();
+  }
 }
 
 function clearRenderedRoutesOnly() {
@@ -791,6 +1011,42 @@ function formatFloodClasses(route) {
   return vars.length ? vars.map(value => `Var ${value}`).join(', ') : 'None';
 }
 
+function getFloodRiskLabelFromVar(varValue) {
+  switch (Number(varValue)) {
+    case 3:
+      return 'High';
+    case 2:
+      return 'Moderate';
+    case 1:
+    default:
+      return 'Low';
+  }
+}
+
+function getFloodRiskLabelFromHazard(hazardValue) {
+  const numericHazard = Number(hazardValue);
+  if (numericHazard >= 5) return 'High';
+  if (numericHazard >= 3) return 'Moderate';
+  return 'Low';
+}
+
+function formatFloodPeakRisk(route) {
+  const vars = Array.isArray(route?.flood_vars_encountered) ? route.flood_vars_encountered : [];
+  if (vars.length) {
+    return getFloodRiskLabelFromVar(Math.max(...vars));
+  }
+
+  return getFloodRiskLabelFromHazard(route?.max_hazard);
+}
+
+function formatFloodPeakRiskWithHazard(route) {
+  return `${formatFloodPeakRisk(route)} (${route?.max_hazard ?? 'N/A'}/5)`;
+}
+
+function getFloodOverlayConfig(mode = floodHazardOverlayMode) {
+  return FLOOD_OVERLAY_VIEWS[mode] || FLOOD_OVERLAY_VIEWS.none;
+}
+
 function formatHazardBreakdown(route) {
   const entries = Object.entries(route?.hazard_breakdown || {});
   return entries.length
@@ -831,14 +1087,16 @@ function buildRouteReason(route) {
       : '';
 
     return unsafeSections > 0
-      ? `Not recommended${destinationNote}. ${formatUnsafeSectionLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
-      : `Not recommended${destinationNote} because it crosses high-risk road sections.`;
+      ? `Not recommended${destinationNote}. ${formatUnsafeSectionLabel(unsafeSections)} ${unsafeSections === 1 ? 'goes' : 'go'} above the safety limit.`
+      : isEarthquakeRoute
+      ? `Not recommended${destinationNote} because it crosses high-risk road sections.`
+      : 'Not recommended because it crosses high water-risk road sections.';
   }
 
   if (route?.category === 'best') {
     return isEarthquakeRoute && route?.destination_name
       ? `Best route to ${route.destination_name}. It keeps risk lowest before distance.`
-      : 'Best route. It keeps hazard exposure lowest before distance.';
+      : 'Best route. It keeps flood risk lowest before distance.';
   }
 
   if (route?.category === 'available') {
@@ -861,7 +1119,7 @@ function buildRouteEvidenceChips(route) {
 
   return [
     { label: 'Flood Zones', value: route?.display_flood_classes || 'None' },
-    { label: 'Peak Risk', value: `${route?.max_hazard ?? 'N/A'}/5` },
+    { label: 'Water Risk', value: formatFloodPeakRiskWithHazard(route) },
     { label: 'Road Sections', value: `${route?.display_segment_count ?? 0}` },
   ];
 }
@@ -897,7 +1155,7 @@ function buildSummaryCallout(result, safeRoutes, bestRoute, earthquakeSummary) {
   }
 
   return bestRoute
-    ? 'The top flood route has the lowest hazard exposure before distance.'
+    ? 'The top flood route keeps water risk lowest before distance.'
     : 'Route summary unavailable.';
 }
 
@@ -1462,9 +1720,26 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
   return nextView;
 }
 
-function setFloodLegendContent() {
+function setFloodLegendContent(options = {}) {
+  const {
+    showHazardLayers = false,
+    hazardOverlayMode = floodHazardOverlayMode,
+  } = options;
   const body = document.getElementById('mapLegendBody');
   if (!body) return;
+
+  const overlayVars = getFloodOverlayConfig(hazardOverlayMode).vars;
+  const hazardLegend = [
+    overlayVars.includes(1)
+      ? `<div class="legend-row"><div class="legend-line" style="background:rgba(250,204,21,.86);height:8px;border-radius:999px;"></div><span style="font-size:.63rem;">Low Flood Area</span></div>`
+      : '',
+    overlayVars.includes(2)
+      ? `<div class="legend-row"><div class="legend-line" style="background:rgba(251,146,60,.90);height:8px;border-radius:999px;"></div><span style="font-size:.63rem;">Moderate Flood Area</span></div>`
+      : '',
+    overlayVars.includes(3)
+      ? `<div class="legend-row"><div class="legend-line" style="background:rgba(244,63,94,.94);height:8px;border-radius:999px;"></div><span style="font-size:.63rem;">High Flood Area</span></div>`
+      : '',
+  ].filter(Boolean).join('');
 
   body.innerHTML = `
     <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
@@ -1473,9 +1748,13 @@ function setFloodLegendContent() {
     <div style="margin-top:5px;">
       <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
       <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
-      <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe</span></div>
-      <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate</span></div>
-      <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger</span></div>
+      ${showHazardLayers ? `
+        ${hazardLegend}
+      ` : `
+        <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe</span></div>
+        <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate</span></div>
+        <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger</span></div>
+      `}
     </div>`;
 }
 
@@ -1567,6 +1846,7 @@ function clearBarangaySelections(options = {}) {
 
   clearPendingSimulationWarmup();
   clearPendingEarthquakeWarmup();
+  floodHazardOverlayMode = 'none';
   resetEarthquakeState({ clearResults: !keepResults });
   hideFallbackWarningModal();
   simData = null;
@@ -2137,8 +2417,7 @@ function makeRouteEndpointPinIcon(kind = 'start') {
   };
 }
 
-function drawSelectedPinsOnly(start, end, options = {}) {
-  const { showStartBadge = false } = options;
+function drawSelectedPinsOnly(start, end) {
   mapLayers.nodes.forEach(m => m.setMap(null));
   mapLayers.nodes = [];
 
@@ -2170,19 +2449,6 @@ function drawSelectedPinsOnly(start, end, options = {}) {
     });
 
     mapLayers.nodes.push(marker);
-
-    if (showStartBadge && n.name === start) {
-      const badgeMarker = new google.maps.Marker({
-        position: { lat: n.lat, lng: n.lng },
-        map: gMap,
-        clickable: false,
-        zIndex: 24,
-        icon: makeNodeBadgeIcon('You are here'),
-      });
-
-      mapLayers.nodes.push(badgeMarker);
-    }
-
   });
 }
 
@@ -2196,7 +2462,7 @@ function redrawNodes(start, end) {
 }
 
 async function selectBarangay(name) {
-  if (simulationConfigLocked) return;
+  if (isSimulationInteractionLocked()) return;
 
   const nodes = getBarangayLocations(name);
   workflowFocusSection = null;
@@ -2291,7 +2557,7 @@ async function selectBarangay(name) {
 }
 
 function onNodeChange() {
-  if (simulationConfigLocked) {
+  if (isSimulationInteractionLocked()) {
     syncSimulationConfigLock();
     return;
   }
@@ -2385,7 +2651,7 @@ function onNodeChange() {
 }
 
 async function selectHazard(name, el) {
-  if (simulationConfigLocked) return;
+  if (isSimulationInteractionLocked()) return;
 
   clearHazardSelectionState();
   resetEarthquakeState({ clearResults: true });
@@ -2598,7 +2864,9 @@ function syncWorkflowSummaries() {
   }
 
   if (summaryRun) {
-    summaryRun.textContent = simulationConfigLocked
+    summaryRun.textContent = simulationInProgress
+      ? 'Simulation is running. Inputs are temporarily locked until the results are ready.'
+      : simulationConfigLocked
       ? 'Setup is locked for this run. Click New Simulation to change it.'
       : isEarthquakeMode()
       ? canRun
@@ -2616,20 +2884,20 @@ function syncWorkflowSummaries() {
 
   if (changeBarangayBtn) {
     changeBarangayBtn.textContent = selectedBarangay ? 'Change' : 'Select';
-    changeBarangayBtn.disabled = simulationConfigLocked;
+    changeBarangayBtn.disabled = isSimulationInteractionLocked();
   }
 
   if (changeHazardBtn) {
     changeHazardBtn.textContent = selectedHazard ? 'Change' : 'Select';
-    changeHazardBtn.disabled = simulationConfigLocked || !selectedBarangay;
+    changeHazardBtn.disabled = isSimulationInteractionLocked() || !selectedBarangay;
   }
 
   if (changeRouteBtn) {
-    changeRouteBtn.disabled = simulationConfigLocked || !(selectedBarangay && selectedHazard);
+    changeRouteBtn.disabled = isSimulationInteractionLocked() || !(selectedBarangay && selectedHazard);
   }
 
   if (resetRouteBtn) {
-    resetRouteBtn.disabled = simulationConfigLocked || (isEarthquakeMode()
+    resetRouteBtn.disabled = isSimulationInteractionLocked() || (isEarthquakeMode()
       ? !(start || earthquakeEvacSitesVisible)
       : !(start || end));
   }
@@ -2663,7 +2931,7 @@ function syncWorkflowCards(activeStep, completed) {
 }
 
 function focusWorkflowSection(sectionKey) {
-  if (simulationConfigLocked) return;
+  if (isSimulationInteractionLocked()) return;
   if (!isWorkflowSectionAvailable(sectionKey)) return;
 
   workflowFocusSection = sectionKey;
@@ -2676,7 +2944,7 @@ function focusWorkflowSection(sectionKey) {
 }
 
 async function resetRouteSelection() {
-  if (simulationConfigLocked) return;
+  if (isSimulationInteractionLocked()) return;
   if (!selectedBarangay) return;
 
   workflowFocusSection = 'route';
@@ -2724,6 +2992,104 @@ function advanceStep(n) {
   syncWorkflowCards(activeStep, completed);
 }
 
+async function syncFloodHazardOverlay(barangay = selectedBarangay) {
+  const overlayConfig = getFloodOverlayConfig();
+
+  if (!gMap || !barangay || selectedHazard !== 'Flood' || !overlayConfig.vars.length) {
+    window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
+    return {
+      visible: false,
+      hasLayers: false,
+      failed: false,
+    };
+  }
+
+  try {
+    const hazardLayers = await window.floodHazardUI?.loadHazardLayers({
+      scope: 'barangay_buffer',
+      barangay,
+      vars: overlayConfig.vars,
+    });
+    const visibleVars = overlayConfig.vars;
+    const filteredFeatures = Array.isArray(hazardLayers?.features)
+      ? hazardLayers.features.filter(feature => visibleVars.includes(Number(feature?.properties?.flood_var)))
+      : [];
+    const hasLayers = filteredFeatures.length > 0;
+
+    window.floodHazardUI?.renderHazardLayers({
+      map: gMap,
+      hazardLayers,
+      visibleVars,
+    });
+    return {
+      visible: hasLayers,
+      hasLayers,
+      failed: false,
+    };
+  } catch (err) {
+    console.warn('Failed to load flood hazard overlay:', err);
+    window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
+    return {
+      visible: false,
+      hasLayers: false,
+      failed: true,
+    };
+  }
+}
+
+function buildFloodOverlayControl() {
+  const activeMode = floodHazardOverlayMode;
+  const overlayConfig = getFloodOverlayConfig(activeMode);
+  const options = [
+    ['high', 'High'],
+    ['moderate', 'Moderate'],
+    ['low', 'Low'],
+  ];
+  const optionButtons = options.map(([modeKey, label]) => `
+    <button
+      class="overlay-toggle-btn ${activeMode === modeKey ? 'active' : ''}"
+      type="button"
+      aria-pressed="${activeMode === modeKey ? 'true' : 'false'}"
+      onclick="setFloodHazardOverlayMode('${modeKey}')"
+    >
+      ${escapeHtml(label)}
+    </button>
+  `).join('');
+
+  return `
+    <div class="results-inline-actions">
+      <div class="overlay-toggle-group" role="group" aria-label="Flood map views">
+        ${optionButtons}
+      </div>
+      <div class="results-inline-copy">${escapeHtml(overlayConfig.copy)}</div>
+    </div>
+  `;
+}
+
+async function setFloodHazardOverlayMode(modeKey) {
+  if (isEarthquakeSimulationResult(simData) || selectedHazard !== 'Flood') {
+    return;
+  }
+
+  floodHazardOverlayMode = floodHazardOverlayMode === modeKey ? 'none' : modeKey;
+
+  const overlayState = await syncFloodHazardOverlay(selectedBarangay);
+  if (floodHazardOverlayMode !== 'none' && overlayState.failed) {
+    floodHazardOverlayMode = 'none';
+    alert('Could not load the flood overlay. Restart the backend, then try again.');
+  } else if (floodHazardOverlayMode !== 'none' && !overlayState.hasLayers) {
+    floodHazardOverlayMode = 'none';
+    alert('No flood areas were found for the selected map view.');
+  }
+
+  setFloodLegendContent({
+    showHazardLayers: floodHazardOverlayMode !== 'none' && overlayState.visible,
+    hazardOverlayMode: floodHazardOverlayMode,
+  });
+  showResultsPanel(simData, { preserveActiveTab: true });
+  updateMapContextBadge();
+}
+
 async function renderActiveSimulationRoutes() {
   if (!simData || !Array.isArray(simData.routes)) return;
 
@@ -2762,12 +3128,16 @@ async function renderActiveSimulationRoutes() {
     });
     fitEarthquakeMapScope({ includeHazards: true });
   } else {
-    setFloodLegendContent();
+    const overlayState = await syncFloodHazardOverlay(selectedBarangay);
+    setFloodLegendContent({
+      showHazardLayers: overlayState.visible,
+      hazardOverlayMode: floodHazardOverlayMode,
+    });
   }
 }
 
 async function showEvacuationSites() {
-  if (simulationConfigLocked) return;
+  if (isSimulationInteractionLocked()) return;
   if (!isEarthquakeMode()) return;
   if (!isEarthquakeBarangaySupported()) {
     alert(`Earthquake routing is currently available only for Brgy. ${EARTHQUAKE_SUPPORTED_BARANGAY}.`);
@@ -2853,7 +3223,7 @@ async function switchEarthquakeView(viewKey) {
 }
 
 async function runSimulation() {
-  if (simulationConfigLocked) return;
+  if (isSimulationInteractionLocked()) return;
 
   const start = document.getElementById('startSel').value;
   const end = document.getElementById('endSel').value;
@@ -2875,27 +3245,43 @@ async function runSimulation() {
   const loader = document.getElementById('loader');
   const runBtn = document.getElementById('runBtn');
   const statusTxt = document.getElementById('statusTxt');
+  let stopLoaderPhaseMessages = () => {};
+  let stopLoaderDrift = () => {};
+  let loaderHideDelay = 420;
 
+  resetLoaderState();
   loader.classList.add('show');
+  setSimulationInProgress(true);
   runBtn.disabled = true;
   statusTxt.textContent = 'Simulating…';
-  setLoaderProgress(8);
+  document.getElementById('infoBox').innerHTML =
+    `Simulation is now <strong>running</strong>. The selected barangay, disaster type, and node inputs are <strong>temporarily locked</strong> until the results are ready.`;
+  setLoaderKicker(isEarthquakeMode() ? 'Earthquake route search' : 'Flood route search');
+  setLoaderTitle(isEarthquakeMode() ? 'Finding the best evacuation route' : 'Finding the best flood route');
+  setLoaderNote('The bar finishes only when your route results are fully ready.');
+  updateLoaderProgress(6, { immediate: true });
 
   try {
     let result;
     if (isEarthquakeMode()) {
-      setLoaderSubtext('Preparing earthquake routing…');
-      setLoaderProgress(18);
+      setLoaderStage('prepare');
+      setLoaderPhase('Getting things ready');
+      setLoaderSubtext('Loading the map, shelters, and risk areas...');
+      updateLoaderProgress(18);
 
       await ensureEarthquakeWarmup(selectedBarangay);
-      setLoaderProgress(36);
+      setLoaderStage('compute');
+      setLoaderPhase('Checking routes');
+      setLoaderSubtext('Reviewing the routes to each shelter...');
+      updateLoaderProgress(42);
 
-      const stopEarthquakePhase = startLoaderPhaseCycle([
-        'Requesting earthquake route evaluation…',
-        'Comparing evacuation route options…',
-        'Ranking the least-risk routes…',
+      stopLoaderPhaseMessages = startLoaderPhaseCycle([
+        'Checking which routes avoid the riskiest road sections...',
+        'Comparing shelter options...',
+        'Sorting the best available routes...',
       ]);
-      setLoaderProgress(54);
+      stopLoaderDrift = startLoaderProgressDrift(78, 1100);
+      updateLoaderProgress(56);
 
       try {
         result = await sendEarthquakeTestRequest({
@@ -2904,9 +3290,12 @@ async function runSimulation() {
           hazard: selectedHazard,
         });
       } finally {
-        stopEarthquakePhase();
+        stopLoaderPhaseMessages();
+        stopLoaderDrift();
+        stopLoaderPhaseMessages = () => {};
+        stopLoaderDrift = () => {};
       }
-      setLoaderProgress(76);
+      updateLoaderProgress(82);
 
       result.hazard_layers = result.hazard_layers || {};
       Object.entries(result.views || {}).forEach(([viewKey, viewData]) => {
@@ -2920,25 +3309,33 @@ async function runSimulation() {
       hydrateActiveEarthquakeView(result.active_view || 'overall');
       earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
       earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
-      setLoaderSubtext('Rendering earthquake routes…');
-      setLoaderProgress(90);
+      setLoaderStage('render');
+      setLoaderPhase('Showing your results');
+      setLoaderSubtext('Preparing the map and route list...');
+      updateLoaderProgress(92);
       syncEarthquakeViewSelector();
       clearBoundaryLayers();
       await renderActiveSimulationRoutes();
       showResultsPanel(simData);
     } else {
-      setLoaderSubtext('Preparing flood routing…');
-      setLoaderProgress(18);
+      setLoaderStage('prepare');
+      setLoaderPhase('Getting things ready');
+      setLoaderSubtext('Loading the map and flood areas...');
+      updateLoaderProgress(18);
       await ensureSimulationWarmup(start, end);
-      setLoaderProgress(34);
+      setLoaderStage('compute');
+      setLoaderPhase('Checking routes');
+      setLoaderSubtext('Preparing the route search...');
+      updateLoaderProgress(38);
 
-      const stopFloodPhase = startLoaderPhaseCycle([
-        'Requesting route evaluation…',
-        'Checking hazard-aware road options…',
-        'Running the ant colony search…',
-        'Ranking the least-risk routes…',
+      stopLoaderPhaseMessages = startLoaderPhaseCycle([
+        'Checking which roads stay under the safety limit...',
+        'Comparing possible route options...',
+        'Searching for the best available routes...',
+        'Sorting the results...',
       ]);
-      setLoaderProgress(52);
+      stopLoaderDrift = startLoaderProgressDrift(76, 1000);
+      updateLoaderProgress(54);
 
       try {
         result = await sendSimulationRequest({
@@ -2948,7 +3345,10 @@ async function runSimulation() {
           barangay: selectedBarangay,
         });
       } finally {
-        stopFloodPhase();
+        stopLoaderPhaseMessages();
+        stopLoaderDrift();
+        stopLoaderPhaseMessages = () => {};
+        stopLoaderDrift = () => {};
       }
 
       const routes = decorateRoutesForDisplay(
@@ -2956,8 +3356,10 @@ async function runSimulation() {
       );
       result.routes = routes;
       simData = result;
-      setLoaderSubtext('Rendering evaluated routes…');
-      setLoaderProgress(88);
+      setLoaderStage('render');
+      setLoaderPhase('Showing your results');
+      setLoaderSubtext('Preparing the map and route list...');
+      updateLoaderProgress(90);
       clearBoundaryLayers();
       setFloodLegendContent();
       await renderActiveSimulationRoutes();
@@ -2974,20 +3376,29 @@ async function runSimulation() {
     setSimulationConfigLocked(true);
     updateMapContextBadge();
 
-    setLoaderProgress(100);
-    setLoaderSubtext('Simulation complete.');
+    setLoaderStage('done');
+    setLoaderPhase('Done');
+    setLoaderSubtext('Your routes are ready.');
+    setLoaderNote('You can now review the route list and summary below.');
+    updateLoaderProgress(100);
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
     console.error(err);
     statusTxt.textContent = 'Error';
-    setLoaderSubtext('Simulation failed.');
+    setLoaderPhase('Stopped');
+    setLoaderSubtext('The simulation could not be completed.');
+    setLoaderNote('Check the backend connection, then try again.');
+    loaderHideDelay = 320;
     alert('Simulation failed: ' + err.message);
   } finally {
+    setSimulationInProgress(false);
+    stopLoaderPhaseMessages();
+    stopLoaderDrift();
     window.setTimeout(() => {
       loader.classList.remove('show');
-      setLoaderProgress(0);
-    }, 240);
-    runBtn.disabled = simulationConfigLocked;
+      resetLoaderState();
+    }, loaderHideDelay);
+    runBtn.disabled = isSimulationInteractionLocked();
     syncSimulationConfigLock();
   }
 }
@@ -3005,6 +3416,9 @@ function showResultsPanel(result, options = {}) {
   const elim = routes.filter(r => r.category === 'eliminated');
   const best = routes.find(r => r.category === 'best');
   const shouldShowFallbackRoutes = safe.length === 0 && elim.length > 0;
+  const floodOverlayControl = !isEarthquakeSimulationResult(result)
+    ? buildFloodOverlayControl()
+    : '';
   const earthquakeSummary = isEarthquakeSimulationResult(result)
     ? result.active_summary || getActiveEarthquakeViewData(result)?.summary || null
     : null;
@@ -3013,8 +3427,8 @@ function showResultsPanel(result, options = {}) {
 
   document.getElementById('tab-routes').innerHTML = routes.length
     ? shouldShowFallbackRoutes
-    ? `<div class="fallback-warning-inline"><strong>No safe route found.</strong> Showing the least-risk options.</div>${buildTable(routes, { switchTabOnFocus: false })}`
-    : buildTable(routes)
+    ? `${floodOverlayControl}<div class="fallback-warning-inline"><strong>Proceed with caution.</strong> No fully safe route is available. Showing the possible routes below${isEarthquakeSimulationResult(result) ? ', with the quicker evacuation-site options first.' : ', with the shorter options first.'}</div>${buildTable(routes, { switchTabOnFocus: false })}`
+    : `${floodOverlayControl}${buildTable(routes)}`
     : `<div class="tab-section-empty">No routes found for this simulation.</div>`;
 
   if (isEarthquakeSimulationResult(result)) {
@@ -3434,6 +3848,9 @@ function buildTable(routes, options = {}) {
     const pips = [1, 2, 3, 4, 5]
       .map(p => `<div class="hlevel-pip ${p <= r.max_hazard ? 'on-' + p : ''}"></div>`)
       .join('');
+    const riskSubtext = isEarthquakeRouteRecord(r)
+      ? `Peak ${escapeHtml(r.max_hazard)}/5 · ${escapeHtml(formatUnsafeSectionLabel(r.display_unsafe_segment_count))}`
+      : `${escapeHtml(formatFloodPeakRiskWithHazard(r))} water risk · ${escapeHtml(formatUnsafeSectionLabel(r.display_unsafe_segment_count))}`;
 
     const rowTitle = `${r.display_route_summary}. ${r.display_reason}`;
     const evidenceChips = buildRouteEvidenceChips(r)
@@ -3453,7 +3870,7 @@ function buildTable(routes, options = {}) {
       </td>
       <td>
         <div class="hlevel">${pips}</div>
-        <div class="metric-sub">Peak ${escapeHtml(r.max_hazard)}/5 · ${escapeHtml(formatUnsafeSectionLabel(r.display_unsafe_segment_count))}</div>
+        <div class="metric-sub">${riskSubtext}</div>
       </td>
       <td>
         <div class="path-txt route-summary" title="${escapeHtml(r.display_route_summary)}">${escapeHtml(r.display_route_summary)}</div>
@@ -3522,8 +3939,10 @@ function downloadCSV() {
 }
 
 function resetAll() {
+  if (simulationInProgress) return;
   clearPendingSimulationWarmup();
   clearPendingEarthquakeWarmup();
+  floodHazardOverlayMode = 'none';
   resetEarthquakeState({ clearResults: true });
   hideFallbackWarningModal();
   simData = null;
@@ -3534,6 +3953,7 @@ function resetAll() {
   activeResultsTab = 'routes';
   workflowFocusSection = null;
   simulationConfigLocked = false;
+  simulationInProgress = false;
   clearLayers();
 
   ['startSel', 'endSel'].forEach(id => {
@@ -3672,6 +4092,8 @@ window.goToStep = goToStep;
 window.startResultsResize = startResultsResize;
 window.initMap = initMap;
 window.handleRouteRowKey = handleRouteRowKey;
+window.formatFloodPeakRisk = formatFloodPeakRisk;
+window.setFloodHazardOverlayMode = setFloodHazardOverlayMode;
 window.showEvacuationSites = showEvacuationSites;
 window.switchEarthquakeView = switchEarthquakeView;
 
