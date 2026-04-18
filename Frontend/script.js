@@ -24,8 +24,7 @@ const loaderState = {
   current: 0,
   target: 0,
   frameId: null,
-  driftTimer: null,
-  stage: 'prepare',
+  patienceTimer: null,
 };
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const FALLBACK_WARNING_SUPPRESS_KEY = 'disaster-route-sim-hide-fallback-warning';
@@ -577,13 +576,13 @@ function clampResultsPanelHeight(value) {
   const mapWrap = document.querySelector('.map-wrap');
   const resultsActions = document.getElementById('resultsActions');
   const minHeight = 180;
-  const viewportCap = Math.min(Math.round(viewportHeight * 0.72), 720);
+  const viewportCap = Math.min(Math.round(viewportHeight * 0.82), 800);
   const rightPanelHeight = rightPanel?.getBoundingClientRect().height || viewportHeight;
-  const mapMinHeight = Math.max(300, Math.min(Math.round(viewportHeight * 0.44), 520));
+  const mapMinHeight = Math.max(200, Math.min(Math.round(viewportHeight * 0.35), 380));
   const liveMapHeight = mapWrap?.getBoundingClientRect().height || mapMinHeight;
   const actionsHeight = resultsActions?.offsetHeight || 52;
-  const reservedMapHeight = Math.max(mapMinHeight, Math.min(liveMapHeight, Math.round(rightPanelHeight * 0.68)));
-  const layoutCap = Math.max(minHeight, rightPanelHeight - actionsHeight - reservedMapHeight - 18);
+  const reservedMapHeight = Math.max(mapMinHeight, Math.min(liveMapHeight, Math.round(rightPanelHeight * 0.52)));
+  const layoutCap = Math.max(minHeight, rightPanelHeight - actionsHeight - reservedMapHeight - 8);
   const maxHeight = Math.max(minHeight, Math.min(viewportCap, layoutCap));
   return Math.max(minHeight, Math.min(value, maxHeight));
 }
@@ -679,13 +678,6 @@ function updateLoaderProgress(percent, options = {}) {
   }
 }
 
-function setLoaderSubtext(message) {
-  const loaderSub = document.getElementById('loaderSub');
-  if (loaderSub) {
-    loaderSub.textContent = message;
-  }
-}
-
 function setLoaderTitle(message) {
   const loaderTitle = document.getElementById('loaderTitle');
   if (loaderTitle) {
@@ -693,98 +685,67 @@ function setLoaderTitle(message) {
   }
 }
 
-function setLoaderKicker(message) {
-  const loaderKicker = document.getElementById('loaderKicker');
-  if (loaderKicker) {
-    loaderKicker.textContent = message;
+function setLoaderPatientNoticeVisible(visible) {
+  const patienceNotification = document.getElementById('patienceNotification');
+  if (patienceNotification) {
+    patienceNotification.hidden = !visible;
   }
 }
 
-function setLoaderNote(message) {
-  const loaderNote = document.getElementById('loaderNote');
-  if (loaderNote) {
-    loaderNote.textContent = message;
+function stopLoaderPatienceTimer() {
+  if (loaderState.patienceTimer) {
+    window.clearTimeout(loaderState.patienceTimer);
+    loaderState.patienceTimer = null;
   }
 }
 
-function setLoaderPhase(message) {
-  const loaderPhase = document.getElementById('loaderPhase');
-  if (loaderPhase) {
-    loaderPhase.textContent = message;
-  }
+function startLoaderPatienceTimer(delayMs = 12000) {
+  stopLoaderPatienceTimer();
+  loaderState.patienceTimer = window.setTimeout(() => {
+    setLoaderPatientNoticeVisible(true);
+  }, delayMs);
 }
 
-function setLoaderStage(stageKey) {
-  loaderState.stage = stageKey;
-  const stageOrder = ['prepare', 'compute', 'render'];
-
-  stageOrder.forEach((key, index) => {
-    const element = document.getElementById(`loaderStage-${key}`);
-    if (!element) return;
-
-    const currentIndex = stageOrder.indexOf(stageKey);
-    const isDone = stageKey === 'done' || (currentIndex > index && currentIndex !== -1);
-    const isActive = key === stageKey;
-
-    element.classList.toggle('is-done', isDone);
-    element.classList.toggle('is-active', isActive);
-  });
-}
-
-function stopLoaderProgressDrift() {
-  if (loaderState.driftTimer) {
-    window.clearInterval(loaderState.driftTimer);
-    loaderState.driftTimer = null;
-  }
-}
-
-function startLoaderProgressDrift(maxPercent, intervalMs = 1000) {
-  stopLoaderProgressDrift();
-
-  loaderState.driftTimer = window.setInterval(() => {
-    const nextTarget = Math.min(maxPercent, loaderState.target + (loaderState.target < 60 ? 2.4 : 1.2));
-    if (nextTarget > loaderState.target) {
-      updateLoaderProgress(nextTarget);
-    }
-  }, intervalMs);
-
-  return stopLoaderProgressDrift;
+function setLoaderStep(title, progress, options = {}) {
+  setLoaderTitle(title);
+  updateLoaderProgress(progress, options);
+  updateLoaderStepDetail(options.detail || title);
 }
 
 function resetLoaderState() {
-  stopLoaderProgressDrift();
-
   if (loaderState.frameId) {
     window.cancelAnimationFrame(loaderState.frameId);
     loaderState.frameId = null;
   }
 
+  stopLoaderPatienceTimer();
+
   loaderState.current = 0;
   loaderState.target = 0;
-  loaderState.stage = 'prepare';
-  setLoaderStage('prepare');
-  setLoaderKicker('Please wait');
-  setLoaderTitle('Finding your best route');
-  setLoaderSubtext('Getting everything ready...');
-  setLoaderPhase('Preparing your route');
-  setLoaderNote('The bar finishes only when your route results are fully ready.');
+  setLoaderTitle('Searching best route');
+  setLoaderPatientNoticeVisible(false);
   updateLoaderProgress(0, { immediate: true });
+  hideLoaderSteps();
 }
 
-function startLoaderPhaseCycle(messages, intervalMs = 1700) {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return () => {};
+function updateLoaderStepDetail(stepText) {
+  const stepsContainer = document.getElementById('loaderSteps');
+  if (!stepsContainer) return;
+
+  if (stepText && stepText.trim()) {
+    stepsContainer.textContent = stepText;
+    stepsContainer.hidden = false;
+  } else {
+    hideLoaderSteps();
   }
+}
 
-  let index = 0;
-  setLoaderSubtext(messages[index]);
-
-  const timer = window.setInterval(() => {
-    index = (index + 1) % messages.length;
-    setLoaderSubtext(messages[index]);
-  }, intervalMs);
-
-  return () => window.clearInterval(timer);
+function hideLoaderSteps() {
+  const stepsContainer = document.getElementById('loaderSteps');
+  if (stepsContainer) {
+    stepsContainer.hidden = true;
+    stepsContainer.textContent = '';
+  }
 }
 
 function initMap() {
@@ -3245,57 +3206,35 @@ async function runSimulation() {
   const loader = document.getElementById('loader');
   const runBtn = document.getElementById('runBtn');
   const statusTxt = document.getElementById('statusTxt');
-  let stopLoaderPhaseMessages = () => {};
-  let stopLoaderDrift = () => {};
   let loaderHideDelay = 420;
 
   resetLoaderState();
   loader.classList.add('show');
+  startLoaderPatienceTimer(isEarthquakeMode() ? 12000 : 10000);
   setSimulationInProgress(true);
   runBtn.disabled = true;
   statusTxt.textContent = 'Simulating…';
   document.getElementById('infoBox').innerHTML =
     `Simulation is now <strong>running</strong>. The selected barangay, disaster type, and node inputs are <strong>temporarily locked</strong> until the results are ready.`;
-  setLoaderKicker(isEarthquakeMode() ? 'Earthquake route search' : 'Flood route search');
-  setLoaderTitle(isEarthquakeMode() ? 'Finding the best evacuation route' : 'Finding the best flood route');
-  setLoaderNote('The bar finishes only when your route results are fully ready.');
-  updateLoaderProgress(6, { immediate: true });
+  setLoaderStep(
+    'Initializing simulation',
+    5,
+    { immediate: true, detail: 'Preparing simulation environment...' }
+  );
 
   try {
     let result;
     if (isEarthquakeMode()) {
-      setLoaderStage('prepare');
-      setLoaderPhase('Getting things ready');
-      setLoaderSubtext('Loading the map, shelters, and risk areas...');
-      updateLoaderProgress(18);
-
       await ensureEarthquakeWarmup(selectedBarangay);
-      setLoaderStage('compute');
-      setLoaderPhase('Checking routes');
-      setLoaderSubtext('Reviewing the routes to each shelter...');
-      updateLoaderProgress(42);
+      setLoaderStep('Loading evacuation data', 20, { detail: 'Preparing earthquake and evacuation data...' });
+      setLoaderStep('Searching evacuation routes', 50, { detail: 'Scanning evacuation route options...' });
 
-      stopLoaderPhaseMessages = startLoaderPhaseCycle([
-        'Checking which routes avoid the riskiest road sections...',
-        'Comparing shelter options...',
-        'Sorting the best available routes...',
-      ]);
-      stopLoaderDrift = startLoaderProgressDrift(78, 1100);
-      updateLoaderProgress(56);
-
-      try {
-        result = await sendEarthquakeTestRequest({
-          start,
-          barangay: selectedBarangay,
-          hazard: selectedHazard,
-        });
-      } finally {
-        stopLoaderPhaseMessages();
-        stopLoaderDrift();
-        stopLoaderPhaseMessages = () => {};
-        stopLoaderDrift = () => {};
-      }
-      updateLoaderProgress(82);
+      result = await sendEarthquakeTestRequest({
+        start,
+        barangay: selectedBarangay,
+        hazard: selectedHazard,
+      });
+      setLoaderStep('Processing results', 75, { detail: 'Evaluating route safety and shelter access...' });
 
       result.hazard_layers = result.hazard_layers || {};
       Object.entries(result.views || {}).forEach(([viewKey, viewData]) => {
@@ -3309,60 +3248,30 @@ async function runSimulation() {
       hydrateActiveEarthquakeView(result.active_view || 'overall');
       earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
       earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
-      setLoaderStage('render');
-      setLoaderPhase('Showing your results');
-      setLoaderSubtext('Preparing the map and route list...');
-      updateLoaderProgress(92);
+      setLoaderStep('Rendering results', 90, { detail: 'Drawing route results on the map...' });
       syncEarthquakeViewSelector();
       clearBoundaryLayers();
       await renderActiveSimulationRoutes();
       showResultsPanel(simData);
     } else {
-      setLoaderStage('prepare');
-      setLoaderPhase('Getting things ready');
-      setLoaderSubtext('Loading the map and flood areas...');
-      updateLoaderProgress(18);
+      setLoaderStep('Building route graph', 20, { detail: 'Preparing the map graph and hazard weights...' });
       await ensureSimulationWarmup(start, end);
-      setLoaderStage('compute');
-      setLoaderPhase('Checking routes');
-      setLoaderSubtext('Preparing the route search...');
-      updateLoaderProgress(38);
+      setLoaderStep('Searching best route', 50, { detail: 'Optimizing route for safety and distance...' });
 
-      stopLoaderPhaseMessages = startLoaderPhaseCycle([
-        'Checking which roads stay under the safety limit...',
-        'Comparing possible route options...',
-        'Searching for the best available routes...',
-        'Sorting the results...',
-      ]);
-      stopLoaderDrift = startLoaderProgressDrift(76, 1000);
-      updateLoaderProgress(54);
+      result = await sendSimulationRequest({
+        start,
+        end,
+        hazard: selectedHazard,
+        barangay: selectedBarangay,
+      });
 
-      try {
-        result = await sendSimulationRequest({
-          start,
-          end,
-          hazard: selectedHazard,
-          barangay: selectedBarangay,
-        });
-      } finally {
-        stopLoaderPhaseMessages();
-        stopLoaderDrift();
-        stopLoaderPhaseMessages = () => {};
-        stopLoaderDrift = () => {};
-      }
-
-      const routes = decorateRoutesForDisplay(
-        normalizeRoutes(result.routes || [])
-      );
-      result.routes = routes;
+      setLoaderStep('Processing results', 75, { detail: 'Evaluating all route scores for safety and efficiency...' });
       simData = result;
-      setLoaderStage('render');
-      setLoaderPhase('Showing your results');
-      setLoaderSubtext('Preparing the map and route list...');
-      updateLoaderProgress(90);
+      setLoaderStep('Rendering results', 90, { detail: 'Finishing route visuals and list output...' });
       clearBoundaryLayers();
       setFloodLegendContent();
       await renderActiveSimulationRoutes();
+      showResultsPanel(simData);
       showResultsPanel(result);
     }
 
@@ -3376,24 +3285,17 @@ async function runSimulation() {
     setSimulationConfigLocked(true);
     updateMapContextBadge();
 
-    setLoaderStage('done');
-    setLoaderPhase('Done');
-    setLoaderSubtext('Your routes are ready.');
-    setLoaderNote('You can now review the route list and summary below.');
-    updateLoaderProgress(100);
+    setLoaderStep('Results ready', 100, { detail: 'Simulation complete. Showing safest routes now.' });
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
     console.error(err);
     statusTxt.textContent = 'Error';
-    setLoaderPhase('Stopped');
-    setLoaderSubtext('The simulation could not be completed.');
-    setLoaderNote('Check the backend connection, then try again.');
+    setLoaderStep('Simulation stopped', 100, { detail: 'Simulation halted due to an error.' });
     loaderHideDelay = 320;
     alert('Simulation failed: ' + err.message);
   } finally {
+    setLoaderPatientNoticeVisible(false);
     setSimulationInProgress(false);
-    stopLoaderPhaseMessages();
-    stopLoaderDrift();
     window.setTimeout(() => {
       loader.classList.remove('show');
       resetLoaderState();

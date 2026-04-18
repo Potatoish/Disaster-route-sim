@@ -217,8 +217,7 @@
 
     <div id="loader" aria-live="polite">
       <div class="loader-card">
-        <div class="loader-kicker" id="loaderKicker">Please wait</div>
-        <div class="ant-track">
+        <div class="ant-track" aria-hidden="true">
           <div class="ant-orbit"></div>
           <div class="ant-orbit"></div>
           <div class="ant-orbit"></div>
@@ -231,21 +230,19 @@
             <div class="ant-pulse-ring"><div class="ant-emoji">&#128028;</div></div>
           </div>
         </div>
-        <div class="loader-text" id="loaderTitle">Finding your best route</div>
-        <div class="loader-sub" id="loaderSub">Getting everything ready...</div>
-        <div class="loader-stage-list" id="loaderStageList" aria-hidden="true">
-          <div class="loader-stage is-active" id="loaderStage-prepare">Get Ready</div>
-          <div class="loader-stage" id="loaderStage-compute">Check Routes</div>
-          <div class="loader-stage" id="loaderStage-render">Show Results</div>
-        </div>
-        <div class="loader-meta">
-          <div class="loader-phase" id="loaderPhase">Preparing your route</div>
-          <div class="loader-pct" id="loaderPct">0%</div>
-        </div>
+        <div class="loader-text" id="loaderTitle">Preparing simulation</div>
         <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div class="loader-bar" id="loaderBar"></div>
+          <div class="loader-pct" id="loaderPct">0%</div>
         </div>
-        <div class="loader-note" id="loaderNote">The bar finishes only when your route results are fully ready.</div>
+        <div class="loader-steps" id="loaderSteps" hidden></div>
+      </div>
+    </div>
+
+    <div class="patience-notification" id="patienceNotification" aria-live="polite" aria-atomic="true" hidden>
+      <div class="patience-content">
+        <span class="patience-icon">⏳</span>
+        <span class="patience-text">Please be patient while we prepare the results.</span>
       </div>
     </div>
 
