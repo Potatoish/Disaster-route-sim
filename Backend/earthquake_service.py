@@ -1,10 +1,13 @@
 from threading import RLock
+import time
 
+import networkx as nx
 import osmnx as ox
 
 from data import database
-from earthquake_test_data import (
-    get_earthquake_test_dataset,
+from earthquake_data import (
+    get_earthquake_dataset,
+    get_supported_earthquake_barangay_names,
     is_supported_earthquake_barangay,
 )
 from osm_routing import (
@@ -12,6 +15,7 @@ from osm_routing import (
     HAZARD_THRESHOLD,
     MAX_ELIMINATED_ROUTES_TO_SHOW,
     clip_graph_to_boundary,
+    debug_print,
     edge_traversal_cost,
     estimate_boundary_graph_radius,
     extract_route_street_path,
@@ -32,8 +36,6 @@ from osm_routing import (
 _EARTHQUAKE_GRAPH_CACHE = {}
 _EARTHQUAKE_GRAPH_LOCK = RLock()
 
-SUPPORTED_EARTHQUAKE_BARANGAY = "pinagbuhatan"
-
 EARTHQUAKE_VIEW_CONFIG = {
     "overall": {
         "label": "Overall",
@@ -51,6 +53,21 @@ EARTHQUAKE_VIEW_CONFIG = {
         "description": "Ground-shaking exposure before distance.",
     },
 }
+
+
+def _format_supported_barangay_list():
+    names = get_supported_earthquake_barangay_names()
+    if not names:
+        return "configured barangays"
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return f"{', '.join(names[:-1])}, and {names[-1]}"
+
+
+def _unsupported_earthquake_scope_message():
+    return f"Earthquake routing is currently available only for {_format_supported_barangay_list()}."
 
 
 def _lens_hazard_factor(hazard_value):
@@ -74,7 +91,7 @@ def _resolve_layer_hazard(edge_geom, layer_zones):
     return severity
 
 
-def _get_earthquake_test_graph(barangay_name):
+def _get_earthquake_graph(barangay_name):
     canonical_name = normalize_barangay_name(barangay_name)
     boundary = get_barangay_boundary(canonical_name)
     if boundary is None:
@@ -83,12 +100,15 @@ def _get_earthquake_test_graph(barangay_name):
     with _EARTHQUAKE_GRAPH_LOCK:
         cached_graph = _EARTHQUAKE_GRAPH_CACHE.get(canonical_name)
         if cached_graph is not None:
+            debug_print(f"[EQ] Using cached graph for {boundary['display_name']}")
             return cached_graph
 
         warm_static_caches()
         boundary_geometry = boundary["geometry"]
         centroid = boundary_geometry.centroid
         radius_m = estimate_boundary_graph_radius(boundary_geometry)
+        debug_print(f"[EQ] Building graph for {boundary['display_name']} with radius {radius_m:.1f} meters")
+        debug_print(f"[EQ] Graph center: ({float(centroid.y)}, {float(centroid.x)})")
 
         graph = ox.graph_from_point(
             (float(centroid.y), float(centroid.x)),
@@ -97,6 +117,7 @@ def _get_earthquake_test_graph(barangay_name):
             simplify=True,
         )
         graph = clip_graph_to_boundary(graph, boundary_geometry)
+        debug_print(f"[EQ] Graph loaded: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 
         _EARTHQUAKE_GRAPH_CACHE[canonical_name] = graph
         return graph
@@ -104,7 +125,11 @@ def _get_earthquake_test_graph(barangay_name):
 
 def _annotate_graph_with_earthquake_hazards(graph, dataset):
     if graph.graph.get("earthquake_dataset") == dataset["canonical_barangay"]:
+        debug_print(f"[EQ] Reusing hazard annotations for {dataset['display_barangay']}")
         return graph
+
+    annotation_started = time.perf_counter()
+    debug_print(f"[EQ] Annotating earthquake hazards on {len(graph.edges)} edges")
 
     for u, v, key, edge_data in graph.edges(keys=True, data=True):
         edge_geom = get_edge_geometry(graph, u, v, edge_data)
@@ -122,6 +147,7 @@ def _annotate_graph_with_earthquake_hazards(graph, dataset):
         edge_data["eq_overall"] = max(liquefaction, ground_shaking)
 
     graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
+    debug_print(f"[EQ] Hazard annotation complete in {time.perf_counter() - annotation_started:.2f}s")
     return graph
 
 
@@ -132,7 +158,7 @@ def _clone_graph_for_view(base_graph, view_key):
     for _, _, _, edge_data in graph.edges(keys=True, data=True):
         edge_data["hazard"] = int(edge_data.get(hazard_attr, 1))
         edge_data["flood_var"] = None
-        edge_data["hazard_source"] = "earthquake_test"
+        edge_data["hazard_source"] = "earthquake"
         edge_data["route_cost"] = edge_traversal_cost(edge_data)
 
     return graph
@@ -273,7 +299,9 @@ def _view_sort_key(route):
 
 
 def _build_view_summary(view_key, routes, evacuation_sites):
-    best_route = next((route for route in routes if route["category"] != "eliminated"), None)
+    selected_route = next((route for route in routes if route["category"] != "eliminated"), None)
+    if selected_route is None and routes:
+        selected_route = routes[0]
 
     return {
         "view_key": view_key,
@@ -284,15 +312,15 @@ def _build_view_summary(view_key, routes, evacuation_sites):
         "eliminated_route_count": sum(1 for route in routes if route["category"] == "eliminated"),
         "selected_evacuation_site": (
             {
-                "id": best_route["destination_id"],
-                "name": best_route["destination_name"],
-                "lat": best_route["destination_lat"],
-                "lng": best_route["destination_lng"],
+                "id": selected_route["destination_id"],
+                "name": selected_route["destination_name"],
+                "lat": selected_route["destination_lat"],
+                "lng": selected_route["destination_lng"],
             }
-            if best_route
+            if selected_route
             else None
         ),
-        "best_distance": best_route["distance"] if best_route else None,
+        "best_distance": selected_route["distance"] if selected_route else None,
     }
 
 
@@ -325,7 +353,10 @@ def _finalize_earthquake_view_routes(start_name, routes, evacuation_sites, view_
     for index, route in enumerate(eliminated_routes, start=next_index):
         route["display_route_no"] = index
         route["category"] = "eliminated"
-        route["status"] = "Eliminated"
+        route["status"] = (
+            "Best" if not valid_routes and index == 1
+            else "Eliminated"
+        )
         route["color"] = "#ef4444"
         route["path_label"] = f"{start_name} -> {route['destination_name']}"
         route["segments"] = max(1, len(route.get("path", [])) - 1)
@@ -379,15 +410,56 @@ def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_
     return list(collected.values())
 
 
-def get_earthquake_test_evacuation_sites(barangay_name):
+def _select_road_nearest_evacuation_site(base_graph, start_location, evacuation_sites):
+    if not evacuation_sites:
+        return None, None
+
+    start_node = select_endpoint_node(
+        base_graph,
+        start_location["lat"],
+        start_location["lng"],
+        "start",
+    )
+
+    ranked_sites = []
+    for site in evacuation_sites:
+        end_node = select_endpoint_node(
+            base_graph,
+            site["lat"],
+            site["lng"],
+            "end",
+        )
+
+        try:
+            road_distance = float(
+                nx.shortest_path_length(
+                    base_graph,
+                    start_node,
+                    end_node,
+                    weight="length",
+                )
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            continue
+
+        ranked_sites.append((road_distance, str(site.get("name", "")).lower(), site))
+
+    if not ranked_sites:
+        return None, None
+
+    road_distance, _, selected_site = min(ranked_sites)
+    return selected_site, round(road_distance, 2)
+
+
+def get_earthquake_evacuation_sites(barangay_name):
     if not is_supported_earthquake_barangay(barangay_name):
         return {
             "error": True,
-            "message": "Earthquake routing is currently available only for Pinagbuhatan.",
+            "message": _unsupported_earthquake_scope_message(),
         }
 
     try:
-        dataset = get_earthquake_test_dataset(barangay_name)
+        dataset = get_earthquake_dataset(barangay_name)
         return {
             "error": False,
             "barangay": dataset["display_barangay"],
@@ -400,19 +472,25 @@ def get_earthquake_test_evacuation_sites(barangay_name):
         }
 
 
-def prewarm_earthquake_test(barangay_name):
+def prewarm_earthquake(barangay_name):
     if not is_supported_earthquake_barangay(barangay_name):
         return {
             "error": True,
-            "message": "Earthquake routing is currently available only for Pinagbuhatan.",
+            "message": _unsupported_earthquake_scope_message(),
         }
 
     try:
-        dataset = get_earthquake_test_dataset(barangay_name)
+        started_at = time.perf_counter()
+        debug_print("\n" + "-" * 60)
+        debug_print("[EQ] PREWARM START")
+        debug_print(f"[EQ] Selection context: {barangay_name}")
+        dataset = get_earthquake_dataset(barangay_name)
         _annotate_graph_with_earthquake_hazards(
-            _get_earthquake_test_graph(barangay_name),
+            _get_earthquake_graph(barangay_name),
             dataset,
         )
+        debug_print(f"[EQ] PREWARM END ({time.perf_counter() - started_at:.2f}s)")
+        debug_print("-" * 60 + "\n")
         return {
             "error": False,
             "barangay": dataset["display_barangay"],
@@ -425,7 +503,7 @@ def prewarm_earthquake_test(barangay_name):
         }
 
 
-def simulate_earthquake_test(start, barangay_name):
+def simulate_earthquake(start, barangay_name):
     if not start:
         return {
             "error": True,
@@ -435,7 +513,7 @@ def simulate_earthquake_test(start, barangay_name):
     if not is_supported_earthquake_barangay(barangay_name):
         return {
             "error": True,
-            "message": "Earthquake routing is currently available only for Pinagbuhatan.",
+            "message": _unsupported_earthquake_scope_message(),
         }
 
     start_location = database.get_location_by_name(start)
@@ -445,47 +523,99 @@ def simulate_earthquake_test(start, barangay_name):
             "message": f"Start location '{start}' not found",
         }
 
-    if normalize_barangay_name(start_location.get("barangay")) != SUPPORTED_EARTHQUAKE_BARANGAY:
-        return {
-            "error": True,
-            "message": "The selected start node is outside Pinagbuhatan earthquake routing coverage.",
-        }
-
     try:
-        dataset = get_earthquake_test_dataset(barangay_name)
+        dataset = get_earthquake_dataset(barangay_name)
+        if normalize_barangay_name(start_location.get("barangay")) != dataset["canonical_barangay"]:
+            return {
+                "error": True,
+                "message": (
+                    f"The selected start node is outside {dataset['display_barangay']} "
+                    "earthquake routing coverage."
+                ),
+            }
+
+        base_graph = _get_earthquake_graph(barangay_name)
+        selected_site, selected_site_road_distance = _select_road_nearest_evacuation_site(
+            base_graph,
+            start_location,
+            dataset["evacuation_sites"],
+        )
+        if selected_site is None or selected_site_road_distance is None:
+            return {
+                "error": True,
+                "message": "No road-reachable evacuation site is available for this start node.",
+            }
+
+        evaluated_sites = [selected_site]
+
+        debug_print("\n" + "=" * 60)
+        debug_print("[EQ] SIMULATION START")
+        debug_print(f"[EQ] From: {start_location['name']} ({start_location['lat']}, {start_location['lng']})")
+        debug_print(f"[EQ] Selection context: {barangay_name}")
+        debug_print(
+            f"[EQ] Target evacuation site: {selected_site['name']} "
+            f"({selected_site['lat']}, {selected_site['lng']}) | "
+            f"road distance={selected_site_road_distance:.1f}m"
+        )
+        simulation_started = time.perf_counter()
+        phase_started = simulation_started
+        debug_print("[EQ] Phase 1/3: preparing routing context")
         base_graph = _annotate_graph_with_earthquake_hazards(
-            _get_earthquake_test_graph(barangay_name),
+            base_graph,
             dataset,
         )
+        now = time.perf_counter()
+        debug_print(f"[EQ] Phase 1/3 complete in {now - phase_started:.2f}s")
 
         views = {}
+        phase_started = now
+        debug_print("[EQ] Phase 2/3: evaluating earthquake views")
         for view_key in EARTHQUAKE_VIEW_CONFIG:
+            view_started = time.perf_counter()
+            view_label = EARTHQUAKE_VIEW_CONFIG[view_key]["label"]
+            debug_print(f"[EQ]   View start: {view_label}")
             candidates = _collect_view_candidates(
                 base_graph,
                 start_location,
-                dataset["evacuation_sites"],
+                evaluated_sites,
                 view_key,
             )
             views[view_key] = _finalize_earthquake_view_routes(
                 start_location["name"],
                 candidates,
-                dataset["evacuation_sites"],
+                evaluated_sites,
                 view_key,
             )
+            debug_print(
+                f"[EQ]   View complete: {view_label} in {time.perf_counter() - view_started:.2f}s "
+                f"(routes={len(views[view_key]['routes'])})"
+            )
 
-        return {
+        now = time.perf_counter()
+        debug_print(f"[EQ] Phase 2/3 complete in {now - phase_started:.2f}s")
+        phase_started = now
+        debug_print("[EQ] Phase 3/3: packaging simulation response")
+
+        response = {
             "error": False,
             "simulation_mode": "earthquake",
             "hazard_type": "Earthquake",
             "barangay": dataset["display_barangay"],
             "start": start_location["name"],
             "safe_threshold": HAZARD_THRESHOLD,
-            "evacuation_sites": dataset["evacuation_sites"],
+            "evacuation_sites": evaluated_sites,
             "hazard_layers": dataset["layer_payloads"],
             "active_view": "overall",
             "views": views,
         }
+        now = time.perf_counter()
+        debug_print(f"[EQ] Phase 3/3 complete in {now - phase_started:.2f}s")
+        debug_print(f"[EQ] Total simulation time: {now - simulation_started:.2f}s")
+        debug_print("[EQ] SIMULATION END")
+        debug_print("=" * 60 + "\n")
+        return response
     except Exception as exc:
+        debug_print(f"[EQ] SIMULATION ERROR: {exc}")
         return {
             "error": True,
             "message": f"Earthquake simulation failed: {exc}",

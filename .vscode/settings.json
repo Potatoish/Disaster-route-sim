@@ -1,0 +1,13 @@
+{
+  "liveServer.settings.ignoreFiles": [
+    "**/.git/**",
+    "**/.svn/**",
+    "**/.hg/**",
+    "**/.DS_Store",
+    "**/Thumbs.db",
+    "**/__pycache__/**",
+    "**/*.pyc",
+    "backend/**",
+    "database/**"
+  ]
+}

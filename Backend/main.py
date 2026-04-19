@@ -1,8 +1,13 @@
+import sys
+
+sys.dont_write_bytecode = True
+
 import csv
 from datetime import datetime
 
 from data import database
 from osm_routing import (
+    debug_print,
     simulate_osm_routes,
     resolve_point_hazard,
     prepare_routing_graph,
@@ -124,6 +129,12 @@ def prewarm_simulation(start, end, barangay=None):
 
     try:
         scope_barangay = barangay or start_location.get("barangay") or end_location.get("barangay")
+        debug_print("\n" + "-" * 60)
+        debug_print("[OSM] PREWARM START")
+        debug_print(f"[OSM] From: {start_location['name']} ({start_location['lat']}, {start_location['lng']})")
+        debug_print(f"[OSM] To  : {end_location['name']} ({end_location['lat']}, {end_location['lng']})")
+        if scope_barangay:
+            debug_print(f"[OSM] Selection context: {scope_barangay}")
         prepare_routing_graph(
             start_location["lat"],
             start_location["lng"],
@@ -131,6 +142,8 @@ def prewarm_simulation(start, end, barangay=None):
             end_location["lng"],
             barangay_name=scope_barangay,
         )
+        debug_print("[OSM] PREWARM END")
+        debug_print("-" * 60 + "\n")
         return {
             "error": False,
             "message": "Simulation context prepared"

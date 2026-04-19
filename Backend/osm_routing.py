@@ -1,6 +1,8 @@
 import json
 import math
+import os
 import random
+import time
 from pathlib import Path
 from threading import RLock
 
@@ -58,6 +60,35 @@ _FLOOD_ZONES_CACHE = None
 _FLOOD_LAYER_PAYLOAD_CACHE = {}
 _BARANGAY_BOUNDARIES_CACHE = None
 _GRAPH_PREP_LOCK = RLock()
+
+
+def get_runtime_cache_dir():
+    override = os.environ.get("DISASTER_ROUTE_SIM_RUNTIME_DIR")
+    if override:
+        base_dir = Path(override).expanduser()
+    elif os.name == "nt":
+        base_dir = Path(
+            os.environ.get(
+                "LOCALAPPDATA",
+                Path.home() / "AppData" / "Local",
+            )
+        )
+    else:
+        base_dir = Path(
+            os.environ.get(
+                "XDG_CACHE_HOME",
+                Path.home() / ".cache",
+            )
+        )
+
+    cache_dir = base_dir / "disaster-route-sim" / "osmnx-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+OSMNX_CACHE_DIR = get_runtime_cache_dir()
+ox.settings.use_cache = True
+ox.settings.cache_folder = str(OSMNX_CACHE_DIR)
 
 FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
 BOUNDARIES_DIR = Path(__file__).parent / "data" / "boundaries"
@@ -751,6 +782,7 @@ def debug_endpoint_candidates(label, fallback_node, fallback_distance, distance_
 
 
 def select_endpoint_node(G, lat, lng, label):
+    debug_print(f"[OSM] Endpoint snap ({label}): locating nearest node")
     fallback_node = ox.distance.nearest_nodes(G, X=lng, Y=lat)
     fallback_data = G.nodes[fallback_node]
     fallback_distance = coordinate_distance_meters(
@@ -768,6 +800,10 @@ def select_endpoint_node(G, lat, lng, label):
         )
         return fallback_node
 
+    debug_print(
+        f"[OSM] Endpoint snap ({label}): evaluating nearby candidates "
+        f"from {len(G.nodes)} graph nodes"
+    )
     candidates, distance_cap = collect_endpoint_candidates(
         G,
         lat,
@@ -1587,7 +1623,10 @@ def finalize_routes(G, candidate_routes, edge_pheromone):
     for idx, route in enumerate(eliminated_routes, start=next_index):
         route["display_route_no"] = idx
         route["category"] = "eliminated"
-        route["status"] = "Eliminated"
+        route["status"] = (
+            "Best" if not valid_routes and idx == 1
+            else "Eliminated"
+        )
         route["color"] = "#ef4444"
         final_routes.append(route)
 
@@ -1604,6 +1643,10 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     if barangay_name:
         debug_print(f"[OSM] Selection context: {barangay_name}")
 
+    simulation_started = time.perf_counter()
+    phase_started = simulation_started
+    debug_print("[OSM] Phase 1/4: preparing routing graph")
+
     G = prepare_routing_graph(
         start_lat,
         start_lng,
@@ -1612,8 +1655,19 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
         barangay_name=barangay_name,
     )
 
+    now = time.perf_counter()
+    debug_print(f"[OSM] Phase 1/4 complete in {now - phase_started:.2f}s")
+    phase_started = now
+    debug_print("[OSM] Phase 2/4: snapping start/end nodes")
+
     start_node, end_node = get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng)
+    now = time.perf_counter()
+    debug_print(f"[OSM] Phase 2/4 complete in {now - phase_started:.2f}s")
+    phase_started = now
+    debug_print("[OSM] Phase 3/4: searching candidate routes")
     candidate_routes, edge_pheromone = run_aco(G, start_node, end_node)
+    now = time.perf_counter()
+    debug_print(f"[OSM] Phase 3/4 complete in {now - phase_started:.2f}s")
 
     if not candidate_routes:
         return {
@@ -1621,12 +1675,17 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
             "message": "No candidate routes found for the selected locations."
         }
 
+    phase_started = now
+    debug_print("[OSM] Phase 4/4: finalizing route results")
     final_routes = finalize_routes(G, candidate_routes, edge_pheromone)
+    now = time.perf_counter()
+    debug_print(f"[OSM] Phase 4/4 complete in {now - phase_started:.2f}s")
 
     for route in final_routes:
         route["path_label"] = f"{start_name} → {end_name}"
         route["segments"] = max(1, len(route.get("path", [])) - 1)
 
+    debug_print(f"[OSM] Total simulation time: {now - simulation_started:.2f}s")
     debug_print("[OSM] SIMULATION END")
     debug_print("=" * 60 + "\n")
 

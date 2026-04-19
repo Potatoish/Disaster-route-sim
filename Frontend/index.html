@@ -201,7 +201,7 @@
         <div class="legend-body" id="mapLegendBody">
           <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
           <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
-          <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated</span></div>
+          <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated Route</span></div>
 
           <div style="margin-top:5px;">
             <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
@@ -217,32 +217,22 @@
 
     <div id="loader" aria-live="polite">
       <div class="loader-card">
-        <div class="ant-track" aria-hidden="true">
-          <div class="ant-orbit"></div>
-          <div class="ant-orbit"></div>
-          <div class="ant-orbit"></div>
-          <div class="ant-dot"></div>
-          <div class="ant-dot"></div>
-          <div class="ant-dot"></div>
-          <div class="ant-dot"></div>
-          <div class="ant-dot"></div>
-          <div class="ant-center">
-            <div class="ant-pulse-ring"><div class="ant-emoji">&#128028;</div></div>
+        <div class="loader-card-top">
+          <div class="loader-heading-group">
+            <div class="loader-kicker" id="loaderKicker">Loading</div>
+            <div class="loader-text" id="loaderTitle">Loading routes</div>
+          </div>
+          <div class="loader-core-badge" id="loaderModeBadge">Route</div>
+        </div>
+        <div class="loader-progress-shell">
+          <div class="loader-progress-head">
+            <span class="loader-progress-label">Progress</span>
+            <span class="loader-pct" id="loaderPct">0%</span>
+          </div>
+          <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="loader-bar" id="loaderBar"></div>
           </div>
         </div>
-        <div class="loader-text" id="loaderTitle">Preparing simulation</div>
-        <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div class="loader-bar" id="loaderBar"></div>
-          <div class="loader-pct" id="loaderPct">0%</div>
-        </div>
-        <div class="loader-steps" id="loaderSteps" hidden></div>
-      </div>
-    </div>
-
-    <div class="patience-notification" id="patienceNotification" aria-live="polite" aria-atomic="true" hidden>
-      <div class="patience-content">
-        <span class="patience-icon">⏳</span>
-        <span class="patience-text">Please be patient while we prepare the results.</span>
       </div>
     </div>
 
@@ -251,14 +241,10 @@
         <div class="warning-modal-kicker" id="fallbackWarningKicker">Warning</div>
         <div class="warning-modal-title" id="fallbackWarningTitle">Proceed with caution</div>
         <div class="warning-modal-copy" id="fallbackWarningCopy">
-          No fully safe route is available right now. We will show the possible routes below so you can review the lower-risk options first.
+          The routes below are possible routes options only. Review them carefully.
         </div>
         <div class="warning-modal-actions">
-          <label class="warning-modal-check">
-            <input class="warning-modal-checkbox" id="fallbackWarningSuppress" type="checkbox">
-            <span>Don't show me again</span>
-          </label>
-          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Continue</button>
+          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Show Routes</button>
         </div>
       </div>
     </div>

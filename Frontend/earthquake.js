@@ -1,4 +1,4 @@
-(function initEarthquakeTestUI() {
+(function initEarthquakeUI() {
   const state = {
     evacuationSitesCache: new Map(),
     evacuationMarkers: [],
@@ -99,8 +99,8 @@
     return `
       <div class="popup-shell">
         <div class="popup-title">${escapeHtml(site.name)}</div>
-        <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Best evacuation site' : 'Evacuation site'}</span></div>
-        <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pinagbuhatan')}</span></div>
+        <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Target evacuation site' : 'Evacuation site'}</span></div>
+        <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pasig City')}</span></div>
         <div class="popup-row"><span>Site Setup</span><span>${escapeHtml(site.site_setup || 'Open-area assembly point')}</span></div>
         <div class="popup-row"><span>Surroundings</span><span>${escapeHtml(site.surroundings || 'No tall buildings nearby')}</span></div>
       </div>`;
@@ -116,7 +116,7 @@
     }
 
     const response = await fetch(
-      `${getBackendBase()}/earthquake-test/evac-sites?barangay=${encodeURIComponent(barangay)}`
+      `${getBackendBase()}/earthquake/evac-sites?barangay=${encodeURIComponent(barangay)}`
     );
     const data = await response.json();
 
@@ -267,7 +267,7 @@
       ? `
         <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
         <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated Route</span></div>
       `
       : '';
     const hazardLegend = showHazardLayers
@@ -285,7 +285,7 @@
       </div>`;
   }
 
-  window.earthquakeTestUI = {
+  window.earthquakeUI = {
     loadEvacuationSites,
     drawEvacuationSites,
     renderHazardLayers,

@@ -1,6 +1,8 @@
 // Render the exact route geometry produced by the backend.
 // Do not re-route paths in the browser, or the map can diverge from the evaluated result.
 
+const ROUTE_ENDPOINT_ATTACH_DISTANCE_METERS = 140;
+
 function formatDistanceKm(distanceMeters) {
   const numericDistance = Number(distanceMeters);
   if (!Number.isFinite(numericDistance)) {
@@ -50,14 +52,55 @@ function estimatePointGapMeters(pointA, pointB) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function buildRenderablePath(route, normalizedCoords) {
-  const renderPath = [...normalizedCoords];
-  const destinationPoint = {
-    lat: Number(route?.destination_lat),
-    lng: Number(route?.destination_lng),
+function normalizePointCandidate(point) {
+  if (!point || point.lat == null || point.lng == null) {
+    return null;
+  }
+
+  const normalized = {
+    lat: Number(point.lat),
+    lng: Number(point.lng),
   };
 
-  if (!Number.isFinite(destinationPoint.lat) || !Number.isFinite(destinationPoint.lng)) {
+  return Number.isFinite(normalized.lat) && Number.isFinite(normalized.lng)
+    ? normalized
+    : null;
+}
+
+function mergePathEndpoint(pathPoints, endpoint, mode) {
+  const normalizedEndpoint = normalizePointCandidate(endpoint);
+  if (!normalizedEndpoint || !Array.isArray(pathPoints) || !pathPoints.length) {
+    return pathPoints;
+  }
+
+  const targetIndex = mode === 'start' ? 0 : pathPoints.length - 1;
+  const edgePoint = pathPoints[targetIndex];
+  const gapMeters = estimatePointGapMeters(edgePoint, normalizedEndpoint);
+
+  if (gapMeters <= 3) {
+    pathPoints[targetIndex] = normalizedEndpoint;
+    return pathPoints;
+  }
+
+  if (gapMeters <= ROUTE_ENDPOINT_ATTACH_DISTANCE_METERS) {
+    if (mode === 'start') {
+      pathPoints.unshift(normalizedEndpoint);
+    } else {
+      pathPoints.push(normalizedEndpoint);
+    }
+  }
+
+  return pathPoints;
+}
+
+function buildRenderablePath(route, normalizedCoords) {
+  const renderPath = [...normalizedCoords];
+  const destinationPoint = normalizePointCandidate({
+    lat: Number(route?.destination_lat),
+    lng: Number(route?.destination_lng),
+  });
+
+  if (!destinationPoint) {
     return renderPath;
   }
 
@@ -65,19 +108,7 @@ function buildRenderablePath(route, normalizedCoords) {
     return [destinationPoint];
   }
 
-  const lastPoint = renderPath[renderPath.length - 1];
-  const gapMeters = estimatePointGapMeters(lastPoint, destinationPoint);
-
-  if (gapMeters <= 3) {
-    renderPath[renderPath.length - 1] = destinationPoint;
-    return renderPath;
-  }
-
-  if (gapMeters <= 140) {
-    renderPath.push(destinationPoint);
-  }
-
-  return renderPath;
+  return mergePathEndpoint(renderPath, destinationPoint, 'end');
 }
 
 function getSegmentCount(route, normalizedPath, normalizedCoords) {
@@ -129,9 +160,25 @@ function getRoutePoints(route, getLocationByName) {
   return [];
 }
 
-function buildFallbackPath(route, getLocationByName) {
-  const routePoints = getRoutePoints(route, getLocationByName);
+function resolveNamedLocationPoint(getLocationByName, locationName) {
+  if (typeof getLocationByName !== 'function' || !locationName) {
+    return null;
+  }
+
+  return normalizePointCandidate(getLocationByName(locationName));
+}
+
+function buildFallbackPath(route, getLocationByName, startName, endName) {
+  const routePoints = [...getRoutePoints(route, getLocationByName)];
   if (routePoints.length >= 2) {
+    const destinationPoint = normalizePointCandidate({
+      lat: route?.destination_lat,
+      lng: route?.destination_lng,
+    }) || resolveNamedLocationPoint(getLocationByName, endName);
+    const startPoint = resolveNamedLocationPoint(getLocationByName, startName);
+
+    mergePathEndpoint(routePoints, startPoint, 'start');
+    mergePathEndpoint(routePoints, destinationPoint, 'end');
     return routePoints;
   }
 
@@ -239,8 +286,8 @@ function formatStreetPath(streetPath, maxItems = 6) {
   return visible.join(' -> ') + suffix;
 }
 
-function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, routeGroup) {
-  const pathCoords = buildFallbackPath(route, getLocationByName);
+function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, routeGroup, startName, endName) {
+  const pathCoords = buildFallbackPath(route, getLocationByName, startName, endName);
   if (pathCoords.length === 0) return null;
 
   route.render_path = pathCoords;
@@ -250,7 +297,10 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, ro
 }
 
 function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfoWindowRef, gMap) {
-  const label = route.category === 'best'
+  const statusLabel = String(route?.status || '').trim();
+  const label = statusLabel
+    ? `${statusLabel} Route`
+    : route.category === 'best'
     ? 'Best Route'
     : route.category === 'available'
     ? 'Available Route'
@@ -274,8 +324,7 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     }
 
     const extraRows = Array.isArray(route.info_rows) ? route.info_rows : [];
-    const isEarthquakeRoute = route.simulation_mode === 'earthquake'
-      || route.simulation_mode === 'earthquake_test';
+    const isEarthquakeRoute = route.simulation_mode === 'earthquake';
     const contextLabel = isEarthquakeRoute ? 'Hazards' : 'Flood Zones';
     const contextValue = isEarthquakeRoute
       ? (route.hazard_signature || 'N/A')
@@ -340,7 +389,16 @@ async function renderRoutesOnRoads({
     const cfg = CFG[route.category] || CFG.eliminated;
     const routeGroup = createRouteGroup(route, cfg);
 
-    const poly = drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, routeGroup);
+    const poly = drawFallbackPolyline(
+      route,
+      cfg,
+      gMap,
+      mapLayers,
+      getLocationByName,
+      routeGroup,
+      start,
+      end
+    );
 
     if (poly) {
       mapLayers.routeGroups.push(routeGroup);

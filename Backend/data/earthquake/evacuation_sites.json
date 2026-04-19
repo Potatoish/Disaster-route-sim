@@ -1,5 +1,5 @@
 {
-  "sites": [
+  "pinagbuhatan": [
     {
       "id": "nagpayong-covered-court",
       "name": "Nagpayong Covered Court",
@@ -33,6 +33,35 @@
       "lat": 14.544851038712663,
       "lng": 121.1030731917307,
       "address": "Nagpayong High School, Pinagbuhatan, Pasig City",
+      "site_setup": "Open-area assembly point",
+      "surroundings": "No tall buildings nearby"
+    }
+  ],
+  "sta lucia": [
+    {
+      "id": "de-castro-elementary-school",
+      "name": "De Castro Elementary School",
+      "lat": 14.58708753759616,
+      "lng": 121.09845942417452,
+      "address": "De Castro Elementary School, Sta. Lucia, Pasig City",
+      "site_setup": "Open-area assembly point",
+      "surroundings": "No tall buildings nearby"
+    },
+    {
+      "id": "sta-lucia-bliss-multipurpose-hall",
+      "name": "Sta. Lucia Bliss Multipurpose Hall",
+      "lat": 14.588174499166966,
+      "lng": 121.09952699543236,
+      "address": "Sta. Lucia Bliss Multipurpose Hall, Sta. Lucia, Pasig City",
+      "site_setup": "Open-area assembly point",
+      "surroundings": "No tall buildings nearby"
+    },
+    {
+      "id": "countryside-multipurpose-center",
+      "name": "Countryside Multipurpose Center",
+      "lat": 14.587375171199472,
+      "lng": 121.10118527828448,
+      "address": "Countryside Multipurpose Center, Sta. Lucia, Pasig City",
       "site_setup": "Open-area assembly point",
       "surroundings": "No tall buildings nearby"
     }

@@ -1,9 +1,9 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from earthquake_test_service import (
-    get_earthquake_test_evacuation_sites,
-    prewarm_earthquake_test,
-    simulate_earthquake_test,
+from earthquake_service import (
+    get_earthquake_evacuation_sites,
+    prewarm_earthquake,
+    simulate_earthquake,
 )
 from main import simulate, get_locations, prewarm_simulation, warm_startup_data
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
@@ -131,11 +131,11 @@ def warm_simulation():
             "message": str(e)
         }), 500
 
-@app.route("/earthquake-test/evac-sites", methods=["GET"])
-def earthquake_test_evac_sites():
+@app.route("/earthquake/evac-sites", methods=["GET"])
+def earthquake_evac_sites():
     try:
         barangay = (request.args.get("barangay") or "").strip()
-        result = get_earthquake_test_evacuation_sites(barangay)
+        result = get_earthquake_evacuation_sites(barangay)
         status_code = 200 if not result.get("error") else 400
         return jsonify(result), status_code
     except Exception as e:
@@ -144,12 +144,12 @@ def earthquake_test_evac_sites():
             "message": str(e)
         }), 500
 
-@app.route("/earthquake-test/prewarm", methods=["POST"])
-def warm_earthquake_test():
+@app.route("/earthquake/prewarm", methods=["POST"])
+def warm_earthquake():
     try:
         data = request.get_json() or {}
         barangay = data.get("barangay")
-        result = prewarm_earthquake_test(barangay)
+        result = prewarm_earthquake(barangay)
         status_code = 200 if not result.get("error") else 400
         return jsonify(result), status_code
     except Exception as e:
@@ -158,13 +158,13 @@ def warm_earthquake_test():
             "message": str(e)
         }), 500
 
-@app.route("/earthquake-test/simulate", methods=["POST"])
-def run_earthquake_test():
+@app.route("/earthquake/simulate", methods=["POST"])
+def run_earthquake():
     try:
         data = request.get_json() or {}
         start = data.get("start")
         barangay = data.get("barangay")
-        result = simulate_earthquake_test(start, barangay)
+        result = simulate_earthquake(start, barangay)
         status_code = 200 if not result.get("error") else 400
         return jsonify(result), status_code
     except Exception as e:
