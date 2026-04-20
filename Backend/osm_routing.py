@@ -1138,7 +1138,7 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
     }
 
 
-def thesis_sort_key(route):
+def safety_sort_key(route):
     return (
         route["unsafe_distance"] > 0,
         route["unsafe_distance"],
@@ -1546,9 +1546,9 @@ def run_aco(G, start_node, end_node):
             debug_print("[ACO] Early stop: enough stable routes collected")
             break
 
-    candidate_routes = sorted(route_cache.values(), key=thesis_sort_key)
+    candidate_routes = sorted(route_cache.values(), key=safety_sort_key)
     candidate_routes = generate_supplemental_routes(G, start_node, end_node, candidate_routes)
-    candidate_routes = sorted(candidate_routes, key=thesis_sort_key)
+    candidate_routes = sorted(candidate_routes, key=safety_sort_key)
     for idx, route in enumerate(candidate_routes, start=1):
         route["candidate_route_no"] = idx
 

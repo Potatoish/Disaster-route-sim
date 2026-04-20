@@ -14,7 +14,6 @@ from osm_routing import (
     warm_static_caches,
 )
 
-
 def get_locations():
     nodes, _ = database.get_graph_data()
 
@@ -153,7 +152,6 @@ def prewarm_simulation(start, end, barangay=None):
             "error": True,
             "message": f"Warmup failed: {str(e)}"
         }
-
 
 def warm_startup_data():
     warm_static_caches()

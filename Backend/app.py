@@ -28,9 +28,10 @@ def locations():
     })
 
 @app.route("/barangay-boundary", methods=["GET"])
-def barangay_boundary():
+@app.route("/barangay-boundary/<path:name>", methods=["GET"])
+def barangay_boundary(name=None):
     try:
-        name = (request.args.get("name") or "").strip()
+        name = (name or request.args.get("name") or "").strip()
         if not name:
             return jsonify({
                 "error": True,

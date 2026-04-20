@@ -99,14 +99,18 @@ def get_hazard_data():
 
 def get_location_by_name(name):
     try:
+        normalized_name = (name or "").strip()
+        if not normalized_name:
+            return None
+
         conn = get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
             SELECT TOP 1 id, name, lat, lng, barangay
             FROM nodes
-            WHERE name = ?
-        """, (name,))
+            WHERE LTRIM(RTRIM(name)) = ?
+        """, (normalized_name,))
 
         row = cursor.fetchone()
         conn.close()

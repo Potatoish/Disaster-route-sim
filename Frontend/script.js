@@ -2336,7 +2336,7 @@ async function loadBarangayMapOnly(bgyName) {
   if (!nodes.length) return;
 
   try {
-    const res = await fetch(BACKEND + '/barangay-boundary?name=' + encodeURIComponent(bgyName));
+    const res = await fetch(BACKEND + '/barangay-boundary/' + encodeURIComponent(bgyName));
     const data = await res.json();
 
     if (!res.ok || data.error === true) {
