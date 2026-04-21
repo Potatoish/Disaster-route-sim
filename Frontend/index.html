@@ -14,7 +14,7 @@
 
 <div class="topbar">
   <div class="topbar-brand">
-    <img class="topbar-logo" src="assets/agnas-wordmark.png" alt="AGNAS logo">
+    <img class="topbar-logo" src="assets/agnas-logo.png" alt="AGNAS logo">
     <div class="topbar-copy">
     <div class="topbar-title">Ant Guided Navigation And Safety System</div>
     <div class="topbar-sub">Ant Colony Optimization - Lexicographic Safety-First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
@@ -101,7 +101,7 @@
               <div class="hazard-icon">&#9888;&#65039;</div>
               <div>
                 <div class="hazard-name">Earthquake</div>
-                <div class="hazard-sub">Setup in progress</div>
+                <div class="hazard-sub">Liquefaction / Ground shaking</div>
               </div>
             </div>
           </div>
@@ -224,16 +224,33 @@
           </div>
           <div class="loader-core-badge" id="loaderModeBadge">Route</div>
         </div>
+        <div class="loader-copy">
+          <div class="loader-stage-label">Current activity</div>
+          <div class="loader-steps" id="loaderSteps" hidden></div>
+        </div>
         <div class="loader-progress-shell">
           <div class="loader-progress-head">
-            <span class="loader-progress-label">Progress</span>
+            <span class="loader-progress-label">Estimated progress</span>
             <span class="loader-pct" id="loaderPct">0%</span>
           </div>
           <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="loader-bar" id="loaderBar"></div>
           </div>
         </div>
-        <div class="loader-steps" id="loaderSteps" hidden></div>
+      </div>
+    </div>
+
+    <div class="patience-notification" id="patienceNotice" hidden>
+      <div class="patience-content">
+        <div class="patience-copy">
+          <div class="patience-title" id="patienceTitle">Still working on your request</div>
+          <div class="patience-text" id="patienceText">
+            The system is still processing this route request. Larger or more complex areas can take longer.
+          </div>
+        </div>
+        <button class="patience-close" type="button" onclick="dismissPatienceNotification()" aria-label="Close loading notice">
+          &times;
+        </button>
       </div>
     </div>
 

@@ -26,20 +26,12 @@ const loaderState = {
   frameId: null,
   stage: '',
 };
-const LOADER_STAGES = [
-  { id: 'ready', label: 'Getting ready...' },
-  { id: 'load', label: 'Loading data...' },
-  { id: 'route', label: 'Finding routes...' },
-  { id: 'review', label: 'Reviewing results...' },
-  { id: 'draw', label: 'Drawing route map...' },
-  { id: 'complete', label: 'Routes ready.' },
-];
+const LOADER_PATIENCE_DELAY_MS = 8000;
+let loaderPatienceTimer = null;
+let loaderPatienceDismissed = false;
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
-const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
-const SIMULATION_WARMUP_TIMEOUT_MS = 120000;
 const SIMULATION_REQUEST_TIMEOUT_MS = 300000;
 const EARTHQUAKE_REQUEST_TIMEOUT_MS = 300000;
-const EARTHQUAKE_WARMUP_TIMEOUT_MS = 300000;
 const HAZARD_SELECTION_CLASSES = ['flood', 'earthquake'];
 const EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE = 'Pinagbuhatan and Sta. Lucia';
 const EARTHQUAKE_SUPPORTED_BARANGAY_PROMPT = 'Pinagbuhatan or Sta. Lucia';
@@ -290,13 +282,6 @@ const HAZARD_THEME_PALETTES = {
   },
 };
 let mapThemeTransitionTimer = null;
-let pendingSimulationWarmup = null;
-let pendingSimulationWarmupKey = '';
-let simulationWarmupTimer = null;
-const completedSimulationWarmups = new Set();
-let pendingEarthquakeWarmup = null;
-let pendingEarthquakeWarmupKey = '';
-const completedEarthquakeWarmups = new Set();
 let resultsResizeState = null;
 
 let ALL_LOCATIONS = [];
@@ -686,6 +671,15 @@ function setLoaderTitle(message) {
   }
 }
 
+function updateLoaderStepDetail(detail = '') {
+  const stepsContainer = document.getElementById('loaderSteps');
+  if (!stepsContainer) return;
+
+  const message = String(detail || '').trim();
+  stepsContainer.textContent = message;
+  stepsContainer.hidden = !message;
+}
+
 function getLoaderModeLabel() {
   const hazardLabel = String(selectedHazard || '').trim();
   if (!hazardLabel) {
@@ -717,11 +711,147 @@ function syncLoaderContext() {
   }
 }
 
-function setLoaderStep(title, progress, options = {}) {
-  const { stageId = '' } = options;
+function getLoaderStageCopy(stageId = '') {
+  const hazardKey = String(selectedHazard || '').trim().toLowerCase();
+
+  switch (stageId) {
+    case 'ready':
+      return {
+        title: 'Checking your choices',
+        detail: 'Making sure your selected area and route setup are complete.',
+      };
+    case 'load':
+      return {
+        title: 'Loading road and area details',
+        detail: hazardKey === 'earthquake'
+          ? 'Getting the road, site, and earthquake details needed for this run.'
+          : 'Getting the road and flood details needed for this run.',
+      };
+    case 'route':
+      return {
+        title: 'Looking for route options',
+        detail: hazardKey === 'earthquake'
+          ? 'Checking possible road paths from your start point to reachable evacuation sites.'
+          : 'Checking possible road paths between your selected points.',
+      };
+    case 'review':
+      return {
+        title: 'Preparing the results',
+        detail: 'Organizing the strongest route options and summary details.',
+      };
+    case 'draw':
+      return {
+        title: 'Showing the results',
+        detail: 'Opening the result panel and drawing the route on the map.',
+      };
+    case 'complete':
+      return {
+        title: 'Results are ready',
+        detail: 'You can now review the map and route details.',
+      };
+    case 'stopped':
+      return {
+        title: 'Simulation stopped',
+        detail: 'The request did not finish. Check the backend and try again.',
+      };
+    default:
+      return null;
+  }
+}
+
+function getPatienceNotificationCopy(stageId = loaderState.stage) {
+  switch (stageId) {
+    case 'load':
+      return {
+        title: 'Still loading the route details',
+        text: 'The system is still getting the road and area data needed for this request.',
+      };
+    case 'route':
+      return {
+        title: 'Still checking route options',
+        text: 'The system is still comparing possible road paths and safety data. This step usually takes the longest.',
+      };
+    case 'review':
+    case 'draw':
+      return {
+        title: 'Still preparing the result view',
+        text: 'The system already has your request and is finishing the route summary and map view.',
+      };
+    default:
+      return {
+        title: 'Still working on your request',
+        text: 'The system is still processing this route request. Larger or more complex areas can take longer.',
+      };
+  }
+}
+
+function updatePatienceNotification(stageId = loaderState.stage) {
+  const patienceTitle = document.getElementById('patienceTitle');
+  const patienceText = document.getElementById('patienceText');
+  const copy = getPatienceNotificationCopy(stageId);
+
+  if (patienceTitle) {
+    patienceTitle.textContent = copy.title;
+  }
+
+  if (patienceText) {
+    patienceText.textContent = copy.text;
+  }
+}
+
+function showPatienceNotification(stageId = loaderState.stage) {
+  const patienceNotice = document.getElementById('patienceNotice');
+  if (!patienceNotice || loaderPatienceDismissed) return;
+
+  updatePatienceNotification(stageId);
+  patienceNotice.hidden = false;
+}
+
+function dismissPatienceNotification() {
+  loaderPatienceDismissed = true;
+  const patienceNotice = document.getElementById('patienceNotice');
+  if (patienceNotice) {
+    patienceNotice.hidden = true;
+  }
+}
+
+function resetPatienceNotification() {
+  if (loaderPatienceTimer) {
+    window.clearTimeout(loaderPatienceTimer);
+    loaderPatienceTimer = null;
+  }
+
+  loaderPatienceDismissed = false;
+  const patienceNotice = document.getElementById('patienceNotice');
+  if (patienceNotice) {
+    patienceNotice.hidden = true;
+  }
+}
+
+function schedulePatienceNotification() {
+  resetPatienceNotification();
+  loaderPatienceTimer = window.setTimeout(() => {
+    loaderPatienceTimer = null;
+    showPatienceNotification(loaderState.stage);
+  }, LOADER_PATIENCE_DELAY_MS);
+}
+
+function setLoaderStep(stageIdOrTitle, progress, options = {}) {
+  const { stageId = '', title: overrideTitle = '', detail: overrideDetail = '' } = options;
+  const resolvedStageId = stageId || stageIdOrTitle;
+  const stageCopy = getLoaderStageCopy(resolvedStageId);
+  const title = overrideTitle || stageCopy?.title || stageIdOrTitle;
+  const detail = overrideDetail || stageCopy?.detail || '';
+
+  loaderState.stage = stageCopy ? resolvedStageId : '';
   setLoaderTitle(title);
   updateLoaderProgress(progress, options);
-  setLoaderActiveStage(stageId);
+  updateLoaderStepDetail(detail);
+
+  const patienceNotice = document.getElementById('patienceNotice');
+  if (patienceNotice && !patienceNotice.hidden) {
+    updatePatienceNotification(loaderState.stage);
+  }
 }
 
 function resetLoaderState() {
@@ -737,31 +867,14 @@ function resetLoaderState() {
   setLoaderTitle('Loading routes');
   updateLoaderProgress(0, { immediate: true });
   hideLoaderSteps();
-}
-
-function renderLoaderSteps(activeStageId = '') {
-  const stepsContainer = document.getElementById('loaderSteps');
-  if (!stepsContainer) return;
-
-  const currentStage = LOADER_STAGES.find(stage => stage.id === activeStageId);
-  stepsContainer.textContent = currentStage?.label || '';
-  stepsContainer.hidden = false;
-}
-
-function setLoaderActiveStage(stageId) {
-  loaderState.stage = stageId || '';
-  if (!loaderState.stage) {
-    hideLoaderSteps();
-    return;
-  }
-  renderLoaderSteps(loaderState.stage);
+  resetPatienceNotification();
 }
 
 function hideLoaderSteps() {
   const stepsContainer = document.getElementById('loaderSteps');
   if (stepsContainer) {
     stepsContainer.hidden = true;
-    stepsContainer.innerHTML = '';
+    stepsContainer.textContent = '';
   }
 }
 
@@ -943,6 +1056,9 @@ async function loadLocationsFromBackend() {
     }
 
     ALL_LOCATIONS = (data.locations || []).map(normalizeLocation);
+    if (!ALL_LOCATIONS.length) {
+      throw new Error('No node locations were returned by the backend.');
+    }
     LOCATIONS_BY_BARANGAY = groupLocationsByBarangay(ALL_LOCATIONS);
     setBarangayCardStates();
 
@@ -1230,31 +1346,6 @@ function getCurrentSelections() {
   };
 }
 
-function buildSimulationWarmupKey({ barangay, hazard, start, end }) {
-  return [barangay || '', hazard || '', start || '', end || '']
-    .map(value => String(value).trim().toLowerCase())
-    .join('::');
-}
-
-function clearPendingSimulationWarmup() {
-  if (simulationWarmupTimer) {
-    window.clearTimeout(simulationWarmupTimer);
-    simulationWarmupTimer = null;
-  }
-
-  pendingSimulationWarmup = null;
-  pendingSimulationWarmupKey = '';
-}
-
-function buildEarthquakeWarmupKey(barangay = selectedBarangay) {
-  return String(barangay || '').trim().toLowerCase();
-}
-
-function clearPendingEarthquakeWarmup() {
-  pendingEarthquakeWarmup = null;
-  pendingEarthquakeWarmupKey = '';
-}
-
 async function parseBackendJsonResponse(res) {
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
@@ -1410,187 +1501,6 @@ async function sendEarthquakeRequest(payload) {
   }
 
   throw lastError || new Error('Earthquake simulation failed');
-}
-
-async function sendEarthquakePrewarmRequest(payload) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    let statusCode = 0;
-
-    try {
-      const { response, data } = await postJsonWithTimeout(
-        '/earthquake/prewarm',
-        payload,
-        EARTHQUAKE_WARMUP_TIMEOUT_MS
-      );
-      statusCode = response.status;
-
-      if (!response.ok || data?.error === true) {
-        throw new Error(data?.message || 'Earthquake routing preparation failed');
-      }
-
-      return data;
-    } catch (error) {
-      lastError = error;
-
-      if (attempt === 1 || !shouldRetrySimulationRequest(error, statusCode)) {
-        break;
-      }
-
-      await new Promise(resolve => window.setTimeout(resolve, 450));
-    }
-  }
-
-  if (isRequestTimeoutError(lastError)) {
-    throw new Error(
-      `Earthquake routing preparation took longer than ${formatTimeoutForHumans(EARTHQUAKE_WARMUP_TIMEOUT_MS)} in the browser and was stopped. Check the backend connection and try again.`
-    );
-  }
-
-  throw lastError || new Error('Earthquake routing preparation failed');
-}
-
-async function prewarmEarthquakeContext(barangay, warmupKey) {
-  try {
-    await sendEarthquakePrewarmRequest({ barangay });
-    completedEarthquakeWarmups.add(warmupKey);
-    return true;
-  } catch (error) {
-    console.warn('Earthquake warmup skipped:', error);
-    return false;
-  } finally {
-    if (pendingEarthquakeWarmupKey === warmupKey) {
-      pendingEarthquakeWarmup = null;
-    }
-  }
-}
-
-function scheduleEarthquakeWarmup(barangay = selectedBarangay) {
-  if (!isEarthquakeMode() || !isEarthquakeBarangaySupported(barangay) || !earthquakeEvacSitesVisible) {
-    clearPendingEarthquakeWarmup();
-    return;
-  }
-
-  const warmupKey = buildEarthquakeWarmupKey(barangay);
-  if (!warmupKey || completedEarthquakeWarmups.has(warmupKey) || pendingEarthquakeWarmupKey === warmupKey) {
-    return;
-  }
-
-  pendingEarthquakeWarmupKey = warmupKey;
-  pendingEarthquakeWarmup = prewarmEarthquakeContext(barangay, warmupKey);
-}
-
-async function ensureEarthquakeWarmup(barangay = selectedBarangay) {
-  if (!isEarthquakeMode() || !isEarthquakeBarangaySupported(barangay)) {
-    return false;
-  }
-
-  const warmupKey = buildEarthquakeWarmupKey(barangay);
-  if (!warmupKey) {
-    return false;
-  }
-
-  if (completedEarthquakeWarmups.has(warmupKey)) {
-    return true;
-  }
-
-  if (pendingEarthquakeWarmupKey === warmupKey && pendingEarthquakeWarmup) {
-    return await pendingEarthquakeWarmup;
-  }
-
-  pendingEarthquakeWarmupKey = warmupKey;
-  pendingEarthquakeWarmup = prewarmEarthquakeContext(barangay, warmupKey);
-  return await pendingEarthquakeWarmup;
-}
-
-async function prewarmSimulationContext(start, end, warmupKey) {
-  try {
-    const { response, data } = await postJsonWithTimeout(
-      '/prewarm-simulation',
-      {
-        start,
-        end,
-        barangay: selectedBarangay,
-      },
-      SIMULATION_WARMUP_TIMEOUT_MS
-    );
-
-    if (response.ok && data?.error !== true) {
-      completedSimulationWarmups.add(warmupKey);
-      return true;
-    }
-
-    throw new Error(data?.message || 'Warmup failed');
-  } catch (error) {
-    console.warn('Simulation warmup skipped:', error);
-    return false;
-  }
-}
-
-function scheduleSimulationWarmup(start, end) {
-  if (!isBackendLive || !selectedBarangay || !selectedHazard || !start || !end || start === end) {
-    clearPendingSimulationWarmup();
-    return;
-  }
-
-  const warmupKey = buildSimulationWarmupKey(getCurrentSelections());
-  const hasMatchingWarmupInFlight = pendingSimulationWarmupKey === warmupKey
-    && (!!pendingSimulationWarmup || !!simulationWarmupTimer);
-
-  if (completedSimulationWarmups.has(warmupKey) || hasMatchingWarmupInFlight) {
-    return;
-  }
-
-  clearPendingSimulationWarmup();
-  pendingSimulationWarmupKey = warmupKey;
-
-  simulationWarmupTimer = window.setTimeout(() => {
-    simulationWarmupTimer = null;
-    const activeWarmupKey = warmupKey;
-
-    pendingSimulationWarmup = prewarmSimulationContext(start, end, activeWarmupKey)
-      .finally(() => {
-        if (pendingSimulationWarmupKey === activeWarmupKey) {
-          pendingSimulationWarmup = null;
-        }
-      });
-  }, SIMULATION_WARMUP_DEBOUNCE_MS);
-}
-
-async function ensureSimulationWarmup(start, end) {
-  if (!isBackendLive || !selectedBarangay || !selectedHazard || !start || !end || start === end) {
-    return false;
-  }
-
-  const warmupKey = buildSimulationWarmupKey(getCurrentSelections());
-  if (completedSimulationWarmups.has(warmupKey)) {
-    return true;
-  }
-
-  if (pendingSimulationWarmupKey === warmupKey && pendingSimulationWarmup) {
-    return await pendingSimulationWarmup;
-  }
-
-  if (pendingSimulationWarmupKey !== warmupKey) {
-    clearPendingSimulationWarmup();
-    pendingSimulationWarmupKey = warmupKey;
-  }
-
-  if (simulationWarmupTimer) {
-    window.clearTimeout(simulationWarmupTimer);
-    simulationWarmupTimer = null;
-  }
-
-  const activeWarmupKey = warmupKey;
-  pendingSimulationWarmup = prewarmSimulationContext(start, end, activeWarmupKey)
-    .finally(() => {
-      if (pendingSimulationWarmupKey === activeWarmupKey) {
-        pendingSimulationWarmup = null;
-      }
-    });
-
-  return await pendingSimulationWarmup;
 }
 
 function setRouteSelectorsEnabled(enabled) {
@@ -1925,8 +1835,6 @@ function populateBarangayNodeSelectors(name) {
 function clearBarangaySelections(options = {}) {
   const { keepResults = false, keepInfoText = false } = options;
 
-  clearPendingSimulationWarmup();
-  clearPendingEarthquakeWarmup();
   floodHazardOverlayMode = 'none';
   resetEarthquakeState({ clearResults: !keepResults });
   hideFallbackWarningModal();
@@ -2422,7 +2330,7 @@ function drawNode(n, start, end) {
     position: { lat: n.lat, lng: n.lng },
     map: gMap,
     title: n.name,
-    zIndex: 10,
+    zIndex: special ? 34 : 10,
     icon: special
       ? makeRouteEndpointPinIcon(role)
       : {
@@ -2484,32 +2392,50 @@ function makeRouteEndpointPinIcon(kind = 'start') {
   const isStart = kind === 'start';
   const fill = isStart ? '#a855f7' : '#06b6d4';
   const stroke = isStart ? '#6b21a8' : '#155e75';
-  const halo = isStart ? 'rgba(168,85,247,0.18)' : 'rgba(6,182,212,0.18)';
   const glyph = isStart ? 'S' : 'E';
-  const label = isStart ? 'START' : 'END';
+  const outerGlow = isStart ? 'rgba(168,85,247,0.22)' : 'rgba(6,182,212,0.22)';
+  const innerFill = isStart ? '#9333ea' : '#0891b2';
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="88" height="104" viewBox="0 0 88 104">
+    <svg xmlns="http://www.w3.org/2000/svg" width="72" height="88" viewBox="0 0 72 88">
       <defs>
-        <filter id="nodePinShadow" x="-20%" y="-20%" width="140%" height="160%">
+        <filter id="routePinShadow" x="-20%" y="-20%" width="140%" height="160%">
           <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="rgba(15,23,42,0.24)"/>
         </filter>
+        <linearGradient id="routePinGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${fill}" />
+          <stop offset="100%" stop-color="${innerFill}" />
+        </linearGradient>
       </defs>
-      <circle cx="44" cy="34" r="28" fill="${halo}" />
-      <g filter="url(#nodePinShadow)">
-        <path d="M44 8C27.4 8 14 21.4 14 38c0 20.7 22.7 36 30 50 7.3-14 30-29.3 30-50C74 21.4 60.6 8 44 8z"
-          fill="${fill}" stroke="${stroke}" stroke-width="3"/>
-        <circle cx="44" cy="37" r="17" fill="#ffffff" opacity="0.98"/>
-        <text x="44" y="43" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="16" font-weight="800" fill="${stroke}">${glyph}</text>
-        <rect x="18" y="73" width="52" height="16" rx="8" fill="#ffffff" opacity="0.98"/>
-        <text x="44" y="84" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="8.5" font-weight="800" fill="${stroke}">${label}</text>
+      <g filter="url(#routePinShadow)">
+        <ellipse cx="36" cy="77" rx="13" ry="4.5" fill="rgba(15,23,42,0.10)" />
+        <circle cx="36" cy="31" r="25.5" fill="${outerGlow}" />
+        <path
+          d="M36 9C22.8 9 12 19.7 12 32.9c0 17.7 18.8 29.5 24 45.1 5.2-15.6 24-27.4 24-45.1C60 19.7 49.2 9 36 9z"
+          fill="url(#routePinGrad)"
+          stroke="#ffffff"
+          stroke-width="4.8"
+          stroke-linejoin="round"
+        />
+        <path
+          d="M36 9C22.8 9 12 19.7 12 32.9c0 17.7 18.8 29.5 24 45.1 5.2-15.6 24-27.4 24-45.1C60 19.7 49.2 9 36 9z"
+          fill="none"
+          stroke="${stroke}"
+          stroke-width="2"
+          stroke-linejoin="round"
+          opacity="0.88"
+        />
+        <circle cx="36" cy="33" r="14.8" fill="#ffffff" opacity="0.99"/>
+        <circle cx="36" cy="33" r="10.8" fill="${innerFill}" opacity="0.98"/>
+        <circle cx="31.5" cy="24.5" r="4.1" fill="rgba(255,255,255,0.28)" />
+        <text x="36" y="38" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="12.8" font-weight="900" fill="#ffffff">${glyph}</text>
       </g>
     </svg>
   `;
 
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new google.maps.Size(48, 58),
-    anchor: new google.maps.Point(24, 51),
+    scaledSize: new google.maps.Size(48, 60),
+    anchor: new google.maps.Point(24, 55),
   };
 }
 
@@ -2530,7 +2456,7 @@ function drawSelectedPinsOnly(start, end) {
       position: { lat: n.lat, lng: n.lng },
       map: gMap,
       title: n.name,
-      zIndex: 20,
+      zIndex: 36,
       icon: makeRouteEndpointPinIcon(n.name === start ? 'start' : 'end')
     });
 
@@ -2701,8 +2627,6 @@ function onNodeChange() {
         });
       }
     }
-    clearPendingSimulationWarmup();
-
     if (!isEarthquakeBarangaySupported()) {
       document.getElementById('infoBox').innerHTML =
         `<strong>Earthquake Routing</strong> is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`;
@@ -2719,9 +2643,9 @@ function onNodeChange() {
       document.getElementById('infoBox').innerHTML =
         `Evacuation sites are loaded. Click <strong>Run Earthquake Simulation</strong> when you are ready.`;
     }
+
   } else {
     if (start || end) drawSelectedPinsOnly(start, end);
-    clearPendingSimulationWarmup();
 
     if (canRun) {
       document.getElementById('infoBox').innerHTML =
@@ -2739,6 +2663,7 @@ function onNodeChange() {
       document.getElementById('infoBox').innerHTML =
         `Choose a <strong>start node</strong> from the dropdown.`;
     }
+
   }
 
   syncEarthquakeRouteUi();
@@ -2879,7 +2804,7 @@ function getStepValue(step) {
   }
   if (step === 5) {
     if (isEarthquakeMode()) {
-      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Complete earthquake setup';
+      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Continue earthquake routing';
     }
     return selectedHazard && start && end && start !== end ? 'Ready to simulate' : 'Complete selections first';
   }
@@ -3064,10 +2989,6 @@ async function resetRouteSelection() {
   await loadBarangayMapOnly(selectedBarangay);
   syncEarthquakeRouteUi();
 }
-
-function initStepNavigation() {}
-
-function goToStep() {}
 
 function advanceStep(n) {
   const completed = getCompletedSteps();
@@ -3280,7 +3201,6 @@ async function showEvacuationSites() {
         `<strong>${earthquakeEvacSites.length}</strong> evacuation site(s) are now visible. Click <strong>Run Earthquake Simulation</strong> to route to the nearest road-reachable site.`;
     }
     fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
-    clearPendingEarthquakeWarmup();
   } catch (err) {
     console.error(err);
     alert('Failed to load evacuation sites: ' + err.message);
@@ -3339,9 +3259,28 @@ async function runSimulation() {
   const runBtn = document.getElementById('runBtn');
   const statusTxt = document.getElementById('statusTxt');
   let loaderHideDelay = 420;
+  let loaderHideTimer = null;
+  let loaderHidden = false;
+
+  const hideLoader = (delay = 0) => {
+    if (loaderHidden) return;
+    loaderHidden = true;
+    resetPatienceNotification();
+
+    if (loaderHideTimer) {
+      window.clearTimeout(loaderHideTimer);
+    }
+
+    loaderHideTimer = window.setTimeout(() => {
+      loader.classList.remove('show');
+      resetLoaderState();
+      loaderHideTimer = null;
+    }, delay);
+  };
 
   resetLoaderState();
   syncLoaderContext();
+  schedulePatienceNotification();
   loader.classList.add('show');
   setSimulationInProgress(true);
   runBtn.disabled = true;
@@ -3349,24 +3288,24 @@ async function runSimulation() {
   document.getElementById('infoBox').innerHTML =
     `Simulation is now <strong>running</strong>. The selected barangay, disaster type, and node inputs are <strong>temporarily locked</strong> until the results are ready.`;
   setLoaderStep(
-    'Getting everything ready',
-    5,
-    { immediate: true, stageId: 'ready' }
+    'ready',
+    8,
+    { immediate: true }
   );
 
   try {
     let result;
     if (isEarthquakeMode()) {
-      clearPendingEarthquakeWarmup();
-      setLoaderStep('Loading earthquake data', 20, { stageId: 'load' });
-      setLoaderStep('Finding routes', 50, { stageId: 'route' });
+      setLoaderStep('load', 22);
+      setLoaderStep('route', 50);
+      statusTxt.textContent = 'Simulating…';
 
       result = await sendEarthquakeRequest({
         start,
         barangay: selectedBarangay,
         hazard: selectedHazard,
       });
-      setLoaderStep('Reviewing results', 75, { stageId: 'review' });
+      setLoaderStep('review', 76);
 
       result.hazard_layers = result.hazard_layers || {};
       Object.entries(result.views || {}).forEach(([viewKey, viewData]) => {
@@ -3380,15 +3319,18 @@ async function runSimulation() {
       hydrateActiveEarthquakeView(result.active_view || 'overall');
       earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
       earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
-      setLoaderStep('Drawing route map', 90, { stageId: 'draw' });
+      showResultsPanel(simData);
+      setLoaderStep('draw', 92);
+      statusTxt.textContent = 'Opening results…';
+      loaderHideDelay = 140;
+      hideLoader(loaderHideDelay);
       syncEarthquakeViewSelector();
       clearBoundaryLayers();
       await renderActiveSimulationRoutes();
-      showResultsPanel(simData);
     } else {
-      clearPendingSimulationWarmup();
-      setLoaderStep('Loading flood data', 20, { stageId: 'load' });
-      setLoaderStep('Finding routes', 50, { stageId: 'route' });
+      setLoaderStep('load', 22);
+      setLoaderStep('route', 50);
+      statusTxt.textContent = 'Simulating…';
 
       result = await sendSimulationRequest({
         start,
@@ -3400,14 +3342,16 @@ async function runSimulation() {
         normalizeRoutes(result.routes || [])
       );
 
-      setLoaderStep('Reviewing results', 75, { stageId: 'review' });
+      setLoaderStep('review', 76);
       simData = result;
-      setLoaderStep('Drawing route map', 90, { stageId: 'draw' });
+      showResultsPanel(simData);
+      setLoaderStep('draw', 92);
+      statusTxt.textContent = 'Opening results…';
+      loaderHideDelay = 140;
+      hideLoader(loaderHideDelay);
       clearBoundaryLayers();
       setFloodLegendContent();
       await renderActiveSimulationRoutes();
-      showResultsPanel(simData);
-      showResultsPanel(result);
     }
 
     selectedRouteFocus = null;
@@ -3420,20 +3364,20 @@ async function runSimulation() {
     setSimulationConfigLocked(true);
     updateMapContextBadge();
 
-    setLoaderStep('Routes are ready', 100, { stageId: 'complete' });
+    setLoaderStep('complete', 100);
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
     console.error(err);
     statusTxt.textContent = 'Error';
-    setLoaderStep('Simulation could not finish', 100);
+    setLoaderStep('stopped', 100);
     loaderHideDelay = 320;
     alert('Simulation failed: ' + err.message);
   } finally {
     setSimulationInProgress(false);
-    window.setTimeout(() => {
-      loader.classList.remove('show');
-      resetLoaderState();
-    }, loaderHideDelay);
+    resetPatienceNotification();
+    if (!loaderHidden) {
+      hideLoader(loaderHideDelay);
+    }
     runBtn.disabled = isSimulationInteractionLocked();
     syncSimulationConfigLock();
   }
@@ -3629,20 +3573,20 @@ function createRoutePreview(group) {
 
   const haloArrowSymbol = {
     path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 7.8,
+    scale: 8.6,
     fillColor: '#ffffff',
-    fillOpacity: 0.98,
+    fillOpacity: 0.99,
     strokeColor: '#ffffff',
-    strokeWeight: 3,
+    strokeWeight: 3.6,
   };
 
   const arrowSymbol = {
     path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 6.2,
+    scale: 6.7,
     fillColor: previewColor,
     fillOpacity: 1,
     strokeColor: '#0f172a',
-    strokeWeight: 1.8,
+    strokeWeight: 1.9,
   };
 
   group.previewDotsHaloLayer = new google.maps.Polyline({
@@ -3680,7 +3624,7 @@ function createRoutePreview(group) {
     clickable: false,
     icons: [{
       icon: haloArrowSymbol,
-      offset: '0%',
+      offset: '3%',
     }],
     map: gMap,
     zIndex: 20,
@@ -3693,7 +3637,7 @@ function createRoutePreview(group) {
     clickable: false,
       icons: [{
         icon: arrowSymbol,
-        offset: '0%',
+        offset: '3%',
       }],
       map: gMap,
       zIndex: 21,
@@ -3975,8 +3919,6 @@ function downloadCSV() {
 
 function resetAll() {
   if (simulationInProgress) return;
-  clearPendingSimulationWarmup();
-  clearPendingEarthquakeWarmup();
   floodHazardOverlayMode = 'none';
   resetEarthquakeState({ clearResults: true });
   hideFallbackWarningModal();
@@ -4123,7 +4065,6 @@ window.focusRouteSelection = function focusRouteSelection(routeNo, category, swi
 };
 
 window.clearRouteAnimation = clearRouteAnimation;
-window.goToStep = goToStep;
 window.startResultsResize = startResultsResize;
 window.initMap = initMap;
 window.handleRouteRowKey = handleRouteRowKey;
@@ -4133,7 +4074,6 @@ window.showEvacuationSites = showEvacuationSites;
 window.switchEarthquakeView = switchEarthquakeView;
 
 syncLoaderContext();
-initStepNavigation();
 setFloodLegendContent();
 syncEarthquakeRouteUi();
 syncEarthquakeViewSelector();
