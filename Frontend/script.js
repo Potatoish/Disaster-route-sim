@@ -2879,7 +2879,7 @@ function getStepValue(step) {
   }
   if (step === 5) {
     if (isEarthquakeMode()) {
-      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Complete earthquake setup';
+      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Continue earthquake routing';
     }
     return selectedHazard && start && end && start !== end ? 'Ready to simulate' : 'Complete selections first';
   }
