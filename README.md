@@ -131,9 +131,7 @@ Main backend endpoints include:
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`
 - `POST /simulate`
-- `POST /prewarm-simulation`
 - `GET /earthquake/evac-sites`
-- `POST /earthquake/prewarm`
 - `POST /earthquake/simulate`
 
 ## Notes

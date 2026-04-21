@@ -23,10 +23,12 @@ MAX_ROUTE_SEARCH_RADIUS_METERS = 4500.0
 ROUTE_SEARCH_RADIUS_BUFFER_METERS = 500.0
 ROUTE_SEARCH_RADIUS_DISTANCE_FACTOR = 0.9
 ROUTE_STITCH_SNAP_TOLERANCE_METERS = 12.0
+ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS = 90.0
 MAX_ENDPOINT_NODE_EXTRA_DISTANCE_METERS = 90.0
 MAX_ENDPOINT_NODE_DISTANCE_RATIO = 6.0
 MAX_ENDPOINT_NODE_DISTANCE_CAP_METERS = 160.0
 ENDPOINT_NODE_CANDIDATE_LIMIT = 25
+GRAPH_NETWORK_TYPE = "walk"
 
 ACO_MAX_ROUTE_STEPS_MULTIPLIER = 2.5
 ACO_MIN_ROUTE_STEPS = 25
@@ -50,16 +52,21 @@ DISTANCE_WEIGHT = 0.20
 UNSAFE_PENALTY = 1_000_000.0
 TOP_ACO_REINFORCERS = 3
 DEBUG = True
+FLOOD_GRAPH_ANNOTATION_VERSION = 1
 
 DISCOURAGED_ENDPOINT_HIGHWAYS = {"track"}
 DISCOURAGED_ENDPOINT_SERVICE_VALUES = {"driveway", "parking_aisle", "parking", "alley"}
 BLOCKED_ENDPOINT_ACCESS_VALUES = {"private", "no"}
 
 _GRAPH_CACHE = {}
+_BARANGAY_BASE_GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
 _FLOOD_LAYER_PAYLOAD_CACHE = {}
 _BARANGAY_BOUNDARIES_CACHE = None
-_GRAPH_PREP_LOCK = RLock()
+_STATIC_CACHE_LOCK = RLock()
+_GRAPH_BUILD_LOCK = RLock()
+_GRAPH_ANNOTATION_LOCK = RLock()
+_BARANGAY_BASE_GRAPH_LOCK = RLock()
 
 
 def get_runtime_cache_dir():
@@ -92,6 +99,7 @@ ox.settings.cache_folder = str(OSMNX_CACHE_DIR)
 
 FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
 BOUNDARIES_DIR = Path(__file__).parent / "data" / "boundaries"
+GRAPHS_DIR = Path(__file__).parent / "data" / "graphs"
 FLOOD_ZONE_FILES = [
     FLOOD_CLASSES_DIR / "flood_var_1.geojson",
     FLOOD_CLASSES_DIR / "flood_var_2.geojson",
@@ -101,6 +109,14 @@ FLOOD_ZONE_FILES = [
 BARANGAY_BOUNDARY_FILES = {
     "pinagbuhatan": BOUNDARIES_DIR / "pinagbuhatan boundary.geojson",
     "sta lucia": BOUNDARIES_DIR / "Sta lucia boundary.geojson",
+}
+BARANGAY_BASE_GRAPH_FILES = {
+    "pinagbuhatan": GRAPHS_DIR / "pinagbuhatan_walk.graphml",
+    "sta lucia": GRAPHS_DIR / "sta_lucia_walk.graphml",
+}
+LEGACY_BARANGAY_BASE_GRAPH_FILES = {
+    "pinagbuhatan": GRAPHS_DIR / "pinagbuhatan_drive.graphml",
+    "sta lucia": GRAPHS_DIR / "sta_lucia_drive.graphml",
 }
 
 VAR_TO_HAZARD = {
@@ -114,7 +130,7 @@ FLOOD_VAR_RISK_LABELS = {
     3: "High",
 }
 METERS_PER_DEGREE = 111_320.0
-FLOOD_LAYER_BUFFER_METERS = 450.0
+FLOOD_LAYER_BUFFER_METERS = 800.0
 FLOOD_LAYER_SIMPLIFY_TOLERANCE = 0.00003
 FLOOD_LAYER_SIMPLIFY_TOLERANCE_BUFFER = 0.00008
 FLOOD_LAYER_SIMPLIFY_TOLERANCE_CITY = 0.00018
@@ -161,6 +177,16 @@ def point_distance_meters(point_a, point_b):
     )
 
 
+def build_route_point(lat, lng):
+    if lat is None or lng is None:
+        return None
+
+    return {
+        "lat": float(lat),
+        "lng": float(lng),
+    }
+
+
 def normalize_barangay_name(name):
     if name is None:
         return ""
@@ -185,68 +211,72 @@ def load_flood_zones():
     if _FLOOD_ZONES_CACHE is not None:
         return _FLOOD_ZONES_CACHE
 
-    flood_zones = []
+    with _STATIC_CACHE_LOCK:
+        if _FLOOD_ZONES_CACHE is not None:
+            return _FLOOD_ZONES_CACHE
 
-    for file_path in FLOOD_ZONE_FILES:
-        if not file_path.exists():
-            raise FileNotFoundError(f"Flood zone file not found: {file_path}")
+        flood_zones = []
 
-        with file_path.open("r", encoding="utf-8-sig") as f:
-            data = json.load(f)
+        for file_path in FLOOD_ZONE_FILES:
+            if not file_path.exists():
+                raise FileNotFoundError(f"Flood zone file not found: {file_path}")
 
-        if data.get("type") != "FeatureCollection":
-            raise ValueError(
-                f"Invalid GeoJSON type in {file_path.name}: expected FeatureCollection"
-            )
+            with file_path.open("r", encoding="utf-8-sig") as f:
+                data = json.load(f)
 
-        features = data.get("features", [])
-        if len(features) != 1:
-            raise ValueError(
-                f"Expected exactly 1 feature in {file_path.name}, found {len(features)}"
-            )
+            if data.get("type") != "FeatureCollection":
+                raise ValueError(
+                    f"Invalid GeoJSON type in {file_path.name}: expected FeatureCollection"
+                )
 
-        feature = features[0]
-        properties = feature.get("properties") or {}
-        geometry_data = feature.get("geometry")
+            features = data.get("features", [])
+            if len(features) != 1:
+                raise ValueError(
+                    f"Expected exactly 1 feature in {file_path.name}, found {len(features)}"
+                )
 
-        if geometry_data is None:
-            raise ValueError(f"Missing geometry in {file_path.name}")
+            feature = features[0]
+            properties = feature.get("properties") or {}
+            geometry_data = feature.get("geometry")
 
-        if "Var" not in properties:
-            raise ValueError(f"Missing 'Var' property in {file_path.name}")
+            if geometry_data is None:
+                raise ValueError(f"Missing geometry in {file_path.name}")
 
-        var_value = int(properties["Var"])
-        hazard_value = map_flood_var_to_hazard(var_value)
+            if "Var" not in properties:
+                raise ValueError(f"Missing 'Var' property in {file_path.name}")
 
-        geom = shape(geometry_data)
-        if geom.is_empty:
-            raise ValueError(f"Empty geometry in {file_path.name}")
+            var_value = int(properties["Var"])
+            hazard_value = map_flood_var_to_hazard(var_value)
 
-        flood_zones.append({
-            "var": var_value,
-            "hazard": hazard_value,
-            "geometry": geom,
-            "prepared": prep(geom),
-            "source_file": file_path.name,
-        })
+            geom = shape(geometry_data)
+            if geom.is_empty:
+                raise ValueError(f"Empty geometry in {file_path.name}")
 
-    flood_zones.sort(key=lambda zone: zone["hazard"], reverse=True)
-    _FLOOD_ZONES_CACHE = flood_zones
+            flood_zones.append({
+                "var": var_value,
+                "hazard": hazard_value,
+                "geometry": geom,
+                "prepared": prep(geom),
+                "source_file": file_path.name,
+            })
 
-    debug_print(
-        "[FLOOD] Loaded zones:",
-        [
-            {
-                "file": zone["source_file"],
-                "var": zone["var"],
-                "hazard": zone["hazard"],
-                "geom_type": zone["geometry"].geom_type,
-            }
-            for zone in _FLOOD_ZONES_CACHE
-        ]
-    )
+        flood_zones.sort(key=lambda zone: zone["hazard"], reverse=True)
+        _FLOOD_ZONES_CACHE = flood_zones
 
-    return _FLOOD_ZONES_CACHE
+        debug_print(
+            "[FLOOD] Loaded zones:",
+            [
+                {
+                    "file": zone["source_file"],
+                    "var": zone["var"],
+                    "hazard": zone["hazard"],
+                    "geom_type": zone["geometry"].geom_type,
+                }
+                for zone in _FLOOD_ZONES_CACHE
+            ]
+        )
+
+        return _FLOOD_ZONES_CACHE
 
 
 def load_barangay_boundaries():
@@ -255,69 +285,73 @@ def load_barangay_boundaries():
     if _BARANGAY_BOUNDARIES_CACHE is not None:
         return _BARANGAY_BOUNDARIES_CACHE
 
-    boundaries = {}
+    with _STATIC_CACHE_LOCK:
+        if _BARANGAY_BOUNDARIES_CACHE is not None:
+            return _BARANGAY_BOUNDARIES_CACHE
 
-    for canonical_name, file_path in BARANGAY_BOUNDARY_FILES.items():
-        if not file_path.exists():
-            debug_print(f"[BOUNDARY] File not found for {canonical_name}: {file_path}")
-            continue
+        boundaries = {}
 
-        with file_path.open("r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-
-        features = data.get("features", [])
-        if not features:
-            debug_print(f"[BOUNDARY] No features found in {file_path.name}")
-            continue
-
-        polygon_geometries = []
-        display_name = canonical_name.title()
-
-        for feature in features:
-            geometry_data = feature.get("geometry")
-            if geometry_data is None:
+        for canonical_name, file_path in BARANGAY_BOUNDARY_FILES.items():
+            if not file_path.exists():
+                debug_print(f"[BOUNDARY] File not found for {canonical_name}: {file_path}")
                 continue
 
-            geom = shape(geometry_data)
-            if geom.is_empty or geom.geom_type not in {"Polygon", "MultiPolygon"}:
+            with file_path.open("r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+
+            features = data.get("features", [])
+            if not features:
+                debug_print(f"[BOUNDARY] No features found in {file_path.name}")
                 continue
 
-            polygon_geometries.append(geom)
+            polygon_geometries = []
+            display_name = canonical_name.title()
 
-            feature_name = (feature.get("properties") or {}).get("name")
-            if feature_name:
-                display_name = feature_name
+            for feature in features:
+                geometry_data = feature.get("geometry")
+                if geometry_data is None:
+                    continue
 
-        if not polygon_geometries:
-            debug_print(f"[BOUNDARY] No polygon geometry found in {file_path.name}")
-            continue
+                geom = shape(geometry_data)
+                if geom.is_empty or geom.geom_type not in {"Polygon", "MultiPolygon"}:
+                    continue
 
-        geom = (
-            polygon_geometries[0]
-            if len(polygon_geometries) == 1
-            else unary_union(polygon_geometries)
+                polygon_geometries.append(geom)
+
+                feature_name = (feature.get("properties") or {}).get("name")
+                if feature_name:
+                    display_name = feature_name
+
+            if not polygon_geometries:
+                debug_print(f"[BOUNDARY] No polygon geometry found in {file_path.name}")
+                continue
+
+            geom = (
+                polygon_geometries[0]
+                if len(polygon_geometries) == 1
+                else unary_union(polygon_geometries)
+            )
+            if geom.is_empty:
+                debug_print(f"[BOUNDARY] Empty geometry in {file_path.name}")
+                continue
+
+            boundaries[canonical_name] = {
+                "canonical_name": canonical_name,
+                "display_name": display_name,
+                "geometry": geom,
+                "prepared": prep(geom),
+                "source_file": file_path.name,
+            }
+
+        _BARANGAY_BOUNDARIES_CACHE = boundaries
+        debug_print(
+            "[BOUNDARY] Loaded:",
+            {
+                name: boundary["source_file"]
+                for name, boundary in boundaries.items()
+            }
         )
-        if geom.is_empty:
-            debug_print(f"[BOUNDARY] Empty geometry in {file_path.name}")
-            continue
-
-        boundaries[canonical_name] = {
-            "canonical_name": canonical_name,
-            "display_name": display_name,
-            "geometry": geom,
-            "prepared": prep(geom),
-            "source_file": file_path.name,
-        }
-
-    _BARANGAY_BOUNDARIES_CACHE = boundaries
-    debug_print(
-        "[BOUNDARY] Loaded:",
-        {
-            name: boundary["source_file"]
-            for name, boundary in boundaries.items()
-        }
-    )
-    return _BARANGAY_BOUNDARIES_CACHE
+        return _BARANGAY_BOUNDARIES_CACHE
 
 
 def get_barangay_boundary(name):
@@ -461,9 +495,8 @@ def build_flood_hazard_layer_payload(name=None, vars_filter=None, clip_scope="ba
 
 
 def warm_static_caches():
-    with _GRAPH_PREP_LOCK:
-        load_flood_zones()
-        load_barangay_boundaries()
+    load_flood_zones()
+    load_barangay_boundaries()
 
 def get_edge_geometry(G, u, v, data):
     edge_geom = data.get("geometry")
@@ -520,11 +553,11 @@ def resolve_point_hazard(lat, lng, flood_zones=None):
 
 def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters, scope_name=None):
     if scope_name:
-        return ("scope", normalize_barangay_name(scope_name), int(round(dist_meters)))
+        return ("scope", GRAPH_NETWORK_TYPE, normalize_barangay_name(scope_name), int(round(dist_meters)))
 
     center_lat = round((start_lat + end_lat) / 2, 3)
     center_lng = round((start_lng + end_lng) / 2, 3)
-    return (center_lat, center_lng, dist_meters)
+    return (GRAPH_NETWORK_TYPE, center_lat, center_lng, dist_meters)
 
 
 def estimate_boundary_graph_radius(boundary_geometry):
@@ -563,6 +596,77 @@ def estimate_route_search_radius(start_lat, start_lng, end_lat, end_lng):
     )
 
 
+def get_barangay_base_graph_path(name):
+    canonical_name = normalize_barangay_name(name)
+    return BARANGAY_BASE_GRAPH_FILES.get(canonical_name)
+
+
+def get_legacy_barangay_base_graph_path(name):
+    canonical_name = normalize_barangay_name(name)
+    return LEGACY_BARANGAY_BASE_GRAPH_FILES.get(canonical_name)
+
+
+def get_barangay_base_graph(name):
+    canonical_name = normalize_barangay_name(name)
+    graph_path = get_barangay_base_graph_path(canonical_name)
+    if not graph_path:
+        return None
+    legacy_graph_path = get_legacy_barangay_base_graph_path(canonical_name)
+
+    cached_graph = _BARANGAY_BASE_GRAPH_CACHE.get(canonical_name)
+    if cached_graph is not None:
+        return cached_graph
+
+    with _BARANGAY_BASE_GRAPH_LOCK:
+        cached_graph = _BARANGAY_BASE_GRAPH_CACHE.get(canonical_name)
+        if cached_graph is not None:
+            return cached_graph
+
+        boundary = get_barangay_boundary(canonical_name)
+        if boundary is None:
+            return None
+
+        if graph_path.exists():
+            graph = ox.load_graphml(graph_path)
+            graph.graph["graph_cache_key"] = f"base::{GRAPH_NETWORK_TYPE}::{canonical_name}"
+            _BARANGAY_BASE_GRAPH_CACHE[canonical_name] = graph
+            debug_print(f"[OSM] Loaded local base graph for {boundary['display_name']}: {graph_path.name}")
+            return graph
+
+        graph_path.parent.mkdir(parents=True, exist_ok=True)
+        boundary_geometry = boundary["geometry"]
+        centroid = boundary_geometry.centroid
+        radius_m = estimate_boundary_graph_radius(boundary_geometry)
+
+        debug_print(
+            f"[OSM] Building local base graph for {boundary['display_name']} "
+            f"with radius {radius_m:.1f} meters"
+        )
+        try:
+            graph = ox.graph_from_point(
+                (float(centroid.y), float(centroid.x)),
+                dist=radius_m,
+                network_type=GRAPH_NETWORK_TYPE,
+                simplify=True,
+            )
+            graph.graph["graph_cache_key"] = f"base::{GRAPH_NETWORK_TYPE}::{canonical_name}"
+            ox.save_graphml(graph, graph_path)
+            _BARANGAY_BASE_GRAPH_CACHE[canonical_name] = graph
+            debug_print(f"[OSM] Saved local base graph for {boundary['display_name']}: {graph_path.name}")
+            return graph
+        except Exception as exc:
+            if legacy_graph_path and legacy_graph_path.exists():
+                debug_print(
+                    f"[OSM] {GRAPH_NETWORK_TYPE.title()} graph build failed for {boundary['display_name']}; "
+                    f"falling back to legacy graph {legacy_graph_path.name}: {exc}"
+                )
+                graph = ox.load_graphml(legacy_graph_path)
+                graph.graph["graph_cache_key"] = f"base::legacy_drive::{canonical_name}"
+                _BARANGAY_BASE_GRAPH_CACHE[canonical_name] = graph
+                return graph
+            raise
+
+
 def clip_graph_to_boundary(G, boundary_geometry):
     prepared_boundary = prep(boundary_geometry)
     keep_nodes = set()
@@ -598,39 +702,62 @@ def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS,
         end_lat,
         end_lng,
         dist_meters,
+        scope_name=scope_name,
     )
 
-    if cache_key in _GRAPH_CACHE:
+    cached_graph = _GRAPH_CACHE.get(cache_key)
+    if cached_graph is not None:
         debug_print(f"[OSM] Using cached graph for key={cache_key}")
-        return _GRAPH_CACHE[cache_key]
+        return cached_graph
 
-    debug_print(f"[OSM] Building graph with radius {dist_meters} meters")
-    debug_print(f"[OSM] Center: ({center_lat}, {center_lng})")
+    with _GRAPH_BUILD_LOCK:
+        cached_graph = _GRAPH_CACHE.get(cache_key)
+        if cached_graph is not None:
+            debug_print(f"[OSM] Using cached graph for key={cache_key}")
+            return cached_graph
 
-    G = ox.graph_from_point(
-        (center_lat, center_lng),
-        dist=dist_meters,
-        network_type="drive",
-        simplify=True
-    )
+        G = None
+        if scope_name:
+            base_graph = get_barangay_base_graph(scope_name)
+            if base_graph is not None:
+                debug_print(f"[OSM] Building scoped graph from local base graph for {normalize_barangay_name(scope_name)}")
+                bbox = ox.utils_geo.bbox_from_point((center_lat, center_lng), dist_meters)
+                try:
+                    G = ox.truncate.truncate_graph_bbox(
+                        base_graph,
+                        bbox,
+                        truncate_by_edge=False,
+                    )
+                except ValueError:
+                    G = None
 
-    _GRAPH_CACHE[cache_key] = G
-    debug_print(f"[OSM] Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
-    return G
+        if G is None:
+            debug_print(f"[OSM] Building graph with radius {dist_meters} meters")
+            debug_print(f"[OSM] Center: ({center_lat}, {center_lng})")
+            G = ox.graph_from_point(
+                (center_lat, center_lng),
+                dist=dist_meters,
+                network_type=GRAPH_NETWORK_TYPE,
+                simplify=True
+            )
+
+        G.graph["graph_cache_key"] = cache_key
+        _GRAPH_CACHE[cache_key] = G
+        debug_print(f"[OSM] Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
+        return G
 
 
 def prepare_routing_graph(start_lat, start_lng, end_lat, end_lng, barangay_name=None):
-    with _GRAPH_PREP_LOCK:
-        warm_static_caches()
-        G = build_graph(
-            start_lat,
-            start_lng,
-            end_lat,
-            end_lng,
-            scope_name=barangay_name,
-        )
-        assign_flood_hazards(G)
-        return G
+    warm_static_caches()
+    G = build_graph(
+        start_lat,
+        start_lng,
+        end_lat,
+        end_lng,
+        scope_name=barangay_name,
+    )
+    assign_flood_hazards(G)
+    return G
 
 
 def is_blocked_endpoint_edge(edge):
@@ -856,36 +983,50 @@ def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
 
 
 def assign_flood_hazards(G):
-    flood_zones = load_flood_zones()
+    if G.graph.get("flood_hazard_annotation_version") == FLOOD_GRAPH_ANNOTATION_VERSION:
+        debug_print(
+            f"[FLOOD] Reusing hazard annotations for graph key={G.graph.get('graph_cache_key', 'runtime')}"
+        )
+        return
 
-    counts = {level: 0 for level in sorted(set(VAR_TO_HAZARD.values()) | {1})}
-    var_counts = {1: 0, 2: 0, 3: 0, None: 0}
+    with _GRAPH_ANNOTATION_LOCK:
+        if G.graph.get("flood_hazard_annotation_version") == FLOOD_GRAPH_ANNOTATION_VERSION:
+            debug_print(
+                f"[FLOOD] Reusing hazard annotations for graph key={G.graph.get('graph_cache_key', 'runtime')}"
+            )
+            return
 
-    for u, v, key, data in G.edges(keys=True, data=True):
-        if data.get("hazard_source") == "flood_json" and "hazard" in data:
-            hazard = int(data.get("hazard", 1))
-            flood_var = data.get("flood_var")
-        else:
-            edge_geom = get_edge_geometry(G, u, v, data)
-            hazard, flood_var = resolve_edge_hazard(edge_geom, flood_zones)
+        flood_zones = load_flood_zones()
 
-            data["hazard"] = int(hazard)
-            data["flood_var"] = flood_var
-            data["hazard_source"] = "flood_json"
+        counts = {level: 0 for level in sorted(set(VAR_TO_HAZARD.values()) | {1})}
+        var_counts = {1: 0, 2: 0, 3: 0, None: 0}
 
-        counts[hazard] = counts.get(hazard, 0) + 1
-        var_counts[flood_var] = var_counts.get(flood_var, 0) + 1
-        data["route_cost"] = edge_traversal_cost(data)
+        for u, v, key, data in G.edges(keys=True, data=True):
+            if data.get("hazard_source") == "flood_json" and "hazard" in data:
+                hazard = int(data.get("hazard", 1))
+                flood_var = data.get("flood_var")
+            else:
+                edge_geom = get_edge_geometry(G, u, v, data)
+                hazard, flood_var = resolve_edge_hazard(edge_geom, flood_zones)
 
-    debug_print(f"[FLOOD] Hazard distribution: {counts}")
-    debug_print(
-        "[FLOOD] Flood class matches:",
-        {
-            "Var 1": var_counts.get(1, 0),
-            "Var 2": var_counts.get(2, 0),
-            "Var 3": var_counts.get(3, 0),
-        }
-    )
+                data["hazard"] = int(hazard)
+                data["flood_var"] = flood_var
+                data["hazard_source"] = "flood_json"
+
+            counts[hazard] = counts.get(hazard, 0) + 1
+            var_counts[flood_var] = var_counts.get(flood_var, 0) + 1
+            data["route_cost"] = edge_traversal_cost(data)
+
+        debug_print(f"[FLOOD] Hazard distribution: {counts}")
+        debug_print(
+            "[FLOOD] Flood class matches:",
+            {
+                "Var 1": var_counts.get(1, 0),
+                "Var 2": var_counts.get(2, 0),
+                "Var 3": var_counts.get(3, 0),
+            }
+        )
+        G.graph["flood_hazard_annotation_version"] = FLOOD_GRAPH_ANNOTATION_VERSION
 
 
 def edge_metrics(edge):
@@ -995,7 +1136,68 @@ def edge_geometry_to_coords(G, u, v, edge):
     return edge_coords
 
 
-def path_to_coords(G, route, resolved_edges=None):
+def project_point_onto_coord_path(endpoint_point, coord_path):
+    if endpoint_point is None or len(coord_path) < 2:
+        return None
+
+    line = LineString(
+        (float(point["lng"]), float(point["lat"]))
+        for point in coord_path
+    )
+    if line.is_empty:
+        return None
+
+    projected = line.interpolate(
+        line.project(Point(float(endpoint_point["lng"]), float(endpoint_point["lat"])))
+    )
+    anchor_point = {
+        "lat": float(projected.y),
+        "lng": float(projected.x),
+    }
+
+    if point_distance_meters(endpoint_point, anchor_point) > ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS:
+        return None
+
+    return anchor_point
+
+
+def attach_endpoint_to_route_coords(coords, endpoint_point, mode):
+    if endpoint_point is None or not coords:
+        return coords
+
+    endpoint_point = build_route_point(endpoint_point["lat"], endpoint_point["lng"])
+    target_index = 0 if mode == "start" else -1
+    edge_point = coords[target_index]
+    gap_meters = point_distance_meters(edge_point, endpoint_point)
+    anchor_path = coords[:2] if mode == "start" else coords[-2:]
+    anchor_point = project_point_onto_coord_path(endpoint_point, anchor_path)
+
+    if anchor_point is None and gap_meters > ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS:
+        return coords
+
+    if anchor_point is not None:
+        if point_distance_meters(coords[target_index], anchor_point) <= ROUTE_STITCH_SNAP_TOLERANCE_METERS:
+            coords[target_index] = anchor_point
+        elif mode == "start":
+            coords.insert(0, anchor_point)
+        else:
+            coords.append(anchor_point)
+    elif gap_meters <= ROUTE_STITCH_SNAP_TOLERANCE_METERS:
+        coords[target_index] = endpoint_point
+        return coords
+
+    target_index = 0 if mode == "start" else -1
+    if point_distance_meters(coords[target_index], endpoint_point) <= ROUTE_STITCH_SNAP_TOLERANCE_METERS:
+        coords[target_index] = endpoint_point
+    elif mode == "start":
+        coords.insert(0, endpoint_point)
+    else:
+        coords.append(endpoint_point)
+
+    return coords
+
+
+def path_to_coords(G, route, resolved_edges=None, start_point=None, end_point=None):
     if not route:
         return []
 
@@ -1026,6 +1228,8 @@ def path_to_coords(G, route, resolved_edges=None):
             coords.extend(edge_coords)
 
     if coords:
+        attach_endpoint_to_route_coords(coords, start_point, "start")
+        attach_endpoint_to_route_coords(coords, end_point, "end")
         return coords
 
     fallback_coords = []
@@ -1035,6 +1239,8 @@ def path_to_coords(G, route, resolved_edges=None):
             "lat": float(node_data["y"]),
             "lng": float(node_data["x"])
         })
+    attach_endpoint_to_route_coords(fallback_coords, start_point, "start")
+    attach_endpoint_to_route_coords(fallback_coords, end_point, "end")
     return fallback_coords
 
 
@@ -1571,7 +1777,7 @@ def run_aco(G, start_node, end_node):
     return candidate_routes, edge_pheromone
 
 
-def finalize_routes(G, candidate_routes, edge_pheromone):
+def finalize_routes(G, candidate_routes, edge_pheromone, start_point=None, end_point=None):
     scored_routes = []
     for route in candidate_routes:
         route_copy = route.copy()
@@ -1584,6 +1790,8 @@ def finalize_routes(G, candidate_routes, edge_pheromone):
             G,
             route_copy["path"],
             resolved_edges=resolved_edges,
+            start_point=start_point,
+            end_point=end_point,
         )
         route_copy["street_path"] = extract_route_street_path(
             G,
@@ -1691,13 +1899,23 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
 
     phase_started = now
     debug_print("[OSM] Phase 4/4: finalizing route results")
-    final_routes = finalize_routes(G, candidate_routes, edge_pheromone)
+    final_routes = finalize_routes(
+        G,
+        candidate_routes,
+        edge_pheromone,
+        start_point=build_route_point(start_lat, start_lng),
+        end_point=build_route_point(end_lat, end_lng),
+    )
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 4/4 complete in {now - phase_started:.2f}s")
 
     for route in final_routes:
-        route["path_label"] = f"{start_name} → {end_name}"
+        route["path_label"] = f"{start_name} -> {end_name}"
         route["segments"] = max(1, len(route.get("path", [])) - 1)
+        route["start_lat"] = float(start_lat)
+        route["start_lng"] = float(start_lng)
+        route["destination_lat"] = float(end_lat)
+        route["destination_lng"] = float(end_lng)
 
     debug_print(f"[OSM] Total simulation time: {now - simulation_started:.2f}s")
     debug_print("[OSM] SIMULATION END")

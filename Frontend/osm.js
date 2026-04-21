@@ -1,12 +1,5 @@
-// Render the exact route geometry produced by the backend.
-// Do not re-route paths in the browser, or the map can diverge from the evaluated result.
-// Do not invent long straight endpoint connectors either. If the snapped road
-// node is far from the selected marker, showing a fake line is more misleading
-// than showing the route starting on the actual routed road geometry.
-
 const ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS = 12;
-const ROUTE_ENDPOINT_GUIDE_MIN_DISTANCE_METERS = 14;
-const ROUTE_ENDPOINT_GUIDE_MAX_DISTANCE_METERS = 180;
+const ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS = 90;
 
 function formatDistanceKm(distanceMeters) {
   const numericDistance = Number(distanceMeters);
@@ -72,7 +65,81 @@ function normalizePointCandidate(point) {
     : null;
 }
 
-function mergePathEndpoint(pathPoints, endpoint, mode) {
+function replaceOrInsertPathPoint(pathPoints, point, mode) {
+  if (!Array.isArray(pathPoints) || !pathPoints.length || !point) {
+    return pathPoints;
+  }
+
+  if (mode === 'start') {
+    if (estimatePointGapMeters(pathPoints[0], point) <= 1.5) {
+      pathPoints[0] = point;
+    } else {
+      pathPoints.unshift(point);
+    }
+    return pathPoints;
+  }
+
+  if (estimatePointGapMeters(pathPoints[pathPoints.length - 1], point) <= 1.5) {
+    pathPoints[pathPoints.length - 1] = point;
+  } else {
+    pathPoints.push(point);
+  }
+
+  return pathPoints;
+}
+
+function projectPointToSegment(endpoint, segmentStart, segmentEnd) {
+  const start = normalizePointCandidate(segmentStart);
+  const end = normalizePointCandidate(segmentEnd);
+  const target = normalizePointCandidate(endpoint);
+  if (!start || !end || !target) {
+    return null;
+  }
+
+  const avgLat = ((start.lat + end.lat + target.lat) / 3) * (Math.PI / 180);
+  const lngScale = Math.cos(avgLat) * 111320;
+  const latScale = 111320;
+
+  const ax = start.lng * lngScale;
+  const ay = start.lat * latScale;
+  const bx = end.lng * lngScale;
+  const by = end.lat * latScale;
+  const px = target.lng * lngScale;
+  const py = target.lat * latScale;
+
+  const abx = bx - ax;
+  const aby = by - ay;
+  const segmentLengthSquared = abx * abx + aby * aby;
+  if (segmentLengthSquared <= 1e-6) {
+    return start;
+  }
+
+  const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / segmentLengthSquared));
+  return {
+    lat: (ay + aby * t) / latScale,
+    lng: (ax + abx * t) / lngScale,
+  };
+}
+
+function buildEndpointAnchor(pathPoints, endpoint, mode) {
+  if (!Array.isArray(pathPoints) || pathPoints.length < 2) {
+    return null;
+  }
+
+  const anchor = mode === 'start'
+    ? projectPointToSegment(endpoint, pathPoints[0], pathPoints[1])
+    : projectPointToSegment(endpoint, pathPoints[pathPoints.length - 2], pathPoints[pathPoints.length - 1]);
+
+  if (!anchor) {
+    return null;
+  }
+
+  return estimatePointGapMeters(endpoint, anchor) <= ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS
+    ? anchor
+    : null;
+}
+
+function attachEndpointToPath(pathPoints, endpoint, mode) {
   const normalizedEndpoint = normalizePointCandidate(endpoint);
   if (!normalizedEndpoint || !Array.isArray(pathPoints) || !pathPoints.length) {
     return pathPoints;
@@ -81,16 +148,24 @@ function mergePathEndpoint(pathPoints, endpoint, mode) {
   const targetIndex = mode === 'start' ? 0 : pathPoints.length - 1;
   const edgePoint = pathPoints[targetIndex];
   const gapMeters = estimatePointGapMeters(edgePoint, normalizedEndpoint);
+  const anchorPoint = buildEndpointAnchor(pathPoints, normalizedEndpoint, mode);
 
-  if (gapMeters <= 3) {
+  if (!anchorPoint && gapMeters > ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS) {
+    return pathPoints;
+  }
+
+  if (anchorPoint) {
+    if (estimatePointGapMeters(pathPoints[targetIndex], anchorPoint) <= ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS) {
+      pathPoints[targetIndex] = anchorPoint;
+    } else {
+      replaceOrInsertPathPoint(pathPoints, anchorPoint, mode);
+    }
+  } else if (gapMeters <= ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS) {
     pathPoints[targetIndex] = normalizedEndpoint;
     return pathPoints;
   }
 
-  if (gapMeters <= ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS) {
-    pathPoints[targetIndex] = normalizedEndpoint;
-  }
-
+  replaceOrInsertPathPoint(pathPoints, normalizedEndpoint, mode);
   return pathPoints;
 }
 
@@ -109,7 +184,7 @@ function buildRenderablePath(route, normalizedCoords) {
     return [destinationPoint];
   }
 
-  return mergePathEndpoint(renderPath, destinationPoint, 'end');
+  return attachEndpointToPath(renderPath, destinationPoint, 'end');
 }
 
 function getSegmentCount(route, normalizedPath, normalizedCoords) {
@@ -178,138 +253,12 @@ function buildFallbackPath(route, getLocationByName, startName, endName) {
     }) || resolveNamedLocationPoint(getLocationByName, endName);
     const startPoint = resolveNamedLocationPoint(getLocationByName, startName);
 
-    mergePathEndpoint(routePoints, startPoint, 'start');
-    mergePathEndpoint(routePoints, destinationPoint, 'end');
+    attachEndpointToPath(routePoints, startPoint, 'start');
+    attachEndpointToPath(routePoints, destinationPoint, 'end');
     return routePoints;
   }
 
   return [];
-}
-
-function shouldDrawEndpointGuide(endpointPoint, routePoint) {
-  const normalizedEndpoint = normalizePointCandidate(endpointPoint);
-  const normalizedRoutePoint = normalizePointCandidate(routePoint);
-  if (!normalizedEndpoint || !normalizedRoutePoint) {
-    return false;
-  }
-
-  const gapMeters = estimatePointGapMeters(normalizedEndpoint, normalizedRoutePoint);
-  return (
-    gapMeters >= ROUTE_ENDPOINT_GUIDE_MIN_DISTANCE_METERS
-    && gapMeters <= ROUTE_ENDPOINT_GUIDE_MAX_DISTANCE_METERS
-  );
-}
-
-function getEndpointGuideStyle(role) {
-  if (role === 'start') {
-    return {
-      color: '#a855f7',
-      halo: 'rgba(255,255,255,.96)',
-      zIndex: 14,
-    };
-  }
-
-  return {
-    color: '#06b6d4',
-    halo: 'rgba(255,255,255,.96)',
-    zIndex: 14,
-  };
-}
-
-function addEndpointGuide(path, role, gMap, mapLayers) {
-  const style = getEndpointGuideStyle(role);
-  const dashHaloSymbol = {
-    path: 'M 0,-1 0,1',
-    strokeOpacity: 1,
-    strokeColor: style.halo,
-    strokeWeight: 4,
-    scale: 3.4,
-  };
-  const dashSymbol = {
-    path: 'M 0,-1 0,1',
-    strokeOpacity: 1,
-    strokeColor: style.color,
-    strokeWeight: 2.2,
-    scale: 3,
-  };
-  const arrowHaloSymbol = {
-    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 4.7,
-    fillColor: style.halo,
-    fillOpacity: 0.96,
-    strokeColor: style.halo,
-    strokeWeight: 3,
-  };
-  const arrowSymbol = {
-    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 3.9,
-    fillColor: style.color,
-    fillOpacity: 1,
-    strokeColor: style.color,
-    strokeWeight: 2,
-  };
-
-  mapLayers.routes.push(new google.maps.Polyline({
-    path,
-    geodesic: false,
-    strokeOpacity: 0,
-    clickable: false,
-    icons: [
-      {
-        icon: dashHaloSymbol,
-        offset: '0',
-        repeat: '10px',
-      },
-      {
-        icon: arrowHaloSymbol,
-        offset: '100%',
-      },
-    ],
-    map: gMap,
-    zIndex: style.zIndex,
-  }));
-
-  mapLayers.routes.push(new google.maps.Polyline({
-    path,
-    geodesic: false,
-    strokeOpacity: 0,
-    clickable: false,
-    icons: [
-      {
-        icon: dashSymbol,
-        offset: '0',
-        repeat: '10px',
-      },
-      {
-        icon: arrowSymbol,
-        offset: '100%',
-      },
-    ],
-    map: gMap,
-    zIndex: style.zIndex + 1,
-  }));
-}
-
-function drawRouteEndpointGuides(route, getLocationByName, startName, endName, gMap, mapLayers) {
-  if (!route) return;
-
-  const pathPoints = getRoutePoints(route, getLocationByName);
-  if (pathPoints.length < 2) return;
-
-  const startPoint = resolveNamedLocationPoint(getLocationByName, startName);
-  const routeStartPoint = pathPoints[0];
-  if (shouldDrawEndpointGuide(startPoint, routeStartPoint)) {
-    addEndpointGuide([startPoint, routeStartPoint], 'start', gMap, mapLayers);
-  }
-
-  const destinationPoint = normalizePointCandidate({
-    lat: route?.destination_lat,
-    lng: route?.destination_lng,
-  }) || resolveNamedLocationPoint(getLocationByName, endName);
-  const routeEndPoint = pathPoints[pathPoints.length - 1];
-  if (shouldDrawEndpointGuide(destinationPoint, routeEndPoint)) {
-    addEndpointGuide([destinationPoint, routeEndPoint], 'end', gMap, mapLayers);
-  }
 }
 
 function createRouteGroup(route, cfg) {
@@ -545,8 +494,6 @@ async function renderRoutesOnRoads({
   const defaultCoords = Array.isArray(bestRoute?.render_path) && bestRoute.render_path.length
     ? bestRoute.render_path
     : getRoutePoints(bestRoute || {}, getLocationByName);
-
-  drawRouteEndpointGuides(bestRoute, getLocationByName, start, end, gMap, mapLayers);
 
   if (defaultCoords.length) {
     const bounds = new google.maps.LatLngBounds();

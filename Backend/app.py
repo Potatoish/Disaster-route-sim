@@ -2,10 +2,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from earthquake_service import (
     get_earthquake_evacuation_sites,
-    prewarm_earthquake,
     simulate_earthquake,
 )
-from main import simulate, get_locations, prewarm_simulation, warm_startup_data
+from main import simulate, get_locations, warm_startup_data
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
 
 app = Flask(__name__)
@@ -14,7 +13,7 @@ CORS(app)
 try:
     warm_startup_data()
 except Exception as e:
-    print(f"[STARTUP] Warmup skipped: {e}")
+    print(f"[STARTUP] Static cache load skipped: {e}")
 
 @app.route("/", methods=["GET"])
 def health():
@@ -22,9 +21,22 @@ def health():
 
 @app.route("/locations", methods=["GET"])
 def locations():
+    locations_payload = get_locations()
+    if locations_payload is None:
+        return jsonify({
+            "error": True,
+            "message": "Failed to load node locations from SQL Server. Check the database connection and the nodes table."
+        }), 500
+
+    if not locations_payload:
+        return jsonify({
+            "error": True,
+            "message": "No node locations were returned from SQL Server. Check whether the nodes table has data for the supported barangays."
+        }), 500
+
     return jsonify({
         "error": False,
-        "locations": get_locations()
+        "locations": locations_payload
     })
 
 @app.route("/barangay-boundary", methods=["GET"])
@@ -116,41 +128,11 @@ def run_simulation():
             "message": str(e)
         }), 500
 
-@app.route("/prewarm-simulation", methods=["POST"])
-def warm_simulation():
-    try:
-        data = request.get_json() or {}
-        start = data.get("start")
-        end = data.get("end")
-        barangay = data.get("barangay")
-        result = prewarm_simulation(start, end, barangay=barangay)
-        status_code = 200 if not result.get("error") else 400
-        return jsonify(result), status_code
-    except Exception as e:
-        return jsonify({
-            "error": True,
-            "message": str(e)
-        }), 500
-
 @app.route("/earthquake/evac-sites", methods=["GET"])
 def earthquake_evac_sites():
     try:
         barangay = (request.args.get("barangay") or "").strip()
         result = get_earthquake_evacuation_sites(barangay)
-        status_code = 200 if not result.get("error") else 400
-        return jsonify(result), status_code
-    except Exception as e:
-        return jsonify({
-            "error": True,
-            "message": str(e)
-        }), 500
-
-@app.route("/earthquake/prewarm", methods=["POST"])
-def warm_earthquake():
-    try:
-        data = request.get_json() or {}
-        barangay = data.get("barangay")
-        result = prewarm_earthquake(barangay)
         status_code = 200 if not result.get("error") else 400
         return jsonify(result), status_code
     except Exception as e:

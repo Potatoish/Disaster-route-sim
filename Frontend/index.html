@@ -237,7 +237,20 @@
             <div class="loader-bar" id="loaderBar"></div>
           </div>
         </div>
-        <div class="loader-steps" id="loaderSteps" hidden></div>
+      </div>
+    </div>
+
+    <div class="patience-notification" id="patienceNotice" hidden>
+      <div class="patience-content">
+        <div class="patience-copy">
+          <div class="patience-title" id="patienceTitle">Still working on your request</div>
+          <div class="patience-text" id="patienceText">
+            The system is still processing this route request. Larger or more complex areas can take longer.
+          </div>
+        </div>
+        <button class="patience-close" type="button" onclick="dismissPatienceNotification()" aria-label="Close loading notice">
+          &times;
+        </button>
       </div>
     </div>
 

@@ -12,12 +12,15 @@ from earthquake_data import (
 )
 from osm_routing import (
     FINAL_ROUTES_TO_SHOW,
+    GRAPH_NETWORK_TYPE,
     HAZARD_THRESHOLD,
     MAX_ELIMINATED_ROUTES_TO_SHOW,
+    build_route_point,
     clip_graph_to_boundary,
     debug_print,
     edge_traversal_cost,
     estimate_boundary_graph_radius,
+    get_barangay_base_graph,
     extract_route_street_path,
     get_barangay_boundary,
     get_edge_geometry,
@@ -35,6 +38,7 @@ from osm_routing import (
 
 _EARTHQUAKE_GRAPH_CACHE = {}
 _EARTHQUAKE_GRAPH_LOCK = RLock()
+_EARTHQUAKE_ANNOTATION_LOCK = RLock()
 
 EARTHQUAKE_VIEW_CONFIG = {
     "overall": {
@@ -97,6 +101,11 @@ def _get_earthquake_graph(barangay_name):
     if boundary is None:
         raise ValueError(f"No barangay boundary found for '{barangay_name}'")
 
+    cached_graph = _EARTHQUAKE_GRAPH_CACHE.get(canonical_name)
+    if cached_graph is not None:
+        debug_print(f"[EQ] Using cached graph for {boundary['display_name']}")
+        return cached_graph
+
     with _EARTHQUAKE_GRAPH_LOCK:
         cached_graph = _EARTHQUAKE_GRAPH_CACHE.get(canonical_name)
         if cached_graph is not None:
@@ -105,17 +114,18 @@ def _get_earthquake_graph(barangay_name):
 
         warm_static_caches()
         boundary_geometry = boundary["geometry"]
-        centroid = boundary_geometry.centroid
-        radius_m = estimate_boundary_graph_radius(boundary_geometry)
-        debug_print(f"[EQ] Building graph for {boundary['display_name']} with radius {radius_m:.1f} meters")
-        debug_print(f"[EQ] Graph center: ({float(centroid.y)}, {float(centroid.x)})")
-
-        graph = ox.graph_from_point(
-            (float(centroid.y), float(centroid.x)),
-            dist=radius_m,
-            network_type="drive",
-            simplify=True,
-        )
+        graph = get_barangay_base_graph(canonical_name)
+        if graph is None:
+            centroid = boundary_geometry.centroid
+            radius_m = estimate_boundary_graph_radius(boundary_geometry)
+            debug_print(f"[EQ] Building graph for {boundary['display_name']} with radius {radius_m:.1f} meters")
+            debug_print(f"[EQ] Graph center: ({float(centroid.y)}, {float(centroid.x)})")
+            graph = ox.graph_from_point(
+                (float(centroid.y), float(centroid.x)),
+                dist=radius_m,
+                network_type=GRAPH_NETWORK_TYPE,
+                simplify=True,
+            )
         graph = clip_graph_to_boundary(graph, boundary_geometry)
         debug_print(f"[EQ] Graph loaded: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 
@@ -128,26 +138,31 @@ def _annotate_graph_with_earthquake_hazards(graph, dataset):
         debug_print(f"[EQ] Reusing hazard annotations for {dataset['display_barangay']}")
         return graph
 
-    annotation_started = time.perf_counter()
-    debug_print(f"[EQ] Annotating earthquake hazards on {len(graph.edges)} edges")
+    with _EARTHQUAKE_ANNOTATION_LOCK:
+        if graph.graph.get("earthquake_dataset") == dataset["canonical_barangay"]:
+            debug_print(f"[EQ] Reusing hazard annotations for {dataset['display_barangay']}")
+            return graph
 
-    for u, v, key, edge_data in graph.edges(keys=True, data=True):
-        edge_geom = get_edge_geometry(graph, u, v, edge_data)
-        liquefaction = _resolve_layer_hazard(
-            edge_geom,
-            dataset["layer_zones"]["liquefaction"],
-        )
-        ground_shaking = _resolve_layer_hazard(
-            edge_geom,
-            dataset["layer_zones"]["ground_shaking"],
-        )
+        annotation_started = time.perf_counter()
+        debug_print(f"[EQ] Annotating earthquake hazards on {len(graph.edges)} edges")
 
-        edge_data["eq_liquefaction"] = liquefaction
-        edge_data["eq_ground_shaking"] = ground_shaking
-        edge_data["eq_overall"] = max(liquefaction, ground_shaking)
+        for u, v, key, edge_data in graph.edges(keys=True, data=True):
+            edge_geom = get_edge_geometry(graph, u, v, edge_data)
+            liquefaction = _resolve_layer_hazard(
+                edge_geom,
+                dataset["layer_zones"]["liquefaction"],
+            )
+            ground_shaking = _resolve_layer_hazard(
+                edge_geom,
+                dataset["layer_zones"]["ground_shaking"],
+            )
 
-    graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
-    debug_print(f"[EQ] Hazard annotation complete in {time.perf_counter() - annotation_started:.2f}s")
+            edge_data["eq_liquefaction"] = liquefaction
+            edge_data["eq_ground_shaking"] = ground_shaking
+            edge_data["eq_overall"] = max(liquefaction, ground_shaking)
+
+        graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
+        debug_print(f"[EQ] Hazard annotation complete in {time.perf_counter() - annotation_started:.2f}s")
     return graph
 
 
@@ -177,7 +192,7 @@ def _build_route_maxima(resolved_edges):
     return maxima
 
 
-def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
+def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_site, view_key):
     resolved_edges = hydrate_route_edge_records(base_graph, route.get("path_edges"))
     if not resolved_edges:
         resolved_edges = resolve_route_edge_records(base_graph, route.get("path", []))
@@ -236,6 +251,8 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
             base_graph,
             route.get("path", []),
             resolved_edges=resolved_edges,
+            start_point=build_route_point(start_location["lat"], start_location["lng"]),
+            end_point=build_route_point(evacuation_site["lat"], evacuation_site["lng"]),
         ),
         "street_path": extract_route_street_path(
             base_graph,
@@ -403,6 +420,7 @@ def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_
             collected[route_key] = _evaluate_earthquake_route(
                 base_graph,
                 route_copy,
+                start_location,
                 evacuation_site,
                 view_key,
             )
@@ -469,37 +487,6 @@ def get_earthquake_evacuation_sites(barangay_name):
         return {
             "error": True,
             "message": f"Failed to load earthquake evacuation sites: {exc}",
-        }
-
-
-def prewarm_earthquake(barangay_name):
-    if not is_supported_earthquake_barangay(barangay_name):
-        return {
-            "error": True,
-            "message": _unsupported_earthquake_scope_message(),
-        }
-
-    try:
-        started_at = time.perf_counter()
-        debug_print("\n" + "-" * 60)
-        debug_print("[EQ] PREWARM START")
-        debug_print(f"[EQ] Selection context: {barangay_name}")
-        dataset = get_earthquake_dataset(barangay_name)
-        _annotate_graph_with_earthquake_hazards(
-            _get_earthquake_graph(barangay_name),
-            dataset,
-        )
-        debug_print(f"[EQ] PREWARM END ({time.perf_counter() - started_at:.2f}s)")
-        debug_print("-" * 60 + "\n")
-        return {
-            "error": False,
-            "barangay": dataset["display_barangay"],
-            "message": "Earthquake routing context prepared",
-        }
-    except Exception as exc:
-        return {
-            "error": True,
-            "message": f"Earthquake routing preparation failed: {exc}",
         }
 
 

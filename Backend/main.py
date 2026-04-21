@@ -4,18 +4,31 @@ sys.dont_write_bytecode = True
 
 import csv
 from datetime import datetime
+from threading import RLock
 
 from data import database
 from osm_routing import (
-    debug_print,
+    get_barangay_base_graph,
+    get_barangay_base_graph_path,
+    get_legacy_barangay_base_graph_path,
     simulate_osm_routes,
     resolve_point_hazard,
-    prepare_routing_graph,
     warm_static_caches,
 )
 
+_LOCATIONS_CACHE = None
+_LOCATIONS_CACHE_LOCK = RLock()
+
 def get_locations():
-    nodes, _ = database.get_graph_data()
+    global _LOCATIONS_CACHE
+
+    with _LOCATIONS_CACHE_LOCK:
+        if _LOCATIONS_CACHE is not None:
+            return [location.copy() for location in _LOCATIONS_CACHE]
+
+    nodes = database.get_nodes()
+    if nodes is None:
+        return None
 
     locations = []
 
@@ -41,7 +54,11 @@ def get_locations():
             "hazard_source": node_hazard["hazard_source"],
         })
 
-    return locations
+    if locations:
+        with _LOCATIONS_CACHE_LOCK:
+            _LOCATIONS_CACHE = locations
+
+    return [location.copy() for location in locations]
 
 def simulate(start, end, hazard_type="Flood", barangay=None):
     if not start:
@@ -96,65 +113,13 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
             "error": True,
             "message": f"OSM routing failed: {str(e)}"
         }
-
-
-def prewarm_simulation(start, end, barangay=None):
-    if not start:
-        return {
-            "error": True,
-            "message": "Start location is required"
-        }
-
-    if not end:
-        return {
-            "error": True,
-            "message": "End location is required"
-        }
-
-    if start == end:
-        return {
-            "error": True,
-            "message": "Start and end locations must be different"
-        }
-
-    start_location = database.get_location_by_name(start)
-    end_location = database.get_location_by_name(end)
-
-    if not start_location or not end_location:
-        return {
-            "error": True,
-            "message": "Start or end location not found"
-        }
-
-    try:
-        scope_barangay = barangay or start_location.get("barangay") or end_location.get("barangay")
-        debug_print("\n" + "-" * 60)
-        debug_print("[OSM] PREWARM START")
-        debug_print(f"[OSM] From: {start_location['name']} ({start_location['lat']}, {start_location['lng']})")
-        debug_print(f"[OSM] To  : {end_location['name']} ({end_location['lat']}, {end_location['lng']})")
-        if scope_barangay:
-            debug_print(f"[OSM] Selection context: {scope_barangay}")
-        prepare_routing_graph(
-            start_location["lat"],
-            start_location["lng"],
-            end_location["lat"],
-            end_location["lng"],
-            barangay_name=scope_barangay,
-        )
-        debug_print("[OSM] PREWARM END")
-        debug_print("-" * 60 + "\n")
-        return {
-            "error": False,
-            "message": "Simulation context prepared"
-        }
-    except Exception as e:
-        return {
-            "error": True,
-            "message": f"Warmup failed: {str(e)}"
-        }
-
 def warm_startup_data():
     warm_static_caches()
+    for barangay_name in ("Pinagbuhatan", "Sta. Lucia"):
+        graph_path = get_barangay_base_graph_path(barangay_name)
+        legacy_graph_path = get_legacy_barangay_base_graph_path(barangay_name)
+        if (graph_path and graph_path.exists()) or (legacy_graph_path and legacy_graph_path.exists()):
+            get_barangay_base_graph(barangay_name)
 
 
 def export_csv(routes, filename=None):
