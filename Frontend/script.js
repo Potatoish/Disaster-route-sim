@@ -24,7 +24,16 @@ const loaderState = {
   current: 0,
   target: 0,
   frameId: null,
+  stage: '',
 };
+const LOADER_STAGES = [
+  { id: 'ready', label: 'Getting ready...' },
+  { id: 'load', label: 'Loading data...' },
+  { id: 'route', label: 'Finding routes...' },
+  { id: 'review', label: 'Reviewing results...' },
+  { id: 'draw', label: 'Drawing route map...' },
+  { id: 'complete', label: 'Routes ready.' },
+];
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
 const SIMULATION_WARMUP_TIMEOUT_MS = 120000;
@@ -709,9 +718,10 @@ function syncLoaderContext() {
 }
 
 function setLoaderStep(title, progress, options = {}) {
+  const { stageId = '' } = options;
   setLoaderTitle(title);
   updateLoaderProgress(progress, options);
-  updateLoaderStepDetail(options.detail || '');
+  setLoaderActiveStage(stageId);
 }
 
 function resetLoaderState() {
@@ -722,29 +732,36 @@ function resetLoaderState() {
 
   loaderState.current = 0;
   loaderState.target = 0;
+  loaderState.stage = '';
   syncLoaderContext();
   setLoaderTitle('Loading routes');
   updateLoaderProgress(0, { immediate: true });
   hideLoaderSteps();
 }
 
-function updateLoaderStepDetail(stepText) {
+function renderLoaderSteps(activeStageId = '') {
   const stepsContainer = document.getElementById('loaderSteps');
   if (!stepsContainer) return;
 
-  if (stepText && stepText.trim()) {
-    stepsContainer.textContent = stepText;
-    stepsContainer.hidden = false;
-  } else {
+  const currentStage = LOADER_STAGES.find(stage => stage.id === activeStageId);
+  stepsContainer.textContent = currentStage?.label || '';
+  stepsContainer.hidden = false;
+}
+
+function setLoaderActiveStage(stageId) {
+  loaderState.stage = stageId || '';
+  if (!loaderState.stage) {
     hideLoaderSteps();
+    return;
   }
+  renderLoaderSteps(loaderState.stage);
 }
 
 function hideLoaderSteps() {
   const stepsContainer = document.getElementById('loaderSteps');
   if (stepsContainer) {
     stepsContainer.hidden = true;
-    stepsContainer.textContent = '';
+    stepsContainer.innerHTML = '';
   }
 }
 
@@ -3334,22 +3351,22 @@ async function runSimulation() {
   setLoaderStep(
     'Getting everything ready',
     5,
-    { immediate: true, detail: 'Preparing the map, hazard data, and route settings...' }
+    { immediate: true, stageId: 'ready' }
   );
 
   try {
     let result;
     if (isEarthquakeMode()) {
       clearPendingEarthquakeWarmup();
-      setLoaderStep('Loading earthquake data', 20);
-      setLoaderStep('Finding routes', 50);
+      setLoaderStep('Loading earthquake data', 20, { stageId: 'load' });
+      setLoaderStep('Finding routes', 50, { stageId: 'route' });
 
       result = await sendEarthquakeRequest({
         start,
         barangay: selectedBarangay,
         hazard: selectedHazard,
       });
-      setLoaderStep('Reviewing results', 75);
+      setLoaderStep('Reviewing results', 75, { stageId: 'review' });
 
       result.hazard_layers = result.hazard_layers || {};
       Object.entries(result.views || {}).forEach(([viewKey, viewData]) => {
@@ -3363,15 +3380,15 @@ async function runSimulation() {
       hydrateActiveEarthquakeView(result.active_view || 'overall');
       earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
       earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
-      setLoaderStep('Drawing route map', 90);
+      setLoaderStep('Drawing route map', 90, { stageId: 'draw' });
       syncEarthquakeViewSelector();
       clearBoundaryLayers();
       await renderActiveSimulationRoutes();
       showResultsPanel(simData);
     } else {
       clearPendingSimulationWarmup();
-      setLoaderStep('Loading flood data', 20);
-      setLoaderStep('Finding routes', 50);
+      setLoaderStep('Loading flood data', 20, { stageId: 'load' });
+      setLoaderStep('Finding routes', 50, { stageId: 'route' });
 
       result = await sendSimulationRequest({
         start,
@@ -3383,9 +3400,9 @@ async function runSimulation() {
         normalizeRoutes(result.routes || [])
       );
 
-      setLoaderStep('Reviewing results', 75);
+      setLoaderStep('Reviewing results', 75, { stageId: 'review' });
       simData = result;
-      setLoaderStep('Drawing route map', 90);
+      setLoaderStep('Drawing route map', 90, { stageId: 'draw' });
       clearBoundaryLayers();
       setFloodLegendContent();
       await renderActiveSimulationRoutes();
@@ -3403,7 +3420,7 @@ async function runSimulation() {
     setSimulationConfigLocked(true);
     updateMapContextBadge();
 
-    setLoaderStep('Routes are ready', 100);
+    setLoaderStep('Routes are ready', 100, { stageId: 'complete' });
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
     console.error(err);

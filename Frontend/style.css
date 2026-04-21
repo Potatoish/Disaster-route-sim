@@ -1563,11 +1563,13 @@ body.dark .loader-card {
 }
 
 .loader-steps {
+  padding: 2px 2px 0;
+  text-align: center;
   font-family: var(--font-body);
-  font-size: .8rem;
-  color: var(--muted);
-  line-height: 1.45;
-  padding: 0 2px;
+  font-size: .74rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--accent2) 58%, #d8e6f5);
 }
 
 .loader-steps[hidden] {
@@ -1751,7 +1753,7 @@ body.dark .patience-content {
   }
 
   .loader-steps {
-    font-size: .8rem;
+    font-size: .72rem;
   }
 
   .patience-notification {
