@@ -152,12 +152,14 @@ body.dark .topbar {
 }
 
 .topbar-logo {
-  width: auto;
-  height: 40px;
-  display: block;
-  flex-shrink: 0;
-  filter: drop-shadow(0 8px 16px rgba(37, 99, 235, .18));
-}
+    width: 88px;
+    height: 56px;
+    display: block;
+    flex-shrink: 0;
+    object-fit: cover;
+    object-position: center;
+    filter: drop-shadow(0 8px 16px rgba(37, 99, 235, .18));
+  }
 
 body.dark .topbar-logo {
   filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .30));
@@ -1599,12 +1601,21 @@ body.dark .loader-card {
 }
 
 .loader-steps {
+  padding: 2px 2px 0;
+  text-align: center;
   font-family: var(--font-body);
+<<<<<<< HEAD
   font-size: .88rem;
   color: color-mix(in srgb, var(--text) 82%, var(--muted) 18%);
   line-height: 1.55;
   min-height: 2.6em;
   padding: 0;
+=======
+  font-size: .74rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--accent2) 58%, #d8e6f5);
+>>>>>>> 7ce6f9cb6122086fd42502ab88ccf83649a35c64
 }
 
 .loader-steps[hidden] {
@@ -1856,7 +1867,7 @@ body.dark .patience-content {
   }
 
   .loader-steps {
-    font-size: .8rem;
+    font-size: .72rem;
   }
 
   .patience-notification {

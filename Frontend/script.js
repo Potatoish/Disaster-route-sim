@@ -24,7 +24,16 @@ const loaderState = {
   current: 0,
   target: 0,
   frameId: null,
+  stage: '',
 };
+const LOADER_STAGES = [
+  { id: 'ready', label: 'Getting ready...' },
+  { id: 'load', label: 'Loading data...' },
+  { id: 'route', label: 'Finding routes...' },
+  { id: 'review', label: 'Reviewing results...' },
+  { id: 'draw', label: 'Drawing route map...' },
+  { id: 'complete', label: 'Routes ready.' },
+];
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const SIMULATION_WARMUP_DEBOUNCE_MS = 180;
 const SIMULATION_WARMUP_TIMEOUT_MS = 120000;
@@ -737,6 +746,7 @@ function getLoaderStepDetail(title) {
 }
 
 function setLoaderStep(title, progress, options = {}) {
+  const { stageId = '' } = options;
   setLoaderTitle(title);
   updateLoaderProgress(progress, options);
   updateLoaderStepDetail(options.detail || getLoaderStepDetail(title));
@@ -750,29 +760,36 @@ function resetLoaderState() {
 
   loaderState.current = 0;
   loaderState.target = 0;
+  loaderState.stage = '';
   syncLoaderContext();
   setLoaderTitle('Loading routes');
   updateLoaderProgress(0, { immediate: true });
   hideLoaderSteps();
 }
 
-function updateLoaderStepDetail(stepText) {
+function renderLoaderSteps(activeStageId = '') {
   const stepsContainer = document.getElementById('loaderSteps');
   if (!stepsContainer) return;
 
-  if (stepText && stepText.trim()) {
-    stepsContainer.textContent = stepText;
-    stepsContainer.hidden = false;
-  } else {
+  const currentStage = LOADER_STAGES.find(stage => stage.id === activeStageId);
+  stepsContainer.textContent = currentStage?.label || '';
+  stepsContainer.hidden = false;
+}
+
+function setLoaderActiveStage(stageId) {
+  loaderState.stage = stageId || '';
+  if (!loaderState.stage) {
     hideLoaderSteps();
+    return;
   }
+  renderLoaderSteps(loaderState.stage);
 }
 
 function hideLoaderSteps() {
   const stepsContainer = document.getElementById('loaderSteps');
   if (stepsContainer) {
     stepsContainer.hidden = true;
-    stepsContainer.textContent = '';
+    stepsContainer.innerHTML = '';
   }
 }
 
@@ -2890,7 +2907,7 @@ function getStepValue(step) {
   }
   if (step === 5) {
     if (isEarthquakeMode()) {
-      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Complete earthquake setup';
+      return canRunEarthquakeSimulation(start) ? 'Ready to simulate' : 'Continue earthquake routing';
     }
     return selectedHazard && start && end && start !== end ? 'Ready to simulate' : 'Complete selections first';
   }
