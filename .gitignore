@@ -1,0 +1,10 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local virtual environment
+.venv/
+
+# Generated OSM/Overpass cache
+Backend/cache/
+backend/cache/

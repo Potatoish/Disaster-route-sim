@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ant Guided Navigation And Safety System</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body onload="initTheme()">
+
+<div class="topbar">
+  <div class="topbar-brand">
+    <img class="topbar-logo" src="assets/agnas-wordmark.png" alt="AGNAS logo">
+    <div class="topbar-copy">
+    <div class="topbar-title">Ant Guided Navigation And Safety System</div>
+    <div class="topbar-sub">Ant Colony Optimization - Lexicographic Safety-First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" aria-label="Switch theme">
+      <span class="theme-toggle-track" aria-hidden="true">
+        <span class="theme-toggle-thumb">
+          <span class="theme-toggle-icon" id="themeToggleIcon">&#9790;</span>
+        </span>
+      </span>
+      <span class="theme-toggle-copy">
+        <span class="theme-toggle-kicker">Theme</span>
+        <span class="theme-toggle-label" id="themeToggleLabel">Light mode</span>
+      </span>
+    </button>
+
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span id="statusTxt">Ready</span>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+
+  <div class="left-panel">
+    <div class="panel-head">
+      <div class="panel-head-title">Simulation Parameters</div>
+      <div class="panel-head-sub">Configure and run ACO route simulation</div>
+    </div>
+
+    <div class="panel-body">
+      <div class="workflow-main">
+      <div class="workflow-card active" id="cardBarangay" data-workflow-card="barangay">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Barangay</div>
+            <div class="workflow-card-summary" id="summaryBarangay">Select the scope you want to simulate.</div>
+          </div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn" id="changeBarangayBtn" type="button" onclick="focusWorkflowSection('barangay')">Select</button>
+          </div>
+        </div>
+        <div class="workflow-card-body">
+          <div class="bgy-grid">
+            <div class="bgy-card" id="bgyPbtn" data-barangay="Pinagbuhatan" onclick="selectBarangay('Pinagbuhatan')">
+              <div class="bgy-icon">&#127969;</div>
+              <div class="bgy-name">Pinagbuhatan</div>
+              <div class="bgy-tag">Pasig City</div>
+            </div>
+            <div class="bgy-card" id="bgyStaBtn" data-barangay="Sta. Lucia" onclick="selectBarangay('Sta. Lucia')">
+              <div class="bgy-icon">&#127969;</div>
+              <div class="bgy-name">Sta. Lucia</div>
+              <div class="bgy-tag">Pasig City</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-card" id="cardHazard" data-workflow-card="hazard">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Disaster</div>
+            <div class="workflow-card-summary" id="summaryHazard">Choose which hazard scenario to test.</div>
+          </div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn" id="changeHazardBtn" type="button" onclick="focusWorkflowSection('hazard')">Select</button>
+          </div>
+        </div>
+        <div class="workflow-card-body">
+          <div class="hazard-grid">
+            <div class="hazard-card flood" id="hFlood" onclick="selectHazard('Flood', this)">
+              <div class="hazard-icon">&#127754;</div>
+              <div>
+                <div class="hazard-name">Flood</div>
+                <div class="hazard-sub">Water level</div>
+              </div>
+            </div>
+
+            <div class="hazard-card" id="hEarthquake" onclick="selectHazard('Earthquake', this)">
+              <div class="hazard-icon">&#9888;&#65039;</div>
+              <div>
+                <div class="hazard-name">Earthquake</div>
+                <div class="hazard-sub">Setup in progress</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-card" id="cardRoute" data-workflow-card="route">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label" id="routeCardLabel">Start / End</div>
+            <div class="workflow-card-summary" id="summaryRoute">Pick the origin and destination nodes inside the selected barangay.</div>
+          </div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn" id="changeRouteBtn" type="button" onclick="focusWorkflowSection('route')">Change</button>
+            <button class="card-action-btn subtle" id="resetRouteBtn" type="button" onclick="resetRouteSelection()">Reset</button>
+          </div>
+        </div>
+        <div class="workflow-card-body">
+          <div class="earthquake-mode-flag" id="earthquakeModeFlag" hidden>Earthquake Routing Mode</div>
+          <div class="workflow-route-flow">
+            <div class="field route-field route-field-start" id="startField">
+              <label id="startNodeLabel">START NODE - Safety Origin</label>
+              <select id="startSel" disabled></select>
+            </div>
+
+            <div class="workflow-route-divider" id="routeDivider">
+              move to
+            </div>
+
+            <div class="field route-field route-field-end" id="endField">
+              <label>END NODE - Safety Destination</label>
+              <select id="endSel" disabled></select>
+            </div>
+
+            <div class="earthquake-route-panel" id="earthquakeRoutePanel" hidden>
+              <div class="earthquake-route-copy" id="earthquakeRouteCopy">
+                Click <strong>Show Evacuation Sites</strong> to reveal the available evacuation shelters for Pinagbuhatan.
+              </div>
+              <button class="earthquake-evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
+                Show Evacuation Sites
+              </button>
+              <div class="earthquake-route-status" id="evacStatusTxt">Evacuation sites are hidden.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-card" id="cardRun" data-workflow-card="run">
+        <div class="workflow-card-head">
+          <div>
+            <div class="sec-label">Run</div>
+            <div class="workflow-card-summary" id="summaryRun">Review the setup, then launch the simulation.</div>
+          </div>
+          <div class="workflow-card-actions">
+            <button class="card-action-btn subtle" id="changeRunBtn" type="button" onclick="resetAll()">Reset all</button>
+          </div>
+        </div>
+        <div class="workflow-card-body workflow-run-body">
+          <div class="info-box" id="infoBox">
+            Select a <strong>barangay</strong> to begin. The ACO algorithm finds the
+            <strong>safest route</strong> using the lexicographic safety-first rule -
+            hazard level is evaluated before travel distance.
+          </div>
+
+          <button class="run-btn" id="runBtn" type="button" onclick="runSimulation()" disabled>
+            Run Simulation
+          </button>
+
+          <button class="reset-btn" id="resetBtn" type="button" onclick="resetAll()">
+            New Simulation
+          </button>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="map-wrap">
+      <div id="map"></div>
+
+      <div class="empty-map" id="emptyMap">
+        <div class="empty-map-icon">&#128506;</div>
+        <div class="empty-map-txt">Select a barangay to load the map</div>
+      </div>
+
+      <div class="map-badge tl" id="mapInfoBadge" style="display:none;" aria-live="polite" aria-atomic="true">
+        <div id="mapInfoContent"></div>
+      </div>
+
+      <div class="map-badge map-legend" id="mapLegend" style="display:none;">
+        <div class="legend-head">
+          <div class="legend-title">Legend</div>
+          <button class="legend-toggle-btn" id="legendToggleBtn" onclick="toggleLegendVisibility()">Hide</button>
+        </div>
+
+        <div class="legend-body" id="mapLegendBody">
+          <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
+          <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
+          <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated Route</span></div>
+
+          <div style="margin-top:5px;">
+            <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.63rem;">End Node</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.63rem;">Safe</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Moderate</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.63rem;">Danger</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="loader" aria-live="polite">
+      <div class="loader-card">
+        <div class="loader-card-top">
+          <div class="loader-heading-group">
+            <div class="loader-kicker" id="loaderKicker">Loading</div>
+            <div class="loader-text" id="loaderTitle">Loading routes</div>
+          </div>
+          <div class="loader-core-badge" id="loaderModeBadge">Route</div>
+        </div>
+        <div class="loader-progress-shell">
+          <div class="loader-progress-head">
+            <span class="loader-progress-label">Progress</span>
+            <span class="loader-pct" id="loaderPct">0%</span>
+          </div>
+          <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="loader-bar" id="loaderBar"></div>
+          </div>
+        </div>
+        <div class="loader-steps" id="loaderSteps" hidden></div>
+      </div>
+    </div>
+
+    <div class="warning-modal-backdrop" id="fallbackWarningModal" hidden>
+      <div class="warning-modal" role="dialog" aria-modal="true" aria-labelledby="fallbackWarningTitle" aria-describedby="fallbackWarningCopy">
+        <div class="warning-modal-kicker" id="fallbackWarningKicker">Warning</div>
+        <div class="warning-modal-title" id="fallbackWarningTitle">Proceed with caution</div>
+        <div class="warning-modal-copy" id="fallbackWarningCopy">
+          The routes below are possible routes options only. Review them carefully.
+        </div>
+        <div class="warning-modal-actions">
+          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Show Routes</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-panel" id="resultsPanel">
+      <div class="results-resize-handle" id="resultsResizeHandle" onmousedown="startResultsResize(event)" title="Drag to resize results"></div>
+      <div class="results-inner">
+        <div class="earthquake-view-switcher" id="earthquakeViewSelector" hidden>
+          <div class="earthquake-view-head">
+            <span class="earthquake-view-badge">EARTHQUAKE</span>
+            <span class="earthquake-view-copy" id="earthquakeViewCopy">Earthquake result lens</span>
+          </div>
+          <div class="earthquake-view-tabs" role="tablist" aria-label="Earthquake result views">
+            <button class="eqtab active" id="eqView-overall" type="button" onclick="switchEarthquakeView('overall')">Overall</button>
+            <button class="eqtab" id="eqView-liquefaction" type="button" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
+            <button class="eqtab" id="eqView-ground_shaking" type="button" onclick="switchEarthquakeView('ground_shaking')">Ground Shaking</button>
+          </div>
+        </div>
+        <div class="results-tabs" role="tablist" aria-label="Route result sections">
+          <button class="rtab active" type="button" role="tab" aria-selected="true" aria-controls="tab-routes" onclick="switchTab('routes',this)">Route List</button>
+          <button class="rtab" type="button" role="tab" aria-selected="false" aria-controls="tab-summary" onclick="switchTab('summary',this)">Summary</button>
+        </div>
+        <div class="rtab-content active" id="tab-routes" role="tabpanel"></div>
+        <div class="rtab-content" id="tab-summary" role="tabpanel"></div>
+      </div>
+    </div>
+
+    <div class="results-actions" id="resultsActions">
+      <button class="dl-btn primary" onclick="downloadCSV()">Download CSV</button>
+      <button class="dl-btn secondary" id="resultsNewSimulationBtn" onclick="resetAll()">New Simulation</button>
+      <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
+      <div class="results-summary-txt" style="margin-left:auto;align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
+    </div>
+
+    <button class="results-toggle-fab" id="resultsToggleFab" onclick="showResultsPanelDrawer()">Show Results</button>
+  </div>
+</div>
+
+<script src="osm.js"></script>
+<script src="flood.js"></script>
+<script src="earthquake.js"></script>
+<script src="script.js"></script>
+
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC9-qnXqJwSD-UTMHkDuTuMW1M99VfmmUA&callback=initMap">
+</script>
+
+</body>
+</html>
+

@@ -1,0 +1,15 @@
+[
+  {
+    "label": "Coordinate pair example",
+    "start": {
+      "name": "Novo",
+      "lat": 14.558085411625907,
+      "lng": 121.084921938467
+    },
+    "end": {
+      "name": "Kenneth",
+      "lat": 14.541715003658885,
+      "lng": 121.10467959564755
+    }
+  }
+]
