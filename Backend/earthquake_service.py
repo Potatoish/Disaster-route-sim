@@ -310,8 +310,8 @@ def _view_sort_key(route):
         route["unsafe_distance"] > 0,
         route["unsafe_distance"],
         route["risk_distance"],
-        -route.get("final_pheromone", 0.0),
         route["distance"],
+        -route.get("final_pheromone", 0.0),
     )
 
 
@@ -428,9 +428,9 @@ def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_
     return list(collected.values())
 
 
-def _select_road_nearest_evacuation_site(base_graph, start_location, evacuation_sites):
+def _collect_road_reachable_evacuation_sites(base_graph, start_location, evacuation_sites):
     if not evacuation_sites:
-        return None, None
+        return []
 
     start_node = select_endpoint_node(
         base_graph,
@@ -438,6 +438,15 @@ def _select_road_nearest_evacuation_site(base_graph, start_location, evacuation_
         start_location["lng"],
         "start",
     )
+
+    try:
+        distance_map = nx.single_source_dijkstra_path_length(
+            base_graph,
+            start_node,
+            weight="length",
+        )
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return []
 
     ranked_sites = []
     for site in evacuation_sites:
@@ -448,25 +457,22 @@ def _select_road_nearest_evacuation_site(base_graph, start_location, evacuation_
             "end",
         )
 
-        try:
-            road_distance = float(
-                nx.shortest_path_length(
-                    base_graph,
-                    start_node,
-                    end_node,
-                    weight="length",
-                )
-            )
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
+        road_distance = distance_map.get(end_node)
+        if road_distance is None:
             continue
 
-        ranked_sites.append((road_distance, str(site.get("name", "")).lower(), site))
+        site_copy = dict(site)
+        site_copy["road_distance"] = round(float(road_distance), 2)
+        ranked_sites.append(site_copy)
 
-    if not ranked_sites:
-        return None, None
-
-    road_distance, _, selected_site = min(ranked_sites)
-    return selected_site, round(road_distance, 2)
+    ranked_sites.sort(
+        key=lambda site: (
+            site["road_distance"],
+            str(site.get("name", "")).lower(),
+            site.get("id", 0),
+        )
+    )
+    return ranked_sites
 
 
 def get_earthquake_evacuation_sites(barangay_name):
@@ -522,28 +528,28 @@ def simulate_earthquake(start, barangay_name):
             }
 
         base_graph = _get_earthquake_graph(barangay_name)
-        selected_site, selected_site_road_distance = _select_road_nearest_evacuation_site(
+        evaluated_sites = _collect_road_reachable_evacuation_sites(
             base_graph,
             start_location,
             dataset["evacuation_sites"],
         )
-        if selected_site is None or selected_site_road_distance is None:
+        if not evaluated_sites:
             return {
                 "error": True,
                 "message": "No road-reachable evacuation site is available for this start node.",
             }
 
-        evaluated_sites = [selected_site]
-
         debug_print("\n" + "=" * 60)
         debug_print("[EQ] SIMULATION START")
         debug_print(f"[EQ] From: {start_location['name']} ({start_location['lat']}, {start_location['lng']})")
         debug_print(f"[EQ] Selection context: {barangay_name}")
-        debug_print(
-            f"[EQ] Target evacuation site: {selected_site['name']} "
-            f"({selected_site['lat']}, {selected_site['lng']}) | "
-            f"road distance={selected_site_road_distance:.1f}m"
-        )
+        debug_print(f"[EQ] Road-reachable evacuation sites: {len(evaluated_sites)}")
+        for site in evaluated_sites:
+            debug_print(
+                f"[EQ]   Candidate site: {site['name']} "
+                f"({site['lat']}, {site['lng']}) | "
+                f"road distance={site['road_distance']:.1f}m"
+            )
         simulation_started = time.perf_counter()
         phase_started = simulation_started
         debug_print("[EQ] Phase 1/3: preparing routing context")
@@ -590,7 +596,8 @@ def simulate_earthquake(start, barangay_name):
             "barangay": dataset["display_barangay"],
             "start": start_location["name"],
             "safe_threshold": HAZARD_THRESHOLD,
-            "evacuation_sites": evaluated_sites,
+            "evacuation_sites": dataset["evacuation_sites"],
+            "reachable_evacuation_sites": evaluated_sites,
             "hazard_layers": dataset["layer_payloads"],
             "active_view": "overall",
             "views": views,

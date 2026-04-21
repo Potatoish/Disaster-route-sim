@@ -30,7 +30,6 @@ _LEVEL_TO_SEVERITY = {
     "severe": 5,
 }
 
-
 def is_supported_earthquake_barangay(barangay_name):
     return normalize_barangay_name(barangay_name) in SUPPORTED_BARANGAYS
 
