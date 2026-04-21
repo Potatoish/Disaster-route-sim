@@ -146,5 +146,9 @@ Main backend endpoints include:
 - The UI is designed for simulation and route review, not full live turn-by-turn navigation
 
 ## Authors
+Ambulario, Ranielle Pearl C.
+Gaces, Winrock, D.
+Globiogo, Jefferson, T.
+Nunez, Jessa, S.
 
 Built as a disaster route simulation project focused on safer evacuation path analysis for selected barangays in Pasig City.
