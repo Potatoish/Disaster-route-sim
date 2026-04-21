@@ -1352,7 +1352,7 @@ body.dark #loader {
 }
 
 .loader-card {
-  width: min(420px, calc(100vw - 40px));
+  width: min(500px, calc(100vw - 40px));
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border) 84%);
   background:
@@ -1362,10 +1362,10 @@ body.dark #loader {
     inset 0 1px 0 color-mix(in srgb, white 45%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 0 18px 18px;
+  padding: 0 20px 20px;
   position: relative;
 }
 
@@ -1542,10 +1542,21 @@ body.dark .loader-card {
 .loader-copy {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border) 88%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft-bg) 92%, white 8%), color-mix(in srgb, var(--panel) 94%, white 6%));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent-soft-shadow) 90%, transparent);
 }
 
 .loader-stage-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-meta);
   font-size: .68rem;
   font-weight: 700;
@@ -1554,9 +1565,34 @@ body.dark .loader-card {
   color: var(--muted);
 }
 
+.loader-stage-label::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--accent2), var(--accent));
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent2) 28%, transparent);
+  animation: loaderPulseDot 1.8s ease-out infinite;
+}
+
+@keyframes loaderPulseDot {
+  0% {
+    transform: scale(.9);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent2) 28%, transparent);
+  }
+  70% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent2) 0%, transparent);
+  }
+  100% {
+    transform: scale(.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent2) 0%, transparent);
+  }
+}
+
 .loader-text {
   font-family: var(--font-body);
-  font-size: 1rem;
+  font-size: 1.04rem;
   font-weight: 800;
   color: var(--text);
   line-height: 1.2;
@@ -1564,10 +1600,11 @@ body.dark .loader-card {
 
 .loader-steps {
   font-family: var(--font-body);
-  font-size: .8rem;
-  color: var(--muted);
-  line-height: 1.45;
-  padding: 0 2px;
+  font-size: .88rem;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted) 18%);
+  line-height: 1.55;
+  min-height: 2.6em;
+  padding: 0;
 }
 
 .loader-steps[hidden] {
@@ -1595,16 +1632,37 @@ body.dark .loader-card {
 
 .loader-progress {
   width: 100%;
-  height: 10px;
+  height: 12px;
   position: relative;
-  background: color-mix(in srgb, var(--border2) 48%, var(--panel) 52%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--border2) 52%, var(--panel) 48%), color-mix(in srgb, var(--border) 64%, var(--surface) 36%));
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent2) 10%, var(--border) 90%);
   box-shadow: inset 0 1px 3px rgba(2, 6, 23, .12);
 }
 
+.loader-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0 28%, rgba(255,255,255,.20) 50%, transparent 72%);
+  opacity: .55;
+  animation: loaderTrackSweep 2.6s linear infinite;
+  pointer-events: none;
+}
+
+.loader-progress::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
+  pointer-events: none;
+}
+
 .loader-bar {
+  position: relative;
   height: 100%;
   background:
     linear-gradient(90deg, rgba(255,255,255,.16), rgba(255,255,255,0), rgba(255,255,255,.16)),
@@ -1612,14 +1670,61 @@ body.dark .loader-card {
   background-size: 150% 100%, 100% 100%;
   border-radius: 999px;
   width: 0;
-  transition: width .42s ease;
+  overflow: visible;
+  transition: width .42s cubic-bezier(.2, .8, .2, 1);
   box-shadow: 0 0 16px color-mix(in srgb, var(--accent2) 26%, transparent);
-  animation: loaderBarShift 2.4s linear infinite;
+  animation: loaderBarShift 2.4s linear infinite, loaderBarGlow 1.7s ease-in-out infinite;
+}
+
+.loader-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0 36%, rgba(255,255,255,.34) 52%, transparent 68%);
+  animation: loaderBarSweep 1.7s linear infinite;
+  pointer-events: none;
+}
+
+.loader-bar::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.94) 0, color-mix(in srgb, var(--accent2) 78%, white 22%) 55%, rgba(255,255,255,0) 72%);
+  transform: translate(50%, -50%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent2) 18%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent2) 32%, transparent);
+  animation: loaderBarHeadPulse 1.2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes loaderBarShift {
   from { background-position: 0% 0, 0 0; }
   to { background-position: 200% 0, 0 0; }
+}
+
+@keyframes loaderTrackSweep {
+  from { transform: translateX(-42%); }
+  to { transform: translateX(42%); }
+}
+
+@keyframes loaderBarSweep {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+@keyframes loaderBarGlow {
+  0%, 100% { box-shadow: 0 0 14px color-mix(in srgb, var(--accent2) 22%, transparent); }
+  50% { box-shadow: 0 0 22px color-mix(in srgb, var(--accent2) 34%, transparent); }
+}
+
+@keyframes loaderBarHeadPulse {
+  0%, 100% { transform: translate(50%, -50%) scale(.92); }
+  50% { transform: translate(50%, -50%) scale(1.04); }
 }
 
 .loader-pct {

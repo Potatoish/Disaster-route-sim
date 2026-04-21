@@ -708,10 +708,38 @@ function syncLoaderContext() {
   }
 }
 
+function getLoaderStepDetail(title) {
+  const normalizedTitle = String(title || '').trim().toLowerCase();
+  const hazardKey = String(selectedHazard || '').trim().toLowerCase();
+
+  switch (normalizedTitle) {
+    case 'preparing your request':
+      return 'Checking your selections and preparing the request for the selected area.';
+    case 'loading area details':
+      return hazardKey === 'earthquake'
+        ? 'Gathering nearby road details, evacuation options, and earthquake map layers for this run.'
+        : 'Gathering nearby road details and flood information needed for this route check.';
+    case 'checking route options':
+      return hazardKey === 'earthquake'
+        ? 'Comparing road options from your chosen start point to reachable evacuation sites. This step usually takes the longest.'
+        : 'Comparing possible road options between your selected points and keeping the safer choices first. This step usually takes the longest.';
+    case 'organizing results':
+      return 'Reviewing the route matches and arranging the strongest options for display.';
+    case 'drawing the route map':
+      return 'Placing the routes, markers, and summary details on the map and results panel.';
+    case 'results are ready':
+      return 'The map and route summary are ready for review.';
+    case 'simulation stopped':
+      return 'The request ended before the results were ready. Check the backend output, then try again.';
+    default:
+      return '';
+  }
+}
+
 function setLoaderStep(title, progress, options = {}) {
   setLoaderTitle(title);
   updateLoaderProgress(progress, options);
-  updateLoaderStepDetail(options.detail || '');
+  updateLoaderStepDetail(options.detail || getLoaderStepDetail(title));
 }
 
 function resetLoaderState() {
@@ -3332,24 +3360,24 @@ async function runSimulation() {
   document.getElementById('infoBox').innerHTML =
     `Simulation is now <strong>running</strong>. The selected barangay, disaster type, and node inputs are <strong>temporarily locked</strong> until the results are ready.`;
   setLoaderStep(
-    'Getting everything ready',
-    5,
-    { immediate: true, detail: 'Preparing the map, hazard data, and route settings...' }
+    'Preparing your request',
+    8,
+    { immediate: true }
   );
 
   try {
     let result;
     if (isEarthquakeMode()) {
       clearPendingEarthquakeWarmup();
-      setLoaderStep('Loading earthquake data', 20);
-      setLoaderStep('Finding routes', 50);
+      setLoaderStep('Loading area details', 22);
+      setLoaderStep('Checking route options', 50);
 
       result = await sendEarthquakeRequest({
         start,
         barangay: selectedBarangay,
         hazard: selectedHazard,
       });
-      setLoaderStep('Reviewing results', 75);
+      setLoaderStep('Organizing results', 76);
 
       result.hazard_layers = result.hazard_layers || {};
       Object.entries(result.views || {}).forEach(([viewKey, viewData]) => {
@@ -3363,15 +3391,15 @@ async function runSimulation() {
       hydrateActiveEarthquakeView(result.active_view || 'overall');
       earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
       earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
-      setLoaderStep('Drawing route map', 90);
+      setLoaderStep('Drawing the route map', 92);
       syncEarthquakeViewSelector();
       clearBoundaryLayers();
       await renderActiveSimulationRoutes();
       showResultsPanel(simData);
     } else {
       clearPendingSimulationWarmup();
-      setLoaderStep('Loading flood data', 20);
-      setLoaderStep('Finding routes', 50);
+      setLoaderStep('Loading area details', 22);
+      setLoaderStep('Checking route options', 50);
 
       result = await sendSimulationRequest({
         start,
@@ -3383,9 +3411,9 @@ async function runSimulation() {
         normalizeRoutes(result.routes || [])
       );
 
-      setLoaderStep('Reviewing results', 75);
+      setLoaderStep('Organizing results', 76);
       simData = result;
-      setLoaderStep('Drawing route map', 90);
+      setLoaderStep('Drawing the route map', 92);
       clearBoundaryLayers();
       setFloodLegendContent();
       await renderActiveSimulationRoutes();
@@ -3403,12 +3431,12 @@ async function runSimulation() {
     setSimulationConfigLocked(true);
     updateMapContextBadge();
 
-    setLoaderStep('Routes are ready', 100);
+    setLoaderStep('Results are ready', 100);
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
     console.error(err);
     statusTxt.textContent = 'Error';
-    setLoaderStep('Simulation could not finish', 100);
+    setLoaderStep('Simulation stopped', 100);
     loaderHideDelay = 320;
     alert('Simulation failed: ' + err.message);
   } finally {

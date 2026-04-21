@@ -51,9 +51,9 @@ UNSAFE_PENALTY = 1_000_000.0
 TOP_ACO_REINFORCERS = 3
 DEBUG = True
 
-DISCOURAGED_ENDPOINT_HIGHWAYS = {"service", "track"}
+DISCOURAGED_ENDPOINT_HIGHWAYS = {"track"}
 DISCOURAGED_ENDPOINT_SERVICE_VALUES = {"driveway", "parking_aisle", "parking", "alley"}
-DISCOURAGED_ENDPOINT_ACCESS_VALUES = {"private", "no"}
+BLOCKED_ENDPOINT_ACCESS_VALUES = {"private", "no"}
 
 _GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
@@ -633,12 +633,16 @@ def prepare_routing_graph(start_lat, start_lng, end_lat, end_lng, barangay_name=
         return G
 
 
+def is_blocked_endpoint_edge(edge):
+    access_values = set(normalize_tag_values(edge.get("access")))
+    return bool(access_values & BLOCKED_ENDPOINT_ACCESS_VALUES)
+
+
 def is_preferred_endpoint_edge(edge):
     highways = set(normalize_tag_values(edge.get("highway")))
     services = set(normalize_tag_values(edge.get("service")))
-    access_values = set(normalize_tag_values(edge.get("access")))
 
-    if access_values & DISCOURAGED_ENDPOINT_ACCESS_VALUES:
+    if is_blocked_endpoint_edge(edge):
         return False
     if highways & DISCOURAGED_ENDPOINT_HIGHWAYS:
         return False
@@ -673,9 +677,11 @@ def build_endpoint_node_profile(G, node_id, label):
 
     for u, v, key, data in get_endpoint_directional_edges(G, node_id, label):
         hazard = int(data.get("hazard", 1))
+        blocked = is_blocked_endpoint_edge(data)
         preferred = is_preferred_endpoint_edge(data)
         edge_profiles.append({
             "hazard": hazard,
+            "blocked": blocked,
             "preferred": preferred,
             "cost": edge_traversal_cost(data),
         })
@@ -686,21 +692,27 @@ def build_endpoint_node_profile(G, node_id, label):
     best_edge = min(
         edge_profiles,
         key=lambda edge: (
+            edge["blocked"],
+            not edge["preferred"],
             edge["hazard"] > HAZARD_THRESHOLD,
             edge["hazard"],
-            not edge["preferred"],
             edge["cost"],
         )
     )
 
     return {
         "edge_count": len(edge_profiles),
+        "accessible_edge_count": sum(
+            1 for edge in edge_profiles if not edge["blocked"]
+        ),
         "safe_edge_count": sum(
-            1 for edge in edge_profiles if edge["hazard"] <= HAZARD_THRESHOLD
+            1 for edge in edge_profiles
+            if not edge["blocked"] and edge["hazard"] <= HAZARD_THRESHOLD
         ),
         "preferred_edge_count": sum(
             1 for edge in edge_profiles if edge["preferred"]
         ),
+        "best_blocked": best_edge["blocked"],
         "best_hazard": best_edge["hazard"],
         "best_cost": best_edge["cost"],
         "best_preferred": best_edge["preferred"],
@@ -710,10 +722,11 @@ def build_endpoint_node_profile(G, node_id, label):
 def build_endpoint_candidate_rank(candidate):
     profile = candidate["profile"]
     return (
+        profile["best_blocked"],
+        round(candidate["distance"], 3),
+        not profile["best_preferred"],
         profile["best_hazard"] > HAZARD_THRESHOLD,
         profile["best_hazard"],
-        not profile["best_preferred"],
-        round(candidate["distance"], 3),
         round(profile["best_cost"], 3),
     )
 
@@ -777,6 +790,7 @@ def debug_endpoint_candidates(label, fallback_node, fallback_distance, distance_
         debug_print(
             f"[OSM]   {marker}node={candidate['node']} dist={candidate['distance']:.1f}m "
             f"haz={profile['best_hazard']} preferred={profile['best_preferred']} "
+            f"blocked={profile['best_blocked']} accessible_edges={profile['accessible_edge_count']}/{profile['edge_count']} "
             f"safe_edges={profile['safe_edge_count']}/{profile['edge_count']}"
         )
 

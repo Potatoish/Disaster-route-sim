@@ -1,7 +1,12 @@
 // Render the exact route geometry produced by the backend.
 // Do not re-route paths in the browser, or the map can diverge from the evaluated result.
+// Do not invent long straight endpoint connectors either. If the snapped road
+// node is far from the selected marker, showing a fake line is more misleading
+// than showing the route starting on the actual routed road geometry.
 
-const ROUTE_ENDPOINT_ATTACH_DISTANCE_METERS = 140;
+const ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS = 12;
+const ROUTE_ENDPOINT_GUIDE_MIN_DISTANCE_METERS = 14;
+const ROUTE_ENDPOINT_GUIDE_MAX_DISTANCE_METERS = 180;
 
 function formatDistanceKm(distanceMeters) {
   const numericDistance = Number(distanceMeters);
@@ -82,12 +87,8 @@ function mergePathEndpoint(pathPoints, endpoint, mode) {
     return pathPoints;
   }
 
-  if (gapMeters <= ROUTE_ENDPOINT_ATTACH_DISTANCE_METERS) {
-    if (mode === 'start') {
-      pathPoints.unshift(normalizedEndpoint);
-    } else {
-      pathPoints.push(normalizedEndpoint);
-    }
+  if (gapMeters <= ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS) {
+    pathPoints[targetIndex] = normalizedEndpoint;
   }
 
   return pathPoints;
@@ -183,6 +184,132 @@ function buildFallbackPath(route, getLocationByName, startName, endName) {
   }
 
   return [];
+}
+
+function shouldDrawEndpointGuide(endpointPoint, routePoint) {
+  const normalizedEndpoint = normalizePointCandidate(endpointPoint);
+  const normalizedRoutePoint = normalizePointCandidate(routePoint);
+  if (!normalizedEndpoint || !normalizedRoutePoint) {
+    return false;
+  }
+
+  const gapMeters = estimatePointGapMeters(normalizedEndpoint, normalizedRoutePoint);
+  return (
+    gapMeters >= ROUTE_ENDPOINT_GUIDE_MIN_DISTANCE_METERS
+    && gapMeters <= ROUTE_ENDPOINT_GUIDE_MAX_DISTANCE_METERS
+  );
+}
+
+function getEndpointGuideStyle(role) {
+  if (role === 'start') {
+    return {
+      color: '#a855f7',
+      halo: 'rgba(255,255,255,.96)',
+      zIndex: 14,
+    };
+  }
+
+  return {
+    color: '#06b6d4',
+    halo: 'rgba(255,255,255,.96)',
+    zIndex: 14,
+  };
+}
+
+function addEndpointGuide(path, role, gMap, mapLayers) {
+  const style = getEndpointGuideStyle(role);
+  const dashHaloSymbol = {
+    path: 'M 0,-1 0,1',
+    strokeOpacity: 1,
+    strokeColor: style.halo,
+    strokeWeight: 4,
+    scale: 3.4,
+  };
+  const dashSymbol = {
+    path: 'M 0,-1 0,1',
+    strokeOpacity: 1,
+    strokeColor: style.color,
+    strokeWeight: 2.2,
+    scale: 3,
+  };
+  const arrowHaloSymbol = {
+    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+    scale: 4.7,
+    fillColor: style.halo,
+    fillOpacity: 0.96,
+    strokeColor: style.halo,
+    strokeWeight: 3,
+  };
+  const arrowSymbol = {
+    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+    scale: 3.9,
+    fillColor: style.color,
+    fillOpacity: 1,
+    strokeColor: style.color,
+    strokeWeight: 2,
+  };
+
+  mapLayers.routes.push(new google.maps.Polyline({
+    path,
+    geodesic: false,
+    strokeOpacity: 0,
+    clickable: false,
+    icons: [
+      {
+        icon: dashHaloSymbol,
+        offset: '0',
+        repeat: '10px',
+      },
+      {
+        icon: arrowHaloSymbol,
+        offset: '100%',
+      },
+    ],
+    map: gMap,
+    zIndex: style.zIndex,
+  }));
+
+  mapLayers.routes.push(new google.maps.Polyline({
+    path,
+    geodesic: false,
+    strokeOpacity: 0,
+    clickable: false,
+    icons: [
+      {
+        icon: dashSymbol,
+        offset: '0',
+        repeat: '10px',
+      },
+      {
+        icon: arrowSymbol,
+        offset: '100%',
+      },
+    ],
+    map: gMap,
+    zIndex: style.zIndex + 1,
+  }));
+}
+
+function drawRouteEndpointGuides(route, getLocationByName, startName, endName, gMap, mapLayers) {
+  if (!route) return;
+
+  const pathPoints = getRoutePoints(route, getLocationByName);
+  if (pathPoints.length < 2) return;
+
+  const startPoint = resolveNamedLocationPoint(getLocationByName, startName);
+  const routeStartPoint = pathPoints[0];
+  if (shouldDrawEndpointGuide(startPoint, routeStartPoint)) {
+    addEndpointGuide([startPoint, routeStartPoint], 'start', gMap, mapLayers);
+  }
+
+  const destinationPoint = normalizePointCandidate({
+    lat: route?.destination_lat,
+    lng: route?.destination_lng,
+  }) || resolveNamedLocationPoint(getLocationByName, endName);
+  const routeEndPoint = pathPoints[pathPoints.length - 1];
+  if (shouldDrawEndpointGuide(destinationPoint, routeEndPoint)) {
+    addEndpointGuide([destinationPoint, routeEndPoint], 'end', gMap, mapLayers);
+  }
 }
 
 function createRouteGroup(route, cfg) {
@@ -418,6 +545,8 @@ async function renderRoutesOnRoads({
   const defaultCoords = Array.isArray(bestRoute?.render_path) && bestRoute.render_path.length
     ? bestRoute.render_path
     : getRoutePoints(bestRoute || {}, getLocationByName);
+
+  drawRouteEndpointGuides(bestRoute, getLocationByName, start, end, gMap, mapLayers);
 
   if (defaultCoords.length) {
     const bounds = new google.maps.LatLngBounds();
