@@ -18,6 +18,9 @@ let selectedRouteFocus = null;
 let workflowFocusSection = null;
 let simulationConfigLocked = false;
 let simulationInProgress = false;
+let backendSimulationBusy = false;
+let backendSimulationStatus = null;
+let backendBusyPollTimer = null;
 let floodHazardOverlayMode = 'none';
 const activeInfoWindowRef = { current: null };
 const loaderState = {
@@ -32,6 +35,7 @@ let loaderPatienceDismissed = false;
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const SIMULATION_REQUEST_TIMEOUT_MS = 300000;
 const EARTHQUAKE_REQUEST_TIMEOUT_MS = 300000;
+const BACKEND_SIMULATION_STATUS_POLL_MS = 2500;
 const HAZARD_SELECTION_CLASSES = ['flood', 'earthquake'];
 const EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE = 'Pinagbuhatan and Sta. Lucia';
 const EARTHQUAKE_SUPPORTED_BARANGAY_PROMPT = 'Pinagbuhatan or Sta. Lucia';
@@ -534,6 +538,11 @@ function syncSimulationConfigLock() {
 
       if (configLocked) {
         el.disabled = true;
+        return;
+      }
+
+      if (id === 'runBtn') {
+        el.disabled = backendSimulationBusy || !canRunCurrentSimulation();
       }
     });
 
@@ -1399,6 +1408,104 @@ function isRequestTimeoutError(error) {
     || /signal is aborted without reason/i.test(error?.message || '');
 }
 
+function buildBackendRequestError(response, data, fallbackMessage) {
+  const error = new Error(data?.message || fallbackMessage);
+  error.statusCode = response?.status || 0;
+  error.backendCode = data?.code || '';
+  error.backendStatus = data?.status || null;
+  return error;
+}
+
+function isBackendSimulationBusyError(error) {
+  return error?.backendCode === 'simulation_busy' || error?.statusCode === 429;
+}
+
+function stopBackendSimulationBusyPolling() {
+  if (backendBusyPollTimer) {
+    window.clearInterval(backendBusyPollTimer);
+    backendBusyPollTimer = null;
+  }
+}
+
+function setBackendSimulationBusyState(busy, status = null) {
+  backendSimulationBusy = !!busy;
+  backendSimulationStatus = backendSimulationBusy ? (status || backendSimulationStatus || {}) : null;
+
+  if (!backendSimulationBusy) {
+    stopBackendSimulationBusyPolling();
+  }
+
+  const statusTxt = document.getElementById('statusTxt');
+  if (statusTxt && !simulationInProgress) {
+    if (backendSimulationBusy) {
+      statusTxt.textContent = 'Backend Busy';
+    } else if (isBackendLive) {
+      statusTxt.textContent = 'Backend Connected';
+    }
+  }
+
+  syncSimulationConfigLock();
+  syncWorkflowSummaries();
+}
+
+async function fetchBackendSimulationStatus() {
+  const response = await fetch(BACKEND + '/simulation-status');
+  const data = await parseBackendJsonResponse(response);
+
+  if (!response.ok || data?.error === true) {
+    throw buildBackendRequestError(
+      response,
+      data,
+      'Failed to read backend simulation status.'
+    );
+  }
+
+  return data?.status || { busy: false };
+}
+
+async function refreshBackendSimulationStatus() {
+  if (!isBackendLive) {
+    setBackendSimulationBusyState(false);
+    return null;
+  }
+
+  try {
+    const status = await fetchBackendSimulationStatus();
+    setBackendSimulationBusyState(!!status?.busy, status);
+    return status;
+  } catch (error) {
+    return null;
+  }
+}
+
+function startBackendSimulationBusyPolling() {
+  if (backendBusyPollTimer) {
+    return;
+  }
+
+  backendBusyPollTimer = window.setInterval(async () => {
+    const status = await refreshBackendSimulationStatus();
+    if (status && !status.busy) {
+      stopBackendSimulationBusyPolling();
+    }
+  }, BACKEND_SIMULATION_STATUS_POLL_MS);
+}
+
+async function syncBackendBusyStateAfterRequestError(error) {
+  if (isBackendSimulationBusyError(error)) {
+    setBackendSimulationBusyState(true, error.backendStatus || backendSimulationStatus);
+    startBackendSimulationBusyPolling();
+    return;
+  }
+
+  if (isRequestTimeoutError(error)) {
+    const status = await refreshBackendSimulationStatus();
+    if (status?.busy) {
+      startBackendSimulationBusyPolling();
+    }
+  }
+}
+
 function formatTimeoutForHumans(timeoutMs) {
   const totalSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
   if (totalSeconds < 60) {
@@ -1439,8 +1546,7 @@ async function sendSimulationRequest(payload) {
       statusCode = response.status;
 
       if (!response.ok || data?.error === true) {
-        const message = data?.message || data?.error || 'Simulation failed';
-        throw new Error(message);
+        throw buildBackendRequestError(response, data, 'Simulation failed');
       }
 
       return data;
@@ -1457,7 +1563,7 @@ async function sendSimulationRequest(payload) {
 
   if (isRequestTimeoutError(lastError)) {
     throw new Error(
-      `Simulation took longer than ${formatTimeoutForHumans(SIMULATION_REQUEST_TIMEOUT_MS)} in the browser and was stopped. The backend may still be computing that request, so avoid running it again immediately.`
+      `Simulation took longer than ${formatTimeoutForHumans(SIMULATION_REQUEST_TIMEOUT_MS)} in the browser and was stopped. The backend may still be finishing that run, so wait until it clears before starting another one.`
     );
   }
 
@@ -1479,7 +1585,7 @@ async function sendEarthquakeRequest(payload) {
       statusCode = response.status;
 
       if (!response.ok || data?.error === true) {
-        throw new Error(data?.message || 'Earthquake simulation failed');
+        throw buildBackendRequestError(response, data, 'Earthquake simulation failed');
       }
 
       return data;
@@ -1496,7 +1602,7 @@ async function sendEarthquakeRequest(payload) {
 
   if (isRequestTimeoutError(lastError)) {
     throw new Error(
-      `Earthquake simulation took longer than ${formatTimeoutForHumans(EARTHQUAKE_REQUEST_TIMEOUT_MS)} in the browser and was stopped. Keep the backend running and try again after the current computation finishes.`
+      `Earthquake simulation took longer than ${formatTimeoutForHumans(EARTHQUAKE_REQUEST_TIMEOUT_MS)} in the browser and was stopped. The backend may still be finishing that run, so wait until it clears before starting another one.`
     );
   }
 
@@ -2606,7 +2712,7 @@ function onNodeChange() {
     else advanceStep(3);
   }
 
-  document.getElementById('runBtn').disabled = !canRun;
+  document.getElementById('runBtn').disabled = !canRun || backendSimulationBusy;
 
   if (isEarthquakeMode()) {
     if (start) {
@@ -2627,12 +2733,15 @@ function onNodeChange() {
         });
       }
     }
-    if (!isEarthquakeBarangaySupported()) {
+    if (backendSimulationBusy) {
+      document.getElementById('infoBox').innerHTML =
+        `The backend is still finishing a <strong>previous simulation</strong>. Wait until it clears before running a new earthquake simulation.`;
+    } else if (!isEarthquakeBarangaySupported()) {
       document.getElementById('infoBox').innerHTML =
         `<strong>Earthquake Routing</strong> is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`;
     } else if (canRun) {
       document.getElementById('infoBox').innerHTML =
-        `Ready! <strong>${start}</strong> will be routed to the nearest <strong>road-reachable evacuation site</strong>. Click <strong>Run Earthquake Simulation</strong>.`;
+        `Ready! <strong>${start}</strong> will be evaluated against the reachable evacuation sites using the <strong>safety-first, distance-second</strong> rule. Click <strong>Run Earthquake Simulation</strong>.`;
     } else if (!start) {
       document.getElementById('infoBox').innerHTML =
         `Choose a <strong>start node</strong> to begin the earthquake routing flow.`;
@@ -2647,7 +2756,10 @@ function onNodeChange() {
   } else {
     if (start || end) drawSelectedPinsOnly(start, end);
 
-    if (canRun) {
+    if (backendSimulationBusy) {
+      document.getElementById('infoBox').innerHTML =
+        `The backend is still finishing a <strong>previous simulation</strong>. Wait until it clears before running a new route simulation.`;
+    } else if (canRun) {
       document.getElementById('infoBox').innerHTML =
         `Ready! <strong>${start}</strong> to <strong>${end}</strong>. Click <strong>Run Simulation</strong>.`;
     } else if (!selectedHazard) {
@@ -2886,11 +2998,13 @@ function syncWorkflowSummaries() {
   if (summaryRun) {
     summaryRun.textContent = simulationInProgress
       ? 'Simulation is running. Inputs are temporarily locked until the results are ready.'
+      : backendSimulationBusy
+      ? 'The backend is still finishing a previous simulation. Wait until it clears before starting another run.'
       : simulationConfigLocked
       ? 'Setup is locked for this run. Click New Simulation to change it.'
       : isEarthquakeMode()
       ? canRun
-        ? 'Earthquake setup is complete. The ACO run will route to the nearest road-reachable evacuation site.'
+        ? 'Earthquake setup is complete. The ACO run will rank reachable evacuation sites by safety first, then distance.'
         : 'Review the earthquake setup, then launch the simulation.'
       : canRun
       ? 'Everything is ready. Launch the simulation when you are set.'
@@ -3305,6 +3419,7 @@ async function runSimulation() {
         barangay: selectedBarangay,
         hazard: selectedHazard,
       });
+      setBackendSimulationBusyState(false);
       setLoaderStep('review', 76);
 
       result.hazard_layers = result.hazard_layers || {};
@@ -3338,6 +3453,7 @@ async function runSimulation() {
         hazard: selectedHazard,
         barangay: selectedBarangay,
       });
+      setBackendSimulationBusyState(false);
       result.routes = decorateRoutesForDisplay(
         normalizeRoutes(result.routes || [])
       );
@@ -3367,18 +3483,18 @@ async function runSimulation() {
     setLoaderStep('complete', 100);
     statusTxt.textContent = 'Simulation Complete';
   } catch (err) {
+    await syncBackendBusyStateAfterRequestError(err);
     console.error(err);
-    statusTxt.textContent = 'Error';
+    statusTxt.textContent = backendSimulationBusy ? 'Backend Busy' : 'Error';
     setLoaderStep('stopped', 100);
     loaderHideDelay = 320;
-    alert('Simulation failed: ' + err.message);
+    alert(isBackendSimulationBusyError(err) ? err.message : 'Simulation failed: ' + err.message);
   } finally {
     setSimulationInProgress(false);
     resetPatienceNotification();
     if (!loaderHidden) {
       hideLoader(loaderHideDelay);
     }
-    runBtn.disabled = isSimulationInteractionLocked();
     syncSimulationConfigLock();
   }
 }
@@ -3977,9 +4093,11 @@ async function checkBackend() {
     if (r.ok) {
       isBackendLive = true;
       document.getElementById('statusTxt').textContent = 'Backend Connected';
+      await refreshBackendSimulationStatus();
     }
   } catch (err) {
     isBackendLive = false;
+    setBackendSimulationBusyState(false);
   }
 }
 
