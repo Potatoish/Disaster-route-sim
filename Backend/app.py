@@ -7,7 +7,7 @@ from earthquake_service import (
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
-from main import simulate, get_locations, warm_startup_data
+from main import simulate, get_locations
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
 
 app = Flask(__name__)
@@ -95,11 +95,6 @@ def _run_with_simulation_gate(mode, request_summary, work):
     finally:
         _mark_simulation_finished()
         _SIMULATION_GATE.release()
-
-try:
-    warm_startup_data()
-except Exception as e:
-    print(f"[STARTUP] Static cache load skipped: {e}")
 
 @app.route("/", methods=["GET"])
 def health():

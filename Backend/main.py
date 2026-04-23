@@ -8,12 +8,8 @@ from threading import RLock
 
 from data import database
 from osm_routing import (
-    get_barangay_base_graph,
-    get_barangay_base_graph_path,
-    get_legacy_barangay_base_graph_path,
     simulate_osm_routes,
     resolve_point_hazard,
-    warm_static_caches,
 )
 
 _LOCATIONS_CACHE = None
@@ -114,12 +110,8 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
             "message": f"OSM routing failed: {str(e)}"
         }
 def warm_startup_data():
-    warm_static_caches()
-    for barangay_name in ("Pinagbuhatan", "Sta. Lucia"):
-        graph_path = get_barangay_base_graph_path(barangay_name)
-        legacy_graph_path = get_legacy_barangay_base_graph_path(barangay_name)
-        if (graph_path and graph_path.exists()) or (legacy_graph_path and legacy_graph_path.exists()):
-            get_barangay_base_graph(barangay_name)
+    # Startup warming is intentionally disabled for low-memory deployments.
+    return None
 
 
 def export_csv(routes, filename=None):
