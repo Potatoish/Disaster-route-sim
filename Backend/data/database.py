@@ -1,132 +1,120 @@
-import pyodbc
-import time
+from pathlib import Path
 
-DB_CONNECT_ATTEMPTS = 2
-DB_CONNECT_RETRY_DELAY_SECONDS = 0.35
-DB_CONNECT_TIMEOUT_SECONDS = 5
+import pandas as pd
 
-CONNECTION_STRING = (
-    "DRIVER={ODBC Driver 18 for SQL Server};"
-    "SERVER=DESKTOP-THN5GFN\\SQLEXPRESS;" 
-    "DATABASE=Disaster_route_Simulationn;"
-    "Trusted_Connection=yes;"
-    "TrustServerCertificate=yes;"
-    f"Connection Timeout={DB_CONNECT_TIMEOUT_SECONDS};"
-    #SQL
-    #disaster_route_sim - pearl sql server database name
-    #PRLY04\\SQLEXPRESS - pearl sql server instance name
-    #------------------
-    #DESKTOP-THN5GFN\\SQLEXPRESS - jeff sql server instance name
-    #Disaster_route_Simulationn- jeff sql server database name
-    #------------------
-    #SERVER=localhost\\SQLEXPRESS - jess sql server instance name
-    #DATABASE=aco_evacuation - jess sql server database name
+
+DATA_DIR = Path(__file__).resolve().parent
+NODE_COLUMNS = ["id", "name", "lat", "lng", "barangay", "node_type"]
+
+
+def _repair_bad_line(row, expected_columns):
+    if len(row) == len(expected_columns):
+        return row
+
+    if expected_columns == NODE_COLUMNS and len(row) > len(expected_columns):
+        repaired_name = ", ".join(part.strip() for part in row[1:-4])
+        return [row[0], repaired_name, *row[-4:]]
+
+    return row
+
+
+def _load_csv(primary_name, fallback_names=(), required_columns=None):
+    for file_name in (primary_name, *fallback_names):
+        file_path = DATA_DIR / file_name
+        if not file_path.exists():
+            continue
+
+        try:
+            frame = pd.read_csv(file_path)
+        except pd.errors.ParserError:
+            frame = pd.read_csv(
+                file_path,
+                engine="python",
+                on_bad_lines=lambda row: _repair_bad_line(row, required_columns or []),
+            )
+        missing_columns = [
+            column
+            for column in (required_columns or [])
+            if column not in frame.columns
+        ]
+        if missing_columns:
+            raise ValueError(
+                f"{file_name} is missing required column(s): {', '.join(missing_columns)}"
+            )
+        return frame, None
+
+    return pd.DataFrame(columns=required_columns or []), FileNotFoundError(
+        f"Could not find any of: {', '.join((primary_name, *fallback_names))}"
+    )
+
+
+nodes, _NODES_LOAD_ERROR = _load_csv(
+    "nodes.csv",
+    fallback_names=("node.csv",),
+    required_columns=NODE_COLUMNS,
 )
 
-def get_connection():
-    last_error = None
 
-    for attempt in range(DB_CONNECT_ATTEMPTS):
-        try:
-            return pyodbc.connect(CONNECTION_STRING)
-        except pyodbc.Error as e:
-            last_error = e
-            if attempt >= DB_CONNECT_ATTEMPTS - 1:
-                raise
-            time.sleep(DB_CONNECT_RETRY_DELAY_SECONDS)
-
-    raise last_error
-
-
-def _fetch_nodes(cursor):
-    cursor.execute("""
-        SELECT id, name, lat, lng, barangay
-        FROM nodes
-    """)
-    return cursor.fetchall()
-
-
-def _fetch_edges(cursor):
-    cursor.execute("""
-        SELECT
-            n1.name AS source_name,
-            n2.name AS target_name,
-            e.distance_km,
-            CASE
-                WHEN fh1.hazard_level IS NULL AND fh2.hazard_level IS NULL THEN 1
-                WHEN fh1.hazard_level IS NULL THEN fh2.hazard_level
-                WHEN fh2.hazard_level IS NULL THEN fh1.hazard_level
-                WHEN fh1.hazard_level >= fh2.hazard_level THEN fh1.hazard_level
-                ELSE fh2.hazard_level
-            END AS hazard_level
-        FROM edges e
-        JOIN nodes n1 ON e.source_id = n1.id
-        JOIN nodes n2 ON e.target_id = n2.id
-        LEFT JOIN flood_hazard fh1 ON fh1.node_id = n1.id
-        LEFT JOIN flood_hazard fh2 ON fh2.node_id = n2.id
-    """)
-    return cursor.fetchall()
+def _fetch_nodes():
+    return list(
+        nodes.loc[:, ["id", "name", "lat", "lng", "barangay"]]
+        .itertuples(index=False, name=None)
+    )
 
 
 def get_nodes():
-    print("Fetching node locations from SQL Server...")
+    print("Fetching node locations from CSV...")
 
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        nodes = _fetch_nodes(cursor)
-        conn.close()
-        print(f"Fetched {len(nodes)} node location(s).")
-        return nodes
+        if _NODES_LOAD_ERROR is not None:
+            raise _NODES_LOAD_ERROR
+
+        node_rows = _fetch_nodes()
+        print(f"Fetched {len(node_rows)} node location(s).")
+        return node_rows
     except Exception as e:
         print("Node fetch error:", e)
         return None
 
+
 def get_graph_data():
-    print("Loading graph data from SQL Server...")
+    print("Loading graph data from CSV...")
 
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        nodes = _fetch_nodes(cursor)
-        edges = _fetch_edges(cursor)
+        if _NODES_LOAD_ERROR is not None:
+            raise _NODES_LOAD_ERROR
 
-        conn.close()
-        return nodes, edges
-
+        node_rows = _fetch_nodes()
+        return node_rows, []
     except Exception as e:
         print("Database error:", e)
         return [], []
 
+
 def get_location_by_name(name):
     try:
+        if _NODES_LOAD_ERROR is not None:
+            raise _NODES_LOAD_ERROR
+
         normalized_name = (name or "").strip()
         if not normalized_name:
             return None
 
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT TOP 1 id, name, lat, lng, barangay
-            FROM nodes
-            WHERE LTRIM(RTRIM(name)) = ?
-        """, (normalized_name,))
-
-        row = cursor.fetchone()
-        conn.close()
-
-        if not row:
+        matched_rows = nodes.loc[
+            nodes["name"].astype(str).str.strip() == normalized_name,
+            ["id", "name", "lat", "lng", "barangay"],
+        ]
+        if matched_rows.empty:
             return None
 
+        row = matched_rows.iloc[0]
         return {
-            "id": row[0],
-            "name": row[1],
-            "lat": float(row[2]),
-            "lng": float(row[3]),
-            "barangay": row[4]
+            "id": int(row["id"]),
+            "name": row["name"],
+            "lat": float(row["lat"]),
+            "lng": float(row["lng"]),
+            "barangay": row["barangay"],
         }
-
     except Exception as e:
         print("Location fetch error:", e)
         return None
