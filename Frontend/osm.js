@@ -408,6 +408,12 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     const peakRiskLabel = !isEarthquakeRoute && typeof window.formatFloodPeakRisk === 'function'
       ? `${window.formatFloodPeakRisk(route)} (${route.max_hazard ?? 'N/A'}/5)`
       : null;
+    const floodExposureRows = !isEarthquakeRoute
+      ? [
+          ['Flood Exposure Score', route.display_flood_exposure_score || 'N/A'],
+          ['What This Means', route.display_flood_exposure_meaning || 'N/A'],
+        ]
+      : [];
     if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
     activeInfoWindowRef.current = new google.maps.InfoWindow({
       content: infoPopup(label, [
@@ -415,6 +421,7 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
         ['Distance', route.display_distance || formatDistanceKm(route.distance)],
         ['Max Hazard', route.max_hazard + '/5', cfg.color],
         ...(peakRiskLabel ? [['Water Risk', peakRiskLabel]] : []),
+        ...floodExposureRows,
         ['Unsafe Dist.', route.display_unsafe_distance || '0 m'],
         ['Unsafe Segs', route.display_unsafe_segment_count ?? 0],
         ['Summary', route.display_route_summary || route.path_label || 'N/A'],

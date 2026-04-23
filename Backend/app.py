@@ -23,10 +23,8 @@ _SIMULATION_STATE = {
     "request": None,
 }
 
-
 def _utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
-
 
 def _serialize_simulation_status():
     with _SIMULATION_STATE_LOCK:
@@ -56,7 +54,6 @@ def _serialize_simulation_status():
             "request": request_summary,
         }
 
-
 def _mark_simulation_started(mode, request_summary):
     with _SIMULATION_STATE_LOCK:
         _SIMULATION_STATE["busy"] = True
@@ -68,7 +65,6 @@ def _mark_simulation_started(mode, request_summary):
             for key, value in request_summary.items()
             if value not in (None, "")
         }
-
 
 def _mark_simulation_finished():
     with _SIMULATION_STATE_LOCK:

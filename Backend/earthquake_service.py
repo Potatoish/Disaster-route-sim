@@ -44,17 +44,17 @@ EARTHQUAKE_VIEW_CONFIG = {
     "overall": {
         "label": "Overall",
         "hazard_attr": "eq_overall",
-        "description": "Combined liquefaction and ground-shaking exposure before distance.",
+        "description": "Combined liquefaction and ground-shaking exposure first, ACO pheromone second, distance third.",
     },
     "liquefaction": {
         "label": "Liquefaction",
         "hazard_attr": "eq_liquefaction",
-        "description": "Liquefaction exposure before distance.",
+        "description": "Liquefaction exposure first, ACO pheromone second, distance third.",
     },
     "ground_shaking": {
         "label": "Ground Shaking",
         "hazard_attr": "eq_ground_shaking",
-        "description": "Ground-shaking exposure before distance.",
+        "description": "Ground-shaking exposure first, ACO pheromone second, distance third.",
     },
 }
 
@@ -310,8 +310,8 @@ def _view_sort_key(route):
         route["unsafe_distance"] > 0,
         route["unsafe_distance"],
         route["risk_distance"],
-        route["distance"],
         -route.get("final_pheromone", 0.0),
+        route["distance"],
     )
 
 
