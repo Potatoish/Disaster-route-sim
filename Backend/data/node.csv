@@ -1,0 +1,13 @@
+id,name,lat,lng,barangay,node_type
+37,Novo Pinagbuhatan,14.558085412,121.084921938,Pinagbuhatan,landmark
+38,Kenneth Talipapa,14.541715004,121.104679596,Pinagbuhatan,road
+39,Pinagbuhatan Barangay Hall,14.557479018,121.090963482,Pinagbuhatan,hall
+40,Pinagbuhatan High School,14.555160161,121.091227026,Pinagbuhatan,school
+41,Pinagbuhatan Ferry station,14.536033824,121.102231378,Pinagbuhatan,ferry
+42,2 Centennial Street, Pinagbuhatan,14.545969109,121.101032111,Pinagbuhatan,road
+43,SM City East Ortigas,14.587528029,121.104157529,Sta. Lucia,mall
+44,Pasig Skatepark,14.575852237,121.101736924,Sta. Lucia,park
+45,St. Jude Thaddeus Parish,14.581430714,121.103032337,Sta. Lucia,church
+46,Santa Lucia High School (Tramo St.),14.583129599,121.103077499,Sta. Lucia,school
+47,Brgy. Sta. Lucia Health Center,14.584885330,121.101101020,Sta. Lucia,health_facility
+48,East Ortigas Mansions,14.586318658,121.102776615,Sta. Lucia,house
