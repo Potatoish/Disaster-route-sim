@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Lock, RLock
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from earthquake_service import (
     get_earthquake_evacuation_sites,
@@ -9,6 +10,8 @@ from earthquake_service import (
 )
 from main import simulate, get_locations
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
+
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "Frontend"
 
 app = Flask(__name__)
 CORS(app)
@@ -96,7 +99,7 @@ def _run_with_simulation_gate(mode, request_summary, work):
         _mark_simulation_finished()
         _SIMULATION_GATE.release()
 
-@app.route("/", methods=["GET"])
+@app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
 
@@ -269,6 +272,20 @@ def run_earthquake():
             "error": True,
             "message": str(e)
         }), 500
+
+
+@app.route("/", methods=["GET"])
+def frontend_index():
+    return send_from_directory(FRONTEND_DIR, "index.html")
+
+
+@app.route("/<path:path>", methods=["GET"])
+def frontend_assets(path):
+    asset_path = FRONTEND_DIR / path
+    if asset_path.is_file():
+        return send_from_directory(FRONTEND_DIR, path)
+
+    return send_from_directory(FRONTEND_DIR, "index.html")
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)

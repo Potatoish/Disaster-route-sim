@@ -1,5 +1,7 @@
 ﻿const BACKEND = 'http://127.0.0.1:5000';
-window.BACKEND_BASE = BACKEND;
+window.BACKEND_BASE = ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+  ? `${window.location.protocol}//127.0.0.1:5000`
+  : window.location.origin;
 
 let gMap = null;
 let selectedBarangay = null;
@@ -1057,7 +1059,7 @@ function setBarangayCardStates() {
 
 async function loadLocationsFromBackend() {
   try {
-    const res = await fetch(BACKEND + '/locations');
+    const res = await fetch(window.BACKEND_BASE + '/locations');
     const data = await res.json();
 
     if (data.error) {
@@ -1444,7 +1446,7 @@ async function postJsonWithTimeout(endpoint, payload, timeoutMs) {
   }, timeoutMs);
 
   try {
-    const response = await fetch(BACKEND + endpoint, {
+    const response = await fetch(window.BACKEND_BASE + endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -1513,7 +1515,7 @@ function setBackendSimulationBusyState(busy, status = null) {
 }
 
 async function fetchBackendSimulationStatus() {
-  const response = await fetch(BACKEND + '/simulation-status');
+  const response = await fetch(window.BACKEND_BASE + '/simulation-status');
   const data = await parseBackendJsonResponse(response);
 
   if (!response.ok || data?.error === true) {
@@ -2431,7 +2433,7 @@ async function loadBarangayMapOnly(bgyName) {
   if (!nodes.length) return;
 
   try {
-    const res = await fetch(BACKEND + '/barangay-boundary/' + encodeURIComponent(bgyName));
+    const res = await fetch(window.BACKEND_BASE + '/barangay-boundary/' + encodeURIComponent(bgyName));
     const data = await res.json();
 
     if (!res.ok || data.error === true) {
@@ -4151,7 +4153,7 @@ async function checkBackend() {
   try {
     const c = new AbortController();
     const t = setTimeout(() => c.abort(), 2000);
-    const r = await fetch(BACKEND + '/', { signal: c.signal });
+    const r = await fetch(window.BACKEND_BASE + '/health', { signal: c.signal });
     clearTimeout(t);
 
     if (r.ok) {
