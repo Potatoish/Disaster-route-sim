@@ -114,10 +114,6 @@ BARANGAY_BASE_GRAPH_FILES = {
     "pinagbuhatan": GRAPHS_DIR / "pinagbuhatan_walk.graphml",
     "sta lucia": GRAPHS_DIR / "sta_lucia_walk.graphml",
 }
-LEGACY_BARANGAY_BASE_GRAPH_FILES = {
-    "pinagbuhatan": GRAPHS_DIR / "pinagbuhatan_drive.graphml",
-    "sta lucia": GRAPHS_DIR / "sta_lucia_drive.graphml",
-}
 
 VAR_TO_HAZARD = {
     1: 1,
@@ -601,17 +597,11 @@ def get_barangay_base_graph_path(name):
     return BARANGAY_BASE_GRAPH_FILES.get(canonical_name)
 
 
-def get_legacy_barangay_base_graph_path(name):
-    canonical_name = normalize_barangay_name(name)
-    return LEGACY_BARANGAY_BASE_GRAPH_FILES.get(canonical_name)
-
-
 def get_barangay_base_graph(name):
     canonical_name = normalize_barangay_name(name)
     graph_path = get_barangay_base_graph_path(canonical_name)
     if not graph_path:
         return None
-    legacy_graph_path = get_legacy_barangay_base_graph_path(canonical_name)
 
     cached_graph = _BARANGAY_BASE_GRAPH_CACHE.get(canonical_name)
     if cached_graph is not None:
@@ -654,16 +644,7 @@ def get_barangay_base_graph(name):
             _BARANGAY_BASE_GRAPH_CACHE[canonical_name] = graph
             debug_print(f"[OSM] Saved local base graph for {boundary['display_name']}: {graph_path.name}")
             return graph
-        except Exception as exc:
-            if legacy_graph_path and legacy_graph_path.exists():
-                debug_print(
-                    f"[OSM] {GRAPH_NETWORK_TYPE.title()} graph build failed for {boundary['display_name']}; "
-                    f"falling back to legacy graph {legacy_graph_path.name}: {exc}"
-                )
-                graph = ox.load_graphml(legacy_graph_path)
-                graph.graph["graph_cache_key"] = f"base::legacy_drive::{canonical_name}"
-                _BARANGAY_BASE_GRAPH_CACHE[canonical_name] = graph
-                return graph
+        except Exception:
             raise
 
 
