@@ -2125,6 +2125,18 @@ select:focus-visible {
   line-height: 1.65;
 }
 
+.summary-callout-title {
+  font-family: var(--font-body);
+  font-size: .7rem;
+  font-weight: 800;
+  color: var(--ink-strong);
+  margin-bottom: 4px;
+}
+
+.summary-callout-copy + .summary-callout-copy {
+  margin-top: 6px;
+}
+
 body.dark .summary-callout {
   background: rgba(14, 165, 233, .08);
   border-color: rgba(56, 189, 248, .22);
@@ -2602,6 +2614,10 @@ body.dark .data-table tr.route-row-selected td {
   font-weight: 600;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.summary-meta strong {
+  color: var(--ink-strong);
 }
 
 .results-actions {

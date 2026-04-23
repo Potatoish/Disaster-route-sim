@@ -14,7 +14,7 @@ from shapely.ops import unary_union
 
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
-MAX_ELIMINATED_ROUTES_TO_SHOW = 2
+MAX_ELIMINATED_ROUTES_TO_SHOW = 3
 DISPLAY_ROUTE_OVERLAP_THRESHOLDS = (0.6, 0.75, 0.9, 1.01)
 
 DIST_METERS = 7000
@@ -1531,6 +1531,10 @@ def select_display_routes(sorted_routes, limit):
 
     selected = []
     selected_paths = set()
+    route_rank = {
+        route_path_signature(route): index
+        for index, route in enumerate(sorted_routes)
+    }
 
     for overlap_threshold in DISPLAY_ROUTE_OVERLAP_THRESHOLDS:
         for route in sorted_routes:
@@ -1556,6 +1560,13 @@ def select_display_routes(sorted_routes, limit):
     debug_print(
         f"[OSM] Display route selection: requested={limit}, "
         f"candidates={len(sorted_routes)}, selected={len(selected)}"
+    )
+
+    selected.sort(
+        key=lambda route: route_rank.get(
+            route_path_signature(route),
+            len(sorted_routes),
+        )
     )
 
     return selected[:limit]

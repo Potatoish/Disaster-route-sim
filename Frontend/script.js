@@ -1161,6 +1161,42 @@ function formatFloodPeakRiskWithHazard(route) {
   return `${formatFloodPeakRisk(route)} (${formatHazardScoreText(route?.max_hazard)})`;
 }
 
+function formatRouteScore(value, digits = 2, fallback = 'N/A') {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  return numericValue.toFixed(digits);
+}
+
+function buildFloodExposureDisplay(route) {
+  if (isEarthquakeRouteRecord(route)) {
+    return null;
+  }
+
+  const score = formatRouteScore(route?.risk_distance, 2);
+  if (score === 'N/A') {
+    return {
+      meaning: 'Unavailable',
+      score: 'N/A',
+    };
+  }
+
+  return {
+    meaning: 'Smaller scores mean less total flood exposure along the route.',
+    score,
+  };
+}
+
+function getAcoRankingRuleText() {
+  return 'safer routes first, then the route the system favors more, then shorter distance';
+}
+
+function getAcoRankingRuleHtml() {
+  return '<strong>safer routes first</strong>, then <strong>the route the system favors more</strong>, then <strong>shorter distance</strong>';
+}
+
 function getFloodOverlayConfig(mode = floodHazardOverlayMode) {
   return FLOOD_OVERLAY_VIEWS[mode] || FLOOD_OVERLAY_VIEWS.none;
 }
@@ -1207,7 +1243,25 @@ function getRouteRiskHeadline(route) {
 }
 
 function getRouteRiskSubtext(route) {
-  return `Highest score: ${formatHazardScoreText(route?.max_hazard)} · Unsafe road parts: ${Number(route?.display_unsafe_segment_count || 0)}`;
+  const unsafeRoadParts = Number(route?.display_unsafe_segment_count || 0);
+
+  if (isEarthquakeRouteRecord(route)) {
+    return `Highest score: ${formatHazardScoreText(route?.max_hazard)} · Unsafe road parts: ${unsafeRoadParts}`;
+  }
+
+  const parts = [
+    `Peak score: ${formatHazardScoreText(route?.max_hazard)}`,
+  ];
+
+  if (route?.display_flood_exposure_score) {
+    parts.push(`Flood exposure score: ${route.display_flood_exposure_score}`);
+  }
+
+  if (unsafeRoadParts > 0) {
+    parts.push(`Unsafe road parts: ${unsafeRoadParts}`);
+  }
+
+  return parts.join(' · ');
 }
 
 function buildRouteStreetSummary(route) {
@@ -1253,12 +1307,12 @@ function buildRouteReason(route) {
 
   if (route?.category === 'best') {
     return isEarthquakeRoute && route?.destination_name
-      ? `Best route to ${route.destination_name}. It has the lowest road risk among the options shown.`
-      : 'Best route. It has the lowest flood risk among the options shown.';
+      ? `Best route to ${route.destination_name}. It is the top choice in this result.`
+      : 'Best route. It is the top choice in this result.';
   }
 
   if (route?.category === 'available') {
-    return 'Available route, but another option is safer or shorter.';
+    return 'Available route, but another option is a better match in this result.';
   }
 
   return route?.reason || 'Route explanation unavailable.';
@@ -1276,48 +1330,55 @@ function buildRouteEvidenceChips(route) {
   return [
     { label: 'Flood levels crossed', value: route?.display_flood_classes || 'None' },
     { label: 'Highest flood level', value: formatFloodPeakRiskWithHazard(route) },
-    { label: 'Road parts in route', value: `${route?.display_segment_count ?? 0}` },
+    { label: 'Flood exposure score', value: route?.display_flood_exposure_score || 'N/A' },
   ];
 }
 
 function getFriendlyEarthquakeViewDescription(viewKey) {
   switch (viewKey) {
     case 'liquefaction':
-      return 'This view favors routes with lower liquefaction risk before distance.';
+      return 'This view focuses on liquefaction risk and shows the safer routes first.';
     case 'ground_shaking':
-      return 'This view favors routes with lower ground-shaking risk before distance.';
+      return 'This view focuses on ground-shaking risk and shows the safer routes first.';
     case 'overall':
     default:
-      return 'Overall checks both liquefaction and ground shaking first, then distance.';
+      return 'This view checks both liquefaction and ground-shaking risk and shows the safer routes first.';
   }
+}
+
+function getUserFriendlyRankingExplanation() {
+  return 'The safest routes are shown first. If two routes have similar risk, the system checks which one it prefers, then looks at distance.';
 }
 
 function buildSummaryCallout(result, safeRoutes, bestRoute, earthquakeSummary) {
   if (isEarthquakeSimulationResult(result)) {
     if (!safeRoutes.length) {
       return earthquakeSummary?.selected_evacuation_site
-        ? `No safe route was found to <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>. The routes shown below still cross road sections above the safety limit.`
-        : 'No safe route was found in this view. The routes shown below still cross road sections above the safety limit.';
+        ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">No fully safe route was found to <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>. The routes shown still pass through road sections above the safety limit.</div>`
+        : '<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">No fully safe route was found in this view. The routes shown still pass through road sections above the safety limit.</div>';
     }
 
-    const base = getFriendlyEarthquakeViewDescription(
-      earthquakeSummary?.view_key || result.active_view || 'overall'
-    );
+    const selectedSite = earthquakeSummary?.selected_evacuation_site?.name || 'the selected evacuation site';
+    const viewLabel = result.active_view_label || earthquakeSummary?.view_label || 'Overall';
+    const distanceText = bestRoute?.display_distance || 'N/A';
     return earthquakeSummary?.selected_evacuation_site
-      ? `${base}<br><br>Target shelter: <strong>${escapeHtml(earthquakeSummary.selected_evacuation_site.name)}</strong>`
-      : base;
+      ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route goes to <strong>${escapeHtml(selectedSite)}</strong> and is about <strong>${escapeHtml(distanceText)}</strong> long.</div><div class="summary-callout-copy">This result uses the <strong>${escapeHtml(viewLabel)}</strong> earthquake view and shows the safest option first.</div>`
+      : `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route is about <strong>${escapeHtml(distanceText)}</strong> long.</div><div class="summary-callout-copy">This result uses the <strong>${escapeHtml(viewLabel)}</strong> earthquake view and shows the safest option first.</div>`;
   }
 
   if (!safeRoutes.length) {
-    return 'No safe flood route was found. All shown options cross road sections above the safety limit.';
+    return '<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">No fully safe flood route was found. All shown options still pass through road sections above the safety limit.</div>';
   }
 
+  const highestFloodLevel = bestRoute ? formatFloodPeakRiskWithHazard(bestRoute) : 'N/A';
+  const distanceText = bestRoute?.display_distance || 'N/A';
+
   return bestRoute
-    ? 'The top flood route keeps water risk lowest before distance.'
+    ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route is about <strong>${escapeHtml(distanceText)}</strong> long.</div><div class="summary-callout-copy">Its highest flood level is <strong>${escapeHtml(highestFloodLevel)}</strong>, and it stays within the safe limit.</div>`
     : 'Route summary unavailable.';
 }
 
-function decorateRouteForDisplay(route) {
+function decorateRouteForDisplay(route, exposureDisplay = null) {
   const segmentCount = typeof route?.segments === 'number'
     ? route.segments
     : Array.isArray(route?.path)
@@ -1339,11 +1400,14 @@ function decorateRouteForDisplay(route) {
     display_reason: buildRouteReason(route),
     display_segment_count: segmentCount,
     display_unsafe_segment_count: unsafeSegmentCount,
+    display_flood_exposure_score: exposureDisplay?.score || '',
+    display_flood_exposure_meaning: exposureDisplay?.meaning || '',
   };
 }
 
 function decorateRoutesForDisplay(routes) {
-  return routes.map(route => decorateRouteForDisplay(route));
+  const exposureDisplays = routes.map(route => buildFloodExposureDisplay(route));
+  return routes.map((route, index) => decorateRouteForDisplay(route, exposureDisplays[index]));
 }
 
 function getCurrentSelections() {
@@ -1976,7 +2040,7 @@ function clearBarangaySelections(options = {}) {
   if (!keepInfoText) {
     document.getElementById('infoBox').innerHTML = selectedBarangay
       ? `<strong>Brgy. ${selectedBarangay}</strong> loaded. ${selectedHazard ? 'Choose your <strong>start</strong> and <strong>end</strong> nodes below.' : 'Choose a <strong>disaster type</strong> first.'}`
-      : `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will find the <strong>safest route</strong> using the <strong>lexicographic safety-first rule</strong>.`;
+      : `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will rank routes using ${getAcoRankingRuleHtml()}.`;
   }
 
   syncEarthquakeViewSelector();
@@ -2741,7 +2805,7 @@ function onNodeChange() {
         `<strong>Earthquake Routing</strong> is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`;
     } else if (canRun) {
       document.getElementById('infoBox').innerHTML =
-        `Ready! <strong>${start}</strong> will be evaluated against the reachable evacuation sites using the <strong>safety-first, distance-second</strong> rule. Click <strong>Run Earthquake Simulation</strong>.`;
+        `Ready! The system will compare routes from <strong>${start}</strong> to the evacuation sites that can still be reached. Click <strong>Run Earthquake Simulation</strong> to view the results.`;
     } else if (!start) {
       document.getElementById('infoBox').innerHTML =
         `Choose a <strong>start node</strong> to begin the earthquake routing flow.`;
@@ -3004,7 +3068,7 @@ function syncWorkflowSummaries() {
       ? 'Setup is locked for this run. Click New Simulation to change it.'
       : isEarthquakeMode()
       ? canRun
-        ? 'Earthquake setup is complete. The ACO run will rank reachable evacuation sites by safety first, then distance.'
+        ? 'Earthquake setup is complete. Run the simulation to see which evacuation sites can still be reached and which routes are safer.'
         : 'Review the earthquake setup, then launch the simulation.'
       : canRun
       ? 'Everything is ready. Launch the simulation when you are set.'
@@ -3530,30 +3594,30 @@ function showResultsPanel(result, options = {}) {
   if (isEarthquakeSimulationResult(result)) {
     document.getElementById('tab-summary').innerHTML = `
       <div class="results-stats-grid">
-        ${statBox('Displayed', routes.length, 'var(--ink-strong)')}
-        ${statBox('Safe Routes', safe.length, 'var(--green)')}
-        ${statBox('Eliminated', elim.length, 'var(--red)')}
-        ${statBox('Target Evac', earthquakeSummary?.selected_evacuation_site?.name || 'No route', safe.length ? 'var(--accent)' : 'var(--red)')}
+        ${statBox('Routes Shown', routes.length, 'var(--ink-strong)')}
+        ${statBox('Safe Options', safe.length, 'var(--green)')}
+        ${statBox('Not Recommended', elim.length, 'var(--red)')}
+        ${statBox('Chosen Shelter', earthquakeSummary?.selected_evacuation_site?.name || 'No route', safe.length ? 'var(--accent)' : 'var(--red)')}
       </div>
       <div class="summary-callout">
         ${buildSummaryCallout(result, safe, best, earthquakeSummary)}
       </div>
       <div class="summary-meta" style="margin-top:10px;">
-        Ranking rule: lower risk first, shorter distance second. &nbsp;|&nbsp; View: ${escapeHtml(result.active_view_label || 'Overall')}
+        <strong>How routes are ordered:</strong> ${escapeHtml(getUserFriendlyRankingExplanation())} &nbsp;|&nbsp; <strong>View:</strong> ${escapeHtml(result.active_view_label || 'Overall')}
       </div>`;
   } else {
     document.getElementById('tab-summary').innerHTML = `
       <div class="results-stats-grid">
-        ${statBox('Displayed', routes.length, 'var(--ink-strong)')}
-        ${statBox('Safe Routes', safe.length, 'var(--green)')}
-        ${statBox('Eliminated', elim.length, 'var(--red)')}
-        ${statBox('Best Dist.', best ? best.display_distance : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
+        ${statBox('Routes Shown', routes.length, 'var(--ink-strong)')}
+        ${statBox('Safe Options', safe.length, 'var(--green)')}
+        ${statBox('Not Recommended', elim.length, 'var(--red)')}
+        ${statBox('Top Route', best ? best.display_distance : 'No safe route', best ? 'var(--accent)' : 'var(--red)')}
       </div>
       <div class="summary-callout">
         ${buildSummaryCallout(result, safe, best, null)}
       </div>
       <div class="summary-meta" style="margin-top:10px;">
-        Ranking rule: lower risk first, shorter distance second. &nbsp;|&nbsp; Disaster: ${result.hazard_type || selectedHazard}
+        <strong>How routes are ordered:</strong> ${escapeHtml(getUserFriendlyRankingExplanation())} &nbsp;|&nbsp; <strong>Disaster:</strong> ${escapeHtml(result.hazard_type || selectedHazard || 'Unknown')}
       </div>`;
   }
 
@@ -3561,7 +3625,7 @@ function showResultsPanel(result, options = {}) {
     ? isEarthquakeSimulationResult(result)
       ? `${result.active_view_label || 'Overall'} · ${routes.length} routes listed`
       : shouldShowFallbackRoutes
-      ? `${routes.length} routes listed · least-risk first`
+      ? `${routes.length} routes listed · safest routes first`
       : `${routes.length} routes listed`
     : 'No route results to display';
 
@@ -3979,7 +4043,7 @@ function buildTable(routes, options = {}) {
   }).join('');
 
   return `<div class="results-table-wrap"><table class="data-table">
-    <thead><tr><th>#</th><th>Recommendation</th><th>Distance</th><th>Risk level</th><th>Route details</th></tr></thead>
+    <thead><tr><th>#</th><th>Recommendation</th><th>Distance</th><th>Risk &amp; Exposure</th><th>Route details</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -4065,7 +4129,7 @@ function resetAll() {
   document.getElementById('statusTxt').textContent = 'Ready';
 
   document.getElementById('infoBox').innerHTML =
-    `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will find the <strong>safest route</strong> using the <strong>lexicographic safety-first rule</strong>.`;
+    `Select a <strong>barangay</strong> and then choose a <strong>disaster type</strong> to begin. The ACO algorithm will rank routes using ${getAcoRankingRuleHtml()}.`;
 
   document.querySelectorAll('.bgy-card').forEach(c => c.classList.remove('selected'));
   clearHazardSelectionState();
