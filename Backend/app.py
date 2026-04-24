@@ -273,11 +273,9 @@ def run_earthquake():
             "message": str(e)
         }), 500
 
-
 @app.route("/", methods=["GET"])
 def frontend_index():
     return send_from_directory(FRONTEND_DIR, "index.html")
-
 
 @app.route("/<path:path>", methods=["GET"])
 def frontend_assets(path):
