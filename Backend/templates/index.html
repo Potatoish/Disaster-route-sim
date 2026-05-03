@@ -8,13 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body onload="initTheme()">
 
 <div class="topbar">
   <div class="topbar-brand">
-    <img class="topbar-logo" src="assets/agnas-logo.png" alt="AGNAS logo">
+    <img class="topbar-logo" src="{{ url_for('static', filename='assets/agnas-logo.png') }}" alt="AGNAS logo">
     <div class="topbar-copy">
     <div class="topbar-title">Ant Guided Navigation And Safety System</div>
     <div class="topbar-sub">Ant Colony Optimization - Safer Routes First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
@@ -301,10 +301,10 @@
   </div>
 </div>
 
-<script src="osm.js"></script>
-<script src="flood.js"></script>
-<script src="earthquake.js"></script>
-<script src="script.js"></script>
+<script src="{{ url_for('static', filename='osm.js') }}"></script>
+<script src="{{ url_for('static', filename='flood.js') }}"></script>
+<script src="{{ url_for('static', filename='earthquake.js') }}"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 
 <script async defer
   src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC9-qnXqJwSD-UTMHkDuTuMW1M99VfmmUA&callback=initMap">
