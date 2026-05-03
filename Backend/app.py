@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
-from pathlib import Path
 from threading import Lock, RLock
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from earthquake_service import (
     get_earthquake_evacuation_sites,
@@ -11,25 +10,7 @@ from earthquake_service import (
 from main import simulate, get_locations
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
 
-def _resolve_frontend_dir():
-    app_file = Path(__file__).resolve()
-    candidates = [
-        app_file.parents[1] / "Frontend",
-        Path.cwd() / "Frontend",
-        Path.cwd().parent / "Frontend",
-        app_file.parent / "Frontend",
-    ]
-
-    for candidate in candidates:
-        if (candidate / "index.html").is_file():
-            return candidate
-
-    return candidates[0]
-
-
-FRONTEND_DIR = _resolve_frontend_dir()
-
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
 
 _SIMULATION_GATE = Lock()
@@ -290,26 +271,8 @@ def run_earthquake():
         }), 500
 
 @app.route("/", methods=["GET"])
-def frontend_index():
-    index_file = FRONTEND_DIR / "index.html"
-    if not index_file.is_file():
-        app.logger.error("Frontend index.html not found at %s", index_file)
-        return jsonify({
-            "error": True,
-            "code": "frontend_not_found",
-            "message": "Frontend/index.html was not found in the deployed app. On Railway, deploy from the repository root so the Frontend folder is included.",
-            "expected_path": str(index_file),
-        }), 500
-
-    return send_from_directory(FRONTEND_DIR, "index.html")
-
-@app.route("/<path:path>", methods=["GET"])
-def frontend_assets(path):
-    asset_path = FRONTEND_DIR / path
-    if asset_path.is_file():
-        return send_from_directory(FRONTEND_DIR, path)
-
-    return frontend_index()
+def home():
+    return render_template("index.html")
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)

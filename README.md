@@ -1,6 +1,6 @@
 # AGNAS
 
-**Ant Guided Navigation And Safety System** is a disaster-aware evacuation route simulator for **Barangay Pinagbuhatan** and **Barangay Sta. Lucia** in **Pasig City**.  
+**Ant Guided Navigation And Safety System** is a disaster-aware evacuation route simulator for **Barangay Pinagbuhatan** and **Barangay Sta. Lucia** in **Pasig City**.
 The project uses an **Ant Colony Optimization (ACO)** approach with a **lexicographic safety-first rule**, meaning route safety is prioritized before travel distance.
 
 ## What It Does
@@ -26,38 +26,43 @@ AGNAS helps users explore evacuation routes under two hazard scenarios:
 - Earthquake evacuation site routing
 - Route list with risk summaries
 - Themed UI for flood and earthquake modes
-- SQL Server-backed location storage
+- Flask-served frontend and API routes
 
 ## Tech Stack
 
-- **Frontend:** HTML, CSS, JavaScript, Google Maps API
+- **Frontend:** HTML, CSS, JavaScript, Google Maps API, served by Flask
 - **Backend:** Python, Flask, Flask-CORS
 - **Routing/Data:** OSMnx, NetworkX, Shapely, GeoPandas
-- **Database:** SQL Server via `pyodbc`
+- **Location Data:** CSV files in `Backend/data/`
 
 ## Project Structure
 
 ```text
 Disaster-route-sim/
-├─ Backend/
-│  ├─ app.py
-│  ├─ main.py
-│  ├─ osm_routing.py
-│  ├─ earthquake_service.py
-│  ├─ earthquake_data.py
-│  ├─ requirements.txt
-│  └─ data/
-│     ├─ boundaries/
-│     ├─ earthquake/
-│     └─ flood_classes/
-├─ Frontend/
-│  ├─ index.html
-│  ├─ script.js
-│  ├─ osm.js
-│  ├─ earthquake.js
-│  ├─ flood.js
-│  └─ style.css
-└─ README.md
+|-- Backend/
+|   |-- app.py
+|   |-- main.py
+|   |-- osm_routing.py
+|   |-- earthquake_service.py
+|   |-- earthquake_data.py
+|   |-- requirements.txt
+|   |-- templates/
+|   |   `-- index.html
+|   |-- static/
+|   |   |-- script.js
+|   |   |-- osm.js
+|   |   |-- earthquake.js
+|   |   |-- flood.js
+|   |   |-- style.css
+|   |   `-- assets/
+|   `-- data/
+|      |-- boundaries/
+|      |-- earthquake/
+|      |-- flood_classes/
+|      |-- graphs/
+|      `-- node.csv
+|-- database/
+`-- README.md
 ```
 
 ## Setup
@@ -68,54 +73,27 @@ Disaster-route-sim/
 pip install -r Backend/requirements.txt
 ```
 
-### 2. Configure SQL Server
+### 2. Check map/API setup
 
-Update the SQL Server connection in `Backend/data/database.py` so it matches your local machine:
-
-- `SERVER`
-- `DATABASE`
-- trusted connection / driver settings
-
-The project expects tables such as:
-
-- `nodes`
-- `edges`
-- `flood_hazard`
-
-If your team is using seed files, run those first before launching the backend.
-
-### 3. Check map/API setup
-
-The frontend currently uses the **Google Maps JavaScript API** from `Frontend/index.html`.  
+The frontend uses the **Google Maps JavaScript API** from `Backend/templates/index.html`.
 If needed, replace the API key with your own valid key before deployment or sharing.
 
-### 4. Run the backend
+### 3. Run the app
 
 ```bash
 py Backend/app.py
 ```
 
-The Flask server runs on:
+The Flask server serves both the web UI and API routes:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-### 5. Run the frontend
-
-Open the frontend with a local static server such as **VS Code Live Server**, or serve the `Frontend/` folder over HTTP.
-
-Example:
+For deployment, the app entrypoint is:
 
 ```bash
-cd Frontend
-py -m http.server 5500
-```
-
-Then open:
-
-```text
-http://127.0.0.1:5500
+gunicorn app:app
 ```
 
 ## Supported Scope
@@ -127,6 +105,7 @@ http://127.0.0.1:5500
 
 Main backend endpoints include:
 
+- `GET /`
 - `GET /locations`
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`
@@ -136,7 +115,7 @@ Main backend endpoints include:
 
 ## Notes
 
-- Flood routing now uses the split flood class GeoJSON files in `Backend/data/flood_classes/`
+- Flood routing uses the split flood class GeoJSON files in `Backend/data/flood_classes/`
 - Earthquake routing uses:
   - `evacuation_sites.json`
   - `liquefaction.geojson`
@@ -144,6 +123,7 @@ Main backend endpoints include:
 - The UI is designed for simulation and route review, not full live turn-by-turn navigation
 
 ## Authors
+
 Ambulario, Ranielle Pearl C.
 Gaces, Winrock, D.
 Globiogo, Jefferson, T.
