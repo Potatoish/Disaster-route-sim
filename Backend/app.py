@@ -11,7 +11,23 @@ from earthquake_service import (
 from main import simulate, get_locations
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
 
-FRONTEND_DIR = Path(__file__).resolve().parents[1] / "Frontend"
+def _resolve_frontend_dir():
+    app_file = Path(__file__).resolve()
+    candidates = [
+        app_file.parents[1] / "Frontend",
+        Path.cwd() / "Frontend",
+        Path.cwd().parent / "Frontend",
+        app_file.parent / "Frontend",
+    ]
+
+    for candidate in candidates:
+        if (candidate / "index.html").is_file():
+            return candidate
+
+    return candidates[0]
+
+
+FRONTEND_DIR = _resolve_frontend_dir()
 
 app = Flask(__name__)
 CORS(app)
@@ -275,6 +291,16 @@ def run_earthquake():
 
 @app.route("/", methods=["GET"])
 def frontend_index():
+    index_file = FRONTEND_DIR / "index.html"
+    if not index_file.is_file():
+        app.logger.error("Frontend index.html not found at %s", index_file)
+        return jsonify({
+            "error": True,
+            "code": "frontend_not_found",
+            "message": "Frontend/index.html was not found in the deployed app. On Railway, deploy from the repository root so the Frontend folder is included.",
+            "expected_path": str(index_file),
+        }), 500
+
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 @app.route("/<path:path>", methods=["GET"])
@@ -283,7 +309,7 @@ def frontend_assets(path):
     if asset_path.is_file():
         return send_from_directory(FRONTEND_DIR, path)
 
-    return send_from_directory(FRONTEND_DIR, "index.html")
+    return frontend_index()
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
