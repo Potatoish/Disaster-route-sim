@@ -78,16 +78,24 @@ pip install -r Backend/requirements.txt
 The frontend uses the **Google Maps JavaScript API** from `Backend/templates/index.html`.
 If needed, replace the API key with your own valid key before deployment or sharing.
 
-### 3. Run the app
+### 3. Run the app locally
 
 ```bash
 py Backend/app.py
 ```
 
-The Flask server serves both the web UI and API routes:
+The Flask server serves both the web UI and API routes on the local machine only:
 
 ```text
 http://127.0.0.1:5000
+```
+
+To keep the app local-only by default, the server reads `HOST` and `PORT` environment variables. If you want to override the defaults, run:
+
+```bash
+$env:HOST = "127.0.0.1"
+$env:PORT = "5000"
+py Backend/app.py
 ```
 
 For deployment, the app entrypoint is:
