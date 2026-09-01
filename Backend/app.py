@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from threading import Lock, RLock
 
@@ -274,5 +275,8 @@ def run_earthquake():
 def home():
     return render_template("index.html")
 
+LOCAL_HOST = os.getenv("HOST", "127.0.0.1")
+LOCAL_PORT = int(os.getenv("PORT", "5000"))
+
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
+    app.run(debug=True, use_reloader=False, host=LOCAL_HOST, port=LOCAL_PORT, threaded=True)
