@@ -14,7 +14,21 @@
 
 <div class="topbar">
   <div class="topbar-brand">
-    <img class="topbar-logo" src="{{ url_for('static', filename='assets/agnas-logo.png') }}" alt="AGNAS logo">
+    <a class="topbar-logo-link" href="/" aria-label="Refresh AGNAS">
+      <svg class="topbar-logo" viewBox="0 0 104 104" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AGNAS logo">
+        <circle cx="50" cy="50" r="32" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
+        <path d="M26,44 Q34,30 42,44 Q50,58 58,44 Q66,30 74,44" stroke="var(--accent2)" stroke-width="4.6" stroke-linecap="round" fill="none"/>
+        <path d="M28,58 L40,70 L50,60 L60,70 L72,58" stroke="var(--accent)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <circle cx="86" cy="26" r="9" fill="none" stroke="#06b6d4" stroke-width="4"/>
+        <circle cx="85" cy="48.6" r="2.1" fill="var(--green)"/>
+        <circle cx="82" cy="62.4" r="2.4" fill="var(--green)"/>
+        <circle cx="75" cy="73.4" r="2.7" fill="var(--green)"/>
+        <circle cx="64" cy="81.7" r="3" fill="var(--green)"/>
+        <circle cx="48.9" cy="87.1" r="3.3" fill="var(--green)"/>
+        <circle cx="29.9" cy="89.8" r="3.6" fill="var(--green)"/>
+        <circle cx="15" cy="90" r="6.5" fill="#a855f7"/>
+      </svg>
+    </a>
     <div class="topbar-copy">
     <div class="topbar-title">Ant Guided Navigation And Safety System</div>
     <div class="topbar-sub">Ant Colony Optimization - Safer Routes First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
@@ -276,24 +290,21 @@
             </circle>
           </svg>
         </div>
-        <div class="loader-card-top">
-          <div class="loader-heading-group">
-            <div class="loader-kicker" id="loaderKicker">Loading</div>
-            <div class="loader-text" id="loaderTitle">Loading routes</div>
-          </div>
-          <div class="loader-core-badge" id="loaderModeBadge">Route</div>
-        </div>
-        <div class="loader-copy">
-          <div class="loader-stage-label">Current activity</div>
-          <div class="loader-steps" id="loaderSteps" hidden></div>
-        </div>
+        <div class="loader-kicker" id="loaderKicker">Loading</div>
+        <div class="loader-text" id="loaderTitle">Loading routes</div>
+        <div class="loader-steps" id="loaderSteps"></div>
         <div class="loader-progress-shell">
-          <div class="loader-progress-head">
-            <span class="loader-progress-label">Estimated progress</span>
-            <span class="loader-pct" id="loaderPct">0%</span>
-          </div>
           <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="loader-bar" id="loaderBar"></div>
+            <svg class="loader-crack" viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden="true">
+              <path class="loader-crack-main" pathLength="100" d="M0,7 L9,6 L15,9.5 L23,4 L31,8.5 L39,5 L47,10 L55,5.5 L63,9 L71,4.5 L79,8 L87,5 L100,7"></path>
+              <path class="loader-crack-branch" pathLength="100" d="M31,8.5 L26,13.5"></path>
+              <path class="loader-crack-branch loader-crack-branch--b" pathLength="100" d="M55,5.5 L60,0.6"></path>
+              <path class="loader-crack-branch loader-crack-branch--c" pathLength="100" d="M79,8 L84.5,13.2"></path>
+            </svg>
+          </div>
+          <div class="loader-progress-caption">
+            <span class="loader-pct" id="loaderPct">0%</span> complete — this may take a few moments
           </div>
         </div>
       </div>

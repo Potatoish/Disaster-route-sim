@@ -722,6 +722,7 @@ function setLoaderProgress(percent) {
 
   if (loaderProgress) {
     loaderProgress.setAttribute('aria-valuenow', String(Math.round(clamped)));
+    loaderProgress.style.setProperty('--progress', String(clamped));
   }
 }
 
@@ -797,22 +798,25 @@ function getLoaderModeLabel() {
 function syncLoaderContext() {
   const modeLabel = getLoaderModeLabel();
   const loaderKicker = document.getElementById('loaderKicker');
-  const loaderModeBadge = document.getElementById('loaderModeBadge');
   const loaderVisual = document.getElementById('loaderVisual');
+  const loaderProgress = document.getElementById('loaderProgress');
+  const hazardKey = String(selectedHazard || '').trim().toLowerCase();
 
   if (loaderKicker) {
     loaderKicker.textContent = modeLabel === 'Route' ? 'Loading' : `${modeLabel} routing`;
   }
 
-  if (loaderModeBadge) {
-    loaderModeBadge.textContent = modeLabel;
-  }
-
   if (loaderVisual) {
     loaderVisual.classList.remove('loader-visual--flood', 'loader-visual--earthquake');
-    const hazardKey = String(selectedHazard || '').trim().toLowerCase();
     if (hazardKey === 'flood' || hazardKey === 'earthquake') {
       loaderVisual.classList.add(`loader-visual--${hazardKey}`);
+    }
+  }
+
+  if (loaderProgress) {
+    loaderProgress.classList.remove('loader-progress--flood', 'loader-progress--earthquake');
+    if (hazardKey === 'flood' || hazardKey === 'earthquake') {
+      loaderProgress.classList.add(`loader-progress--${hazardKey}`);
     }
   }
 }
@@ -2020,30 +2024,9 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
 }
 
 function setFloodLegendContent(options = {}) {
-  const {
-    showHazardLayers = false,
-    hazardOverlayMode = floodHazardOverlayMode,
-  } = options;
+  const { showHazardLayers = false } = options;
   const body = document.getElementById('mapLegendBody');
   if (!body) return;
-
-  const overlayConfig = getFloodOverlayConfig(hazardOverlayMode);
-  const overlayVars = overlayConfig.vars;
-  const focusVar = Number(overlayConfig.focusVar || 0);
-  const FLOOD_LEGEND_ROWS = [
-    { level: 1, label: 'Low Flood Area', color: 'rgba(250,204,21,.86)' },
-    { level: 2, label: 'Medium Flood Area', color: 'rgba(251,146,60,.90)' },
-    { level: 3, label: 'High Flood Area', color: 'rgba(244,63,94,.94)' },
-  ];
-  const hazardLegend = FLOOD_LEGEND_ROWS
-    .filter(row => overlayVars.includes(row.level))
-    .map(row => {
-      const rowClass = !focusVar
-        ? ''
-        : (focusVar === row.level ? ' legend-focus' : ' legend-dimmed');
-      return `<div class="legend-row${rowClass}"><div class="legend-line" style="background:${row.color};height:8px;border-radius:999px;"></div><span style="font-size:.78rem;">${row.label}</span></div>`;
-    })
-    .join('');
 
   body.innerHTML = `
     <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.78rem;">Best Route</span></div>
@@ -2052,9 +2035,7 @@ function setFloodLegendContent(options = {}) {
     <div style="margin-top:5px;">
       <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">Start Node</span></div>
       <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">End Node</span></div>
-      ${(showHazardLayers || selectedHazard === 'Flood') ? `
-        ${hazardLegend}
-      ` : `
+      ${(showHazardLayers || selectedHazard === 'Flood') ? '' : `
         <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.78rem;">Safe</span></div>
         <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Moderate</span></div>
         <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.78rem;">Danger</span></div>
