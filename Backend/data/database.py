@@ -77,20 +77,6 @@ def get_nodes():
         return None
 
 
-def get_graph_data():
-    print("Loading graph data from CSV...")
-
-    try:
-        if _NODES_LOAD_ERROR is not None:
-            raise _NODES_LOAD_ERROR
-
-        node_rows = _fetch_nodes()
-        return node_rows, []
-    except Exception as e:
-        print("Database error:", e)
-        return [], []
-
-
 def get_location_by_name(name):
     try:
         if _NODES_LOAD_ERROR is not None:

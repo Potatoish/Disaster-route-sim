@@ -45,6 +45,7 @@ Disaster-route-sim/
 |   |-- osm_routing.py
 |   |-- earthquake_service.py
 |   |-- earthquake_data.py
+|   |-- simulation_progress.py
 |   |-- requirements.txt
 |   |-- templates/
 |   |   `-- index.html
@@ -55,13 +56,13 @@ Disaster-route-sim/
 |   |   |-- flood.js
 |   |   |-- style.css
 |   |   `-- assets/
-|   `-- data/
-|      |-- boundaries/
-|      |-- earthquake/
-|      |-- flood_classes/
-|      |-- graphs/
-|      `-- node.csv
-|-- database/
+|   |-- data/
+|   |   |-- boundaries/
+|   |   |-- earthquake/
+|   |   |-- flood_classes/
+|   |   |-- graphs/
+|   |   `-- node.csv
+|   `-- tools/
 `-- README.md
 ```
 

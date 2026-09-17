@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from threading import Lock, RLock
 
@@ -9,6 +10,7 @@ from earthquake_service import (
 )
 from main import simulate, get_locations
 from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
+from simulation_progress import get_progress, reset_progress
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
@@ -45,6 +47,10 @@ def _serialize_simulation_status():
             (datetime.now(timezone.utc) - started_at).total_seconds(),
         )
         request_summary = dict(_SIMULATION_STATE["request"] or {})
+        progress_state = get_progress()
+        total = progress_state["total"]
+        current = min(progress_state["current"], total) if total else 0
+        percent = round((current / total) * 100, 1) if total else 0.0
         return {
             "busy": True,
             "mode": _SIMULATION_STATE["mode"],
@@ -52,9 +58,15 @@ def _serialize_simulation_status():
             "started_at": started_at_raw,
             "elapsed_seconds": round(elapsed_seconds, 1),
             "request": request_summary,
+            "progress": {
+                "current": current,
+                "total": total,
+                "percent": percent,
+            },
         }
 
 def _mark_simulation_started(mode, request_summary):
+    reset_progress(0)
     with _SIMULATION_STATE_LOCK:
         _SIMULATION_STATE["busy"] = True
         _SIMULATION_STATE["mode"] = mode
@@ -114,13 +126,13 @@ def locations():
     if locations_payload is None:
         return jsonify({
             "error": True,
-            "message": "Failed to load node locations from SQL Server. Check the database connection and the nodes table."
+            "message": "Failed to load node locations. Check that Backend/data/node.csv exists and is readable."
         }), 500
 
     if not locations_payload:
         return jsonify({
             "error": True,
-            "message": "No node locations were returned from SQL Server. Check whether the nodes table has data for the supported barangays."
+            "message": "No node locations were found. Check that Backend/data/node.csv has data for the supported barangays."
         }), 500
 
     return jsonify({
@@ -272,7 +284,10 @@ def run_earthquake():
 
 @app.route("/", methods=["GET"])
 def home():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        google_maps_api_key=os.environ.get("GOOGLE_MAPS_API_KEY", ""),
+    )
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
