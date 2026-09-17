@@ -12,6 +12,8 @@ from shapely.geometry import LineString, Point, mapping, shape
 from shapely.prepared import prep
 from shapely.ops import unary_union
 
+from simulation_progress import bump_progress, reset_progress
+
 HAZARD_THRESHOLD = 3
 FINAL_ROUTES_TO_SHOW = 5
 MAX_ELIMINATED_ROUTES_TO_SHOW = 3
@@ -126,6 +128,7 @@ FLOOD_VAR_RISK_LABELS = {
     3: "High",
 }
 METERS_PER_DEGREE = 111_320.0
+GRAPH_BOUNDARY_BUFFER_METERS = 50.0
 FLOOD_LAYER_BUFFER_METERS = 800.0
 FLOOD_LAYER_SIMPLIFY_TOLERANCE = 0.00003
 FLOOD_LAYER_SIMPLIFY_TOLERANCE_BUFFER = 0.00008
@@ -649,7 +652,10 @@ def get_barangay_base_graph(name):
 
 
 def clip_graph_to_boundary(G, boundary_geometry):
-    prepared_boundary = prep(boundary_geometry)
+    # Small buffer so roads that graze the boundary line aren't severed from
+    # the rest of the network.
+    buffered_boundary = boundary_geometry.buffer(GRAPH_BOUNDARY_BUFFER_METERS / METERS_PER_DEGREE)
+    prepared_boundary = prep(buffered_boundary)
     keep_nodes = set()
 
     for node_id, node_data in G.nodes(data=True):
@@ -1711,6 +1717,7 @@ def run_aco(G, start_node, end_node):
             f"[ACO] Iteration {iteration + 1}: "
             f"completed={len(completed_routes)}, unique={len(unique_completed)}"
         )
+        bump_progress()
 
         for edge_key in edge_pheromone:
             edge_pheromone[edge_key] *= (1 - EVAPORATION)
@@ -1879,6 +1886,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     debug_print(f"[OSM] Phase 2/4 complete in {now - phase_started:.2f}s")
     phase_started = now
     debug_print("[OSM] Phase 3/4: searching candidate routes")
+    reset_progress(NUM_ITERATIONS)
     candidate_routes, edge_pheromone = run_aco(G, start_node, end_node)
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 3/4 complete in {now - phase_started:.2f}s")

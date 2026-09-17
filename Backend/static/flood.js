@@ -2,6 +2,7 @@
   const state = {
     hazardCache: new Map(),
     dataLayer: null,
+    highlightVar: null,
   };
 
   const FLOOD_LAYER_STYLES = {
@@ -41,12 +42,13 @@
       state.dataLayer.setStyle(feature => {
         const floodVar = Number(feature.getProperty('flood_var'));
         const style = FLOOD_LAYER_STYLES[floodVar] || FLOOD_LAYER_STYLES[1];
+        const isDimmed = state.highlightVar && floodVar !== state.highlightVar;
         return {
           clickable: false,
           fillColor: style.fillColor,
-          fillOpacity: style.fillOpacity,
+          fillOpacity: isDimmed ? style.fillOpacity * 0.18 : style.fillOpacity,
           strokeColor: style.strokeColor,
-          strokeOpacity: style.strokeOpacity,
+          strokeOpacity: isDimmed ? style.strokeOpacity * 0.22 : style.strokeOpacity,
           strokeWeight: style.strokeWeight,
           zIndex: style.zIndex,
         };
@@ -100,8 +102,9 @@
     return payload;
   }
 
-  function renderHazardLayers({ map, hazardLayers, visibleVars = null }) {
+  function renderHazardLayers({ map, hazardLayers, visibleVars = null, highlightVar = null }) {
     clearLayer();
+    state.highlightVar = highlightVar ? Number(highlightVar) : null;
 
     if (!map || !hazardLayers) {
       if (state.dataLayer) {

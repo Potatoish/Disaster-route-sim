@@ -15,6 +15,7 @@ from osm_routing import (
     GRAPH_NETWORK_TYPE,
     HAZARD_THRESHOLD,
     MAX_ELIMINATED_ROUTES_TO_SHOW,
+    NUM_ITERATIONS,
     build_route_point,
     clip_graph_to_boundary,
     debug_print,
@@ -35,6 +36,7 @@ from osm_routing import (
     select_endpoint_node,
     warm_static_caches,
 )
+from simulation_progress import reset_progress
 
 _EARTHQUAKE_GRAPH_CACHE = {}
 _EARTHQUAKE_GRAPH_LOCK = RLock()
@@ -563,6 +565,7 @@ def simulate_earthquake(start, barangay_name):
         views = {}
         phase_started = now
         debug_print("[EQ] Phase 2/3: evaluating earthquake views")
+        reset_progress(len(evaluated_sites) * len(EARTHQUAKE_VIEW_CONFIG) * NUM_ITERATIONS)
         for view_key in EARTHQUAKE_VIEW_CONFIG:
             view_started = time.perf_counter()
             view_label = EARTHQUAKE_VIEW_CONFIG[view_key]["label"]

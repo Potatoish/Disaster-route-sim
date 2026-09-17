@@ -2,8 +2,6 @@ import sys
 
 sys.dont_write_bytecode = True
 
-import csv
-from datetime import datetime
 from threading import RLock
 
 from data import database
@@ -109,39 +107,3 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
             "error": True,
             "message": f"OSM routing failed: {str(e)}"
         }
-def warm_startup_data():
-    # Startup warming is intentionally disabled for low-memory deployments.
-    return None
-
-
-def export_csv(routes, filename=None):
-    if filename is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"routes_{timestamp}.csv"
-
-    with open(filename, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            "Route",
-            "Category",
-            "Status",
-            "Distance (m)",
-            "Max Hazard",
-            "Total Hazard",
-            "Eliminated",
-            "Path Coordinates Count"
-        ])
-
-        for route in routes:
-            writer.writerow([
-                route.get("display_route_no", ""),
-                route.get("category", ""),
-                route.get("status", ""),
-                route.get("distance", ""),
-                route.get("max_hazard", ""),
-                route.get("total_hazard", ""),
-                route.get("eliminated", ""),
-                len(route.get("path_coordinates", []))
-            ])
-
-    return filename

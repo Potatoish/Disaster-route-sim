@@ -159,13 +159,13 @@
     });
   }
 
-  function getLayerEmphasis(layerKey, activeView) {
+  function getLayerEmphasis(layerKey, activeView, isLine = false) {
     if (activeView === 'overall') {
-      return {
-        fillOpacity: 0.18,
-        strokeOpacity: 0.45,
-        strokeWeight: 1.8,
-      };
+      // Zones dim so overlapping fills don't muddy together; lines stay strong
+      // since a dim stroke becomes unreadable.
+      return isLine
+        ? { fillOpacity: 0, strokeOpacity: 0.82, strokeWeight: 2.6 }
+        : { fillOpacity: 0.18, strokeOpacity: 0.45, strokeWeight: 1.8 };
     }
 
     const isActive = layerKey === activeView;
@@ -212,10 +212,11 @@
 
   function renderFeature(map, layerKey, feature, activeView) {
     const style = LAYER_STYLES[layerKey];
-    const emphasis = getLayerEmphasis(layerKey, activeView);
     const geometry = feature?.geometry || {};
     const type = geometry.type;
     const coordinates = geometry.coordinates || [];
+    const isLine = type === 'LineString' || type === 'MultiLineString';
+    const emphasis = getLayerEmphasis(layerKey, activeView, isLine);
 
     if (type === 'Polygon') {
       return [createPolygon(map, coordinates.map(ring => ring.map(normalizeCoordinate)), style, emphasis)];
@@ -243,15 +244,22 @@
   function renderHazardLayers({ map, hazardLayers, activeView = 'overall' }) {
     Object.values(state.hazardOverlays).forEach(overlays => clearMapObjects(overlays));
 
-    if (!map || !hazardLayers || activeView === 'overall' || !LAYER_STYLES[activeView]) {
+    if (!map || !hazardLayers) {
       return;
     }
 
-    const collection = hazardLayers[activeView];
-    const features = Array.isArray(collection?.features) ? collection.features : [];
-    features.forEach(feature => {
-      const overlays = renderFeature(map, activeView, feature, activeView);
-      state.hazardOverlays[activeView].push(...overlays);
+    // "Overall" has no geometry of its own, so render both real layers together.
+    const layerKeys = activeView === 'overall'
+      ? Object.keys(LAYER_STYLES)
+      : (LAYER_STYLES[activeView] ? [activeView] : []);
+
+    layerKeys.forEach(layerKey => {
+      const collection = hazardLayers[layerKey];
+      const features = Array.isArray(collection?.features) ? collection.features : [];
+      features.forEach(feature => {
+        const overlays = renderFeature(map, layerKey, feature, activeView);
+        state.hazardOverlays[layerKey].push(...overlays);
+      });
     });
   }
 
@@ -265,22 +273,26 @@
 
     const routeLegend = showRouteKeys
       ? `
-        <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.63rem;">Best Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.63rem;">Available Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.63rem;">Eliminated Route</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.78rem;">Best Route</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Available Route</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
       `
       : '';
-    const hazardLegend = showHazardLayers
-      ? activeView === 'liquefaction'
-        ? `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.63rem;">Liquefaction Layer</span></div>`
-        : `<div class="legend-row"><div class="legend-line" style="background:rgba(59,130,246,1);height:4px;"></div><span style="font-size:.63rem;">Ground Shaking Layer</span></div>`
-      : `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.58rem;color:var(--muted);line-height:1.5;">Select <strong>Liquefaction</strong> or <strong>Ground Shaking</strong> to view the hazard layer.</div>`;
+    const liquefactionRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.78rem;">Liquefaction Layer</span></div>`;
+    const groundShakingRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(59,130,246,1);height:4px;"></div><span style="font-size:.78rem;">Ground Shaking Layer</span></div>`;
+    const hazardLegend = !showHazardLayers
+      ? `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted);line-height:1.5;">Select <strong>Liquefaction</strong> or <strong>Ground Shaking</strong> to view the hazard layer.</div>`
+      : activeView === 'liquefaction'
+        ? liquefactionRow
+        : activeView === 'ground_shaking'
+          ? groundShakingRow
+          : liquefactionRow + groundShakingRow;
 
     body.innerHTML = `
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
-        <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.63rem;">Start Node</span></div>
-        <div class="legend-row"><div class="legend-dot-sm" style="background:#f59e0b;"></div><span style="font-size:.63rem;">Evacuation Site</span></div>
+        <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">Start Node</span></div>
+        <div class="legend-row"><div class="legend-dot-sm" style="background:#f59e0b;"></div><span style="font-size:.78rem;">Evacuation Site</span></div>
         ${hazardLegend}
       </div>`;
   }
