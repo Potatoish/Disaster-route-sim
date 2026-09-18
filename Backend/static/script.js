@@ -38,6 +38,8 @@ const LOADER_PROGRESS_POLL_MS = 900;
 const LOADER_ROUTE_STAGE_RANGE = [22, 76];
 let loaderProgressPollTimer = null;
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
+const TUTORIAL_STORAGE_KEY = 'agnas.tutorialSeen';
+let tutorialReturnFocusEl = null;
 const SIMULATION_REQUEST_TIMEOUT_MS = 300000;
 const EARTHQUAKE_REQUEST_TIMEOUT_MS = 300000;
 const BACKEND_SIMULATION_STATUS_POLL_MS = 2500;
@@ -452,6 +454,86 @@ function toggleTheme() {
   applyTheme(document.body.classList.contains('dark') ? 'light' : 'dark');
 }
 
+function hasSeenTutorial() {
+  try {
+    return localStorage.getItem(TUTORIAL_STORAGE_KEY) === '1';
+  } catch (err) {
+    return false;
+  }
+}
+
+// Auto-trigger for first-time visitors only; returning users re-open it via
+// the topbar "Show tutorial" button, which calls showTutorial() directly.
+function maybeShowTutorial() {
+  if (hasSeenTutorial()) return;
+  showTutorial();
+}
+
+function showTutorial(event) {
+  const overlay = document.getElementById('tutorialOverlay');
+  if (!overlay) return;
+
+  tutorialReturnFocusEl = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : document.activeElement;
+
+  overlay.hidden = false;
+  document.body.classList.add('tutorial-open');
+  document.getElementById('tutorialCardRow')?.scrollTo({ left: 0 });
+  window.requestAnimationFrame(() => {
+    overlay.querySelector('.tutorial-skip-btn')?.focus({ preventScroll: true });
+  });
+}
+
+function skipTutorial() {
+  const overlay = document.getElementById('tutorialOverlay');
+  if (!overlay || overlay.hidden) return;
+
+  overlay.hidden = true;
+  document.body.classList.remove('tutorial-open');
+
+  try {
+    localStorage.setItem(TUTORIAL_STORAGE_KEY, '1');
+  } catch (err) {
+    // Ignore storage failures; the tutorial will simply auto-show again next visit.
+  }
+
+  const focusTarget = tutorialReturnFocusEl || document.getElementById('tutorialTriggerBtn');
+  tutorialReturnFocusEl = null;
+  focusTarget?.focus?.({ preventScroll: true });
+}
+
+let aboutReturnFocusEl = null;
+
+function showAboutModal(event) {
+  const modal = document.getElementById('aboutModal');
+  if (!modal) return;
+
+  aboutReturnFocusEl = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : document.activeElement;
+
+  modal.hidden = false;
+  window.requestAnimationFrame(() => {
+    modal.querySelector('.about-modal-close')?.focus({ preventScroll: true });
+  });
+}
+
+function closeAboutModal() {
+  const modal = document.getElementById('aboutModal');
+  if (!modal || modal.hidden) return;
+
+  modal.hidden = true;
+
+  const focusTarget = aboutReturnFocusEl || document.getElementById('aboutTriggerBtn');
+  aboutReturnFocusEl = null;
+  focusTarget?.focus?.({ preventScroll: true });
+}
+
+document.getElementById('aboutModal')?.addEventListener('mousedown', event => {
+  if (event.target === event.currentTarget) closeAboutModal();
+});
+
 function syncMapOverlayLayout() {
   const legend = document.getElementById('mapLegend');
   if (!legend) return;
@@ -560,6 +642,18 @@ document.addEventListener('keydown', event => {
   if (key === 'Escape' && !document.getElementById('routeListModal')?.hidden) {
     event.preventDefault();
     closeRouteListModal();
+    return;
+  }
+
+  if (key === 'Escape' && document.getElementById('tutorialOverlay')?.hidden === false) {
+    event.preventDefault();
+    skipTutorial();
+    return;
+  }
+
+  if (key === 'Escape' && document.getElementById('aboutModal')?.hidden === false) {
+    event.preventDefault();
+    closeAboutModal();
   }
 });
 
@@ -676,11 +770,17 @@ function applyResultsPanelHeight(height) {
   panel.style.height = `${clampResultsPanelHeight(height)}px`;
 }
 
-function stopResultsResize() {
+function stopResultsResize(event) {
   if (!resultsResizeState) return;
 
-  window.removeEventListener('mousemove', onResultsResizeMove);
-  window.removeEventListener('mouseup', stopResultsResize);
+  const handle = document.getElementById('resultsResizeHandle');
+  if (handle && event && typeof event.pointerId === 'number') {
+    try { handle.releasePointerCapture(event.pointerId); } catch (err) { /* already released */ }
+  }
+
+  window.removeEventListener('pointermove', onResultsResizeMove);
+  window.removeEventListener('pointerup', stopResultsResize);
+  window.removeEventListener('pointercancel', stopResultsResize);
   document.body.classList.remove('results-resizing');
   resultsResizeState = null;
 }
@@ -702,9 +802,15 @@ function startResultsResize(event) {
     startHeight: panel.getBoundingClientRect().height,
   };
 
+  const handle = document.getElementById('resultsResizeHandle');
+  if (handle && typeof event.pointerId === 'number') {
+    try { handle.setPointerCapture(event.pointerId); } catch (err) { /* not capturable, fall back to window listeners */ }
+  }
+
   document.body.classList.add('results-resizing');
-  window.addEventListener('mousemove', onResultsResizeMove);
-  window.addEventListener('mouseup', stopResultsResize);
+  window.addEventListener('pointermove', onResultsResizeMove);
+  window.addEventListener('pointerup', stopResultsResize);
+  window.addEventListener('pointercancel', stopResultsResize);
 }
 
 function setLoaderProgress(percent) {
@@ -1021,14 +1127,32 @@ function initMap() {
     zoomControl: true,
     tiltControl: false,
     rotationControl: false,
+    // Default "auto" gesture handling falls back to two-finger panning once the
+    // page itself becomes scrollable (the phone/tablet layout), which reads as
+    // "the map doesn't respond to touch." Greedy keeps one-finger drag/pinch
+    // working on the map on every device; page scrolling still works from any
+    // area outside the map surface.
+    gestureHandling: 'greedy',
   });
 
+  let mapResizeDebounceTimer = null;
   window.addEventListener('resize', () => {
     syncMapOverlayLayout();
     const resultsPanel = document.getElementById('resultsPanel');
     if (resultsPanel?.classList.contains('show')) {
       applyResultsPanelHeight(resultsPanel.getBoundingClientRect().height || 320);
     }
+
+    // Google Maps caches its canvas size at creation time and after layout
+    // changes, so rotating the phone or toggling the browser's mobile address
+    // bar (both fire 'resize') needs an explicit nudge or the map keeps the
+    // old dimensions and shows blank/cropped tiles.
+    clearTimeout(mapResizeDebounceTimer);
+    mapResizeDebounceTimer = window.setTimeout(() => {
+      if (gMap && window.google?.maps?.event) {
+        window.google.maps.event.trigger(gMap, 'resize');
+      }
+    }, 150);
   });
   startApp();
 }
