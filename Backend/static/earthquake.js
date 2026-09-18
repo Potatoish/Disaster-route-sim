@@ -17,8 +17,8 @@
     },
     ground_shaking: {
       label: 'Ground Shaking',
-      strokeColor: '#1d4ed8',
-      fillColor: '#3b82f6',
+      strokeColor: '#7c2d12',
+      fillColor: '#c2410c',
     },
   };
 
@@ -37,13 +37,13 @@
 
   function clearInfoWindow() {
     if (state.activeInfoWindow) {
-      state.activeInfoWindow.close();
+      state.activeInfoWindow.remove();
       state.activeInfoWindow = null;
     }
   }
 
   function clearMapObjects(objects) {
-    objects.forEach(object => object.setMap(null));
+    objects.forEach(object => object.remove());
     objects.length = 0;
   }
 
@@ -88,11 +88,13 @@
       </svg>
     `;
 
-    return {
-      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-      scaledSize: new google.maps.Size(58, 70),
-      anchor: new google.maps.Point(29, 62),
-    };
+    return L.icon({
+      iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      iconSize: [58, 70],
+      // Pin tip is at (46, 99) in the 92x110 source viewBox; scaled to this
+      // 58x70 render size that's (29, 63), not (29, 62).
+      iconAnchor: [29, 63],
+    });
   }
 
   function buildEvacInfoContent(site, isHighlighted) {
@@ -139,20 +141,18 @@
 
     sites.forEach(site => {
       const isHighlighted = highlightedSiteId != null && site.id === highlightedSiteId;
-      const marker = new google.maps.Marker({
-        position: { lat: Number(site.lat), lng: Number(site.lng) },
-        map,
+      const marker = L.marker({ lat: Number(site.lat), lng: Number(site.lng) }, {
         title: site.name,
-        zIndex: isHighlighted ? 31 : 30,
+        zIndexOffset: isHighlighted ? 3100 : 3000,
         icon: buildEvacMarkerIcon(isHighlighted),
-      });
+      }).addTo(map);
 
-      marker.addListener('click', () => {
+      marker.on('click', () => {
         clearInfoWindow();
-        state.activeInfoWindow = new google.maps.InfoWindow({
-          content: buildEvacInfoContent(site, isHighlighted),
-        });
-        state.activeInfoWindow.open(map, marker);
+        state.activeInfoWindow = L.popup()
+          .setLatLng(marker.getLatLng())
+          .setContent(buildEvacInfoContent(site, isHighlighted))
+          .openOn(map);
       });
 
       state.evacuationMarkers.push(marker);
@@ -177,30 +177,27 @@
   }
 
   function createPolygon(map, path, style, emphasis) {
-    return new google.maps.Polygon({
-      paths: path,
-      map,
-      strokeColor: style.strokeColor,
-      strokeOpacity: emphasis.strokeOpacity,
-      strokeWeight: emphasis.strokeWeight,
+    return L.polygon(path, {
+      color: style.strokeColor,
+      opacity: emphasis.strokeOpacity,
+      weight: emphasis.strokeWeight,
       fillColor: style.fillColor,
       fillOpacity: emphasis.fillOpacity,
-      clickable: false,
-      zIndex: 6,
-    });
+      interactive: false,
+    }).addTo(map);
   }
 
   function createPolyline(map, path, style, emphasis) {
-    return new google.maps.Polyline({
-      path,
-      map,
-      geodesic: false,
-      strokeColor: style.strokeColor,
-      strokeOpacity: emphasis.strokeOpacity,
-      strokeWeight: emphasis.strokeWeight,
-      clickable: false,
-      zIndex: 7,
-    });
+    const layer = L.polyline(path, {
+      color: style.strokeColor,
+      opacity: emphasis.strokeOpacity,
+      weight: emphasis.strokeWeight,
+      interactive: false,
+    }).addTo(map);
+    // Leaflet paths stack by insertion order, not zIndex; flag lines so
+    // renderHazardLayers can lift them above any fills added after them.
+    layer._isHazardLine = true;
+    return layer;
   }
 
   function normalizeCoordinate(point) {
@@ -261,12 +258,20 @@
         state.hazardOverlays[layerKey].push(...overlays);
       });
     });
+
+    Object.values(state.hazardOverlays).flat().forEach(layer => {
+      if (layer._isHazardLine) layer.bringToFront();
+    });
   }
 
   function syncLegend(activeView = 'overall', options = {}) {
     const {
       showRouteKeys = true,
       showHazardLayers = true,
+      // Before a simulation has actually run, there's no hazard lens to
+      // pick yet, so the "Select Liquefaction or Ground Shaking" hint would
+      // be premature -- pass false to omit the hazard line entirely.
+      showHazardSection = true,
     } = options;
     const body = document.getElementById('mapLegendBody');
     if (!body) return;
@@ -279,19 +284,21 @@
       `
       : '';
     const liquefactionRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.78rem;">Liquefaction Layer</span></div>`;
-    const groundShakingRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(59,130,246,1);height:4px;"></div><span style="font-size:.78rem;">Ground Shaking Layer</span></div>`;
-    const hazardLegend = !showHazardLayers
-      ? `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted);line-height:1.5;">Select <strong>Liquefaction</strong> or <strong>Ground Shaking</strong> to view the hazard layer.</div>`
-      : activeView === 'liquefaction'
-        ? liquefactionRow
-        : activeView === 'ground_shaking'
-          ? groundShakingRow
-          : liquefactionRow + groundShakingRow;
+    const groundShakingRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(194,65,12,1);height:4px;"></div><span style="font-size:.78rem;">Ground Shaking Layer</span></div>`;
+    const hazardLegend = !showHazardSection
+      ? ''
+      : !showHazardLayers
+        ? `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted);line-height:1.5;">Select <strong>Liquefaction</strong> or <strong>Ground Shaking</strong> to view the hazard layer.</div>`
+        : activeView === 'liquefaction'
+          ? liquefactionRow
+          : activeView === 'ground_shaking'
+            ? groundShakingRow
+            : liquefactionRow + groundShakingRow;
 
     body.innerHTML = `
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
-        <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">Start Node</span></div>
+        <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Start Node</span></div>
         <div class="legend-row"><div class="legend-dot-sm" style="background:#f59e0b;"></div><span style="font-size:.78rem;">Evacuation Site</span></div>
         ${hazardLegend}
       </div>`;

@@ -8,9 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin="" />
+
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body onload="initTheme(); maybeShowTutorial();">
+<body onload="initTheme(); maybeShowTutorial(); initMap();">
 
 <div class="topbar">
   <div class="topbar-brand">
@@ -31,11 +35,16 @@
     </a>
     <div class="topbar-copy">
     <div class="topbar-title">Ant Guided Navigation And Safety System</div>
-    <div class="topbar-sub">Ant Colony Optimization - Safer Routes First - Barangay Pinagbuhatan & Sta. Lucia, Pasig City</div>
+    <div class="topbar-sub">Ant Colony Optimization - Safer Routes First - In selected Barangay in Pasig City</div>
     </div>
   </div>
 
   <div class="topbar-right">
+    <button class="sidebar-toggle" id="sidebarToggleBtn" type="button" onclick="toggleSetupSidebar()" aria-label="Hide simulation setup" aria-controls="setupPanel" aria-expanded="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
+      <span class="sidebar-tip" aria-hidden="true"><span data-sidebar-tip-label>Hide sidebar</span><kbd>Ctrl B</kbd></span>
+    </button>
+
     <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" aria-label="Switch theme">
       <span class="theme-toggle-track" aria-hidden="true">
         <span class="theme-toggle-thumb">
@@ -68,10 +77,6 @@
     <div class="panel-head">
       <div class="panel-head-title-row">
         <div class="panel-head-title">Simulation setup</div>
-        <button class="sidebar-toggle" id="setupSidebarToggle" type="button" onclick="toggleSetupSidebar()" aria-label="Hide simulation setup" aria-controls="setupPanel" aria-expanded="true">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
-          <span class="sidebar-tip" aria-hidden="true"><span data-sidebar-tip-label>Hide sidebar</span><kbd>Ctrl B</kbd></span>
-        </button>
       </div>
       <div class="panel-head-sub">Configure and run ACO route simulation</div>
     </div>
@@ -143,28 +148,36 @@
         <div class="workflow-card-head">
           <div>
             <div class="sec-label" id="routeCardLabel">Start / End</div>
-            <div class="workflow-card-summary" id="summaryRoute">Pick the origin and destination nodes inside the selected barangay.</div>
+            <div class="workflow-card-summary" id="summaryRoute"></div>
           </div>
           <div class="workflow-card-actions">
             <button class="card-action-btn" id="changeRouteBtn" type="button" onclick="focusWorkflowSection('route')">Change</button>
-            <button class="card-action-btn subtle" id="resetRouteBtn" type="button" onclick="resetRouteSelection()">Reset</button>
           </div>
         </div>
         <div class="workflow-card-body">
-          <div class="earthquake-mode-flag" id="earthquakeModeFlag" hidden>Earthquake Routing Mode</div>
           <div class="workflow-route-flow">
             <div class="field route-field route-field-start" id="startField">
-              <label id="startNodeLabel">START NODE - Safety Origin</label>
-              <select id="startSel" disabled></select>
-            </div>
-
-            <div class="workflow-route-divider" id="routeDivider">
-              move to
+              <span class="location-icon location-icon-start" aria-hidden="true"></span>
+              <label id="startNodeLabel" class="sr-only" for="startSelTrigger">Your location</label>
+              <div class="location-combo">
+                <button type="button" class="location-combo-trigger" id="startSelTrigger" disabled aria-haspopup="listbox" aria-expanded="false" aria-labelledby="startNodeLabel">
+                  <span class="location-combo-value" id="startSelValue">Your location</span>
+                </button>
+                <ul class="location-combo-list" id="startSelList" role="listbox" hidden></ul>
+              </div>
+              <select id="startSel" disabled hidden></select>
             </div>
 
             <div class="field route-field route-field-end" id="endField">
-              <label>END NODE - Safety Destination</label>
-              <select id="endSel" disabled></select>
+              <span class="location-icon location-icon-end" aria-hidden="true"></span>
+              <label id="endNodeLabel" class="sr-only" for="endSelTrigger">Your destination</label>
+              <div class="location-combo">
+                <button type="button" class="location-combo-trigger" id="endSelTrigger" disabled aria-haspopup="listbox" aria-expanded="false" aria-labelledby="endNodeLabel">
+                  <span class="location-combo-value" id="endSelValue">Your destination</span>
+                </button>
+                <ul class="location-combo-list" id="endSelList" role="listbox" hidden></ul>
+              </div>
+              <select id="endSel" disabled hidden></select>
             </div>
 
             <div class="earthquake-route-panel" id="earthquakeRoutePanel" hidden>
@@ -186,9 +199,6 @@
             <div class="sec-label">Run</div>
             <div class="workflow-card-summary" id="summaryRun">Review the setup, then launch the simulation.</div>
           </div>
-          <div class="workflow-card-actions">
-            <button class="card-action-btn subtle" id="changeRunBtn" type="button" onclick="resetAll()">Reset all</button>
-          </div>
         </div>
         <div class="workflow-card-body workflow-run-body">
           <div class="info-box" id="infoBox">
@@ -202,6 +212,10 @@
           </button>
         </div>
       </div>
+
+      <div class="workflow-reset-all-row">
+        <button class="card-action-btn subtle" id="changeRunBtn" type="button" onclick="resetAll()">Reset all</button>
+      </div>
       </div>
     </div>
   </div>
@@ -209,11 +223,6 @@
   <div class="right-panel">
     <div class="map-wrap">
       <div id="map"></div>
-
-      <button class="sidebar-toggle map-sidebar-toggle" id="mapSidebarToggle" type="button" onclick="toggleSetupSidebar()" aria-label="Show simulation setup" aria-controls="setupPanel" aria-expanded="false" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
-        <span class="sidebar-tip" aria-hidden="true"><span data-sidebar-tip-label>Show sidebar</span><kbd>Ctrl B</kbd></span>
-      </button>
 
       <div class="earthquake-view-switcher" id="earthquakeViewSelector" hidden>
         <div class="earthquake-view-title">Earthquake lens</div>
@@ -252,8 +261,8 @@
           <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
 
           <div style="margin-top:5px;">
-            <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">Start Node</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">End Node</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Start Node</span></div>
+            <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">End Node</span></div>
             <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.78rem;">Safe</span></div>
             <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Moderate</span></div>
             <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.78rem;">Danger</span></div>
@@ -407,7 +416,7 @@
           <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-dark.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
         </div>
         <div class="tutorial-card-title">Pick barangay</div>
-        <div class="tutorial-card-desc">Choose the area to simulate.</div>
+        <div class="tutorial-card-desc">Choose your barangay/area</div>
       </div>
       <div class="tutorial-card">
         <div class="tutorial-card-shot">
@@ -415,15 +424,31 @@
           <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-dark.png') }}" alt="Flood and Earthquake hazard selection cards">
         </div>
         <div class="tutorial-card-title">Pick disaster</div>
-        <div class="tutorial-card-desc">Sets the active hazard.</div>
+        <div class="tutorial-card-desc">Sets the hazard you want to simulate.</div>
       </div>
       <div class="tutorial-card">
         <div class="tutorial-card-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/set-start-end-light.png') }}" alt="Start node and end node dropdown fields">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/set-start-end-dark.png') }}" alt="Start node and end node dropdown fields">
+          <div class="tutorial-route-shot" aria-hidden="true">
+            <div class="field route-field route-field-start">
+              <span class="location-icon location-icon-start"></span>
+              <div class="location-combo">
+                <button type="button" class="location-combo-trigger" tabindex="-1">
+                  <span class="location-combo-value">Your location</span>
+                </button>
+              </div>
+            </div>
+            <div class="field route-field route-field-end">
+              <span class="location-icon location-icon-end"></span>
+              <div class="location-combo">
+                <button type="button" class="location-combo-trigger" tabindex="-1">
+                  <span class="location-combo-value">Your destination</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="tutorial-card-title">Set start / end</div>
-        <div class="tutorial-card-desc">For flood: choose your route nodes.</div>
+        <div class="tutorial-card-desc">For Flood: choose your route nodes.</div>
       </div>
       <div class="tutorial-card">
         <div class="tutorial-card-shot">
@@ -431,7 +456,7 @@
           <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-dark.png') }}" alt="Show Evacuation Sites button for earthquake mode">
         </div>
         <div class="tutorial-card-title">Reveal evacuation sites</div>
-        <div class="tutorial-card-desc">For earthquake: pick a start, then reveal shelters.</div>
+        <div class="tutorial-card-desc">For earthquake: pick a start, then click to reveal shelters.</div>
       </div>
       <div class="tutorial-card">
         <div class="tutorial-card-shot">
@@ -471,14 +496,45 @@
   </div>
 </div>
 
+<div class="about-modal-backdrop" id="emergencyContactModal" hidden>
+  <div class="about-modal emergency-modal" role="dialog" aria-modal="true" aria-labelledby="emergencyContactModalTitle">
+    <button class="modal-close-btn about-modal-close emergency-modal-close" type="button" onclick="closeEmergencyContactModal()" aria-label="Close emergency contacts">&times;</button>
+    <div class="safety-eyebrow emergency-eyebrow">Emergency</div>
+    <h2 class="about-modal-title" id="emergencyContactModalTitle">Emergency Contact Numbers</h2>
+
+    <p class="about-modal-copy">
+      If you are in immediate danger, call one of these numbers right away.
+    </p>
+
+    <ul class="emergency-contact-list">
+      <li class="emergency-contact-item">
+        <span class="emergency-contact-name">General Emergency</span>
+        <span class="emergency-contact-number"><a href="tel:911">911</a></span>
+      </li>
+      <li class="emergency-contact-item">
+        <span class="emergency-contact-name">Pasig City DRRMO Emergency Hotline</span>
+        <span class="emergency-contact-number"><a href="tel:86430000">8643-0000</a></span>
+      </li>
+      <li class="emergency-contact-item">
+        <span class="emergency-contact-name">Barangay Pinagbuhatan Action Center Hotline</span>
+        <span class="emergency-contact-number"><a href="tel:88804609">8880-4609</a> or <a href="tel:88809394">8880-9394</a></span>
+      </li>
+      <li class="emergency-contact-item">
+        <span class="emergency-contact-name">Barangay Santa Lucia Hotline</span>
+        <span class="emergency-contact-number"><a href="tel:09173119756">0917 3119 756</a> or <a href="tel:09624964778">0962 496 4778</a></span>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""></script>
+
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
-
-<script async defer
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC82C27z54L41yFU2mWuhhgxbPXDJIIRJs&callback=initMap&v=weekly&loading=async">
-</script>
 
 </body>
 </html>

@@ -1256,6 +1256,111 @@ def extract_route_street_path(G, route, resolved_edges=None):
     return street_names
 
 
+TURN_ANGLE_STRAIGHT_DEGREES = 20
+TURN_ANGLE_SLIGHT_DEGREES = 45
+TURN_ANGLE_UTURN_DEGREES = 150
+
+
+def compute_bearing_degrees(point_a, point_b):
+    lat1 = math.radians(point_a["lat"])
+    lat2 = math.radians(point_b["lat"])
+    delta_lng = math.radians(point_b["lng"] - point_a["lng"])
+
+    x = math.sin(delta_lng) * math.cos(lat2)
+    y = (
+        math.cos(lat1) * math.sin(lat2)
+        - math.sin(lat1) * math.cos(lat2) * math.cos(delta_lng)
+    )
+    return math.degrees(math.atan2(x, y)) % 360
+
+
+def classify_turn_angle(delta_degrees):
+    if delta_degrees > TURN_ANGLE_UTURN_DEGREES or delta_degrees < -TURN_ANGLE_UTURN_DEGREES:
+        return "u_turn"
+    if delta_degrees >= TURN_ANGLE_SLIGHT_DEGREES:
+        return "right"
+    if delta_degrees >= TURN_ANGLE_STRAIGHT_DEGREES:
+        return "slight_right"
+    if delta_degrees <= -TURN_ANGLE_SLIGHT_DEGREES:
+        return "left"
+    if delta_degrees <= -TURN_ANGLE_STRAIGHT_DEGREES:
+        return "slight_left"
+    return "straight"
+
+
+def _turn_step_entry_bearing(coords):
+    if len(coords) < 2:
+        return None
+    return compute_bearing_degrees(coords[0], coords[min(3, len(coords) - 1)])
+
+
+def _turn_step_exit_bearing(coords):
+    if len(coords) < 2:
+        return None
+    return compute_bearing_degrees(coords[max(0, len(coords) - 4)], coords[-1])
+
+
+def extract_route_turn_steps(G, route, resolved_edges=None):
+    """Collapse the route into per-street walking-direction steps: a name,
+    the distance walked on it, and the turn onto it from the previous step.
+    There is no maneuver data in the source graph, so the turn is derived
+    from the bearing change between consecutive streets' geometry."""
+    if resolved_edges is None:
+        resolved_edges = resolve_route_edge_records(G, route)
+
+    if not resolved_edges:
+        return []
+
+    steps = []
+    for u, v, key, edge in resolved_edges:
+        edge_names = edge.get("name")
+        if edge_names is None:
+            name = ""
+        elif isinstance(edge_names, list):
+            name = next((str(n).strip() for n in edge_names if str(n).strip()), "")
+        else:
+            name = str(edge_names).strip()
+
+        coords = edge_geometry_to_coords(G, u, v, edge)
+        if len(coords) < 2:
+            u_node, v_node = G.nodes[u], G.nodes[v]
+            coords = [
+                {"lat": float(u_node["y"]), "lng": float(u_node["x"])},
+                {"lat": float(v_node["y"]), "lng": float(v_node["x"])},
+            ]
+        length = max(float(edge.get("length", 0)), 0.0)
+
+        # Unnamed connectors (driveways, short links) fold into whichever
+        # step precedes them, so a turn is measured where the pedestrian
+        # actually changes heading rather than at an arbitrary unnamed edge.
+        if steps and (not name or steps[-1]["name"] == name):
+            steps[-1]["length"] += length
+            steps[-1]["coords"].extend(coords[1:])
+        else:
+            steps.append({"name": name, "length": length, "coords": list(coords)})
+
+    turn_steps = []
+    prev_exit_bearing = None
+    for index, step in enumerate(steps):
+        turn = "start"
+        if index > 0:
+            entry_bearing = _turn_step_entry_bearing(step["coords"])
+            if prev_exit_bearing is None or entry_bearing is None:
+                turn = "straight"
+            else:
+                delta = ((entry_bearing - prev_exit_bearing + 540) % 360) - 180
+                turn = classify_turn_angle(delta)
+
+        turn_steps.append({
+            "name": step["name"],
+            "distance": round(step["length"], 1),
+            "turn": turn,
+        })
+        prev_exit_bearing = _turn_step_exit_bearing(step["coords"]) or prev_exit_bearing
+
+    return turn_steps
+
+
 def route_edges(route):
     return list(zip(route[:-1], route[1:]))
 
@@ -1793,6 +1898,11 @@ def finalize_routes(G, candidate_routes, edge_pheromone, start_point=None, end_p
             end_point=end_point,
         )
         route_copy["street_path"] = extract_route_street_path(
+            G,
+            route_copy["path"],
+            resolved_edges=resolved_edges,
+        )
+        route_copy["turn_steps"] = extract_route_turn_steps(
             G,
             route_copy["path"],
             resolved_edges=resolved_edges,

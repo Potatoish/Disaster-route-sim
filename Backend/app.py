@@ -290,4 +290,8 @@ def home():
     )
 
 if __name__ == "__main__":
+    # Local dev only (gunicorn never runs this block): always revalidate static
+    # files instead of caching them, so edits to script.js/style.css show up on
+    # a plain reload instead of silently running stale JS/CSS from an old tab.
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)

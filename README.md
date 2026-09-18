@@ -21,7 +21,7 @@ AGNAS helps users explore evacuation routes under two hazard scenarios:
 
 - ACO-based route search
 - Safety-first route ranking
-- Interactive Google Maps route display
+- Interactive Leaflet + OpenStreetMap route display
 - Flood hazard overlays
 - Earthquake evacuation site routing
 - Route list with risk summaries
@@ -30,7 +30,7 @@ AGNAS helps users explore evacuation routes under two hazard scenarios:
 
 ## Tech Stack
 
-- **Frontend:** HTML, CSS, JavaScript, Google Maps API, served by Flask
+- **Frontend:** HTML, CSS, JavaScript, Leaflet + OpenStreetMap tiles, served by Flask
 - **Backend:** Python, Flask, Flask-CORS
 - **Routing/Data:** OSMnx, NetworkX, Shapely, GeoPandas
 - **Location Data:** CSV files in `Backend/data/`
@@ -74,10 +74,11 @@ Disaster-route-sim/
 pip install -r Backend/requirements.txt
 ```
 
-### 2. Check map/API setup
+### 2. Check map setup
 
-The frontend uses the **Google Maps JavaScript API** from `Backend/templates/index.html`.
-If needed, replace the API key with your own valid key before deployment or sharing.
+The frontend renders the map with **Leaflet**, using OpenStreetMap's standard tiles as the default
+basemap and Esri World Imagery as an optional satellite layer, both loaded without an API key. No
+account or key setup is required.
 
 ### 3. Run the app
 

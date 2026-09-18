@@ -12,7 +12,6 @@
       fillOpacity: 0.22,
       strokeOpacity: 0.44,
       strokeWeight: 0.9,
-      zIndex: 1,
     },
     2: {
       fillColor: '#fb923c',
@@ -20,7 +19,6 @@
       fillOpacity: 0.26,
       strokeOpacity: 0.54,
       strokeWeight: 0.95,
-      zIndex: 2,
     },
     3: {
       fillColor: '#f43f5e',
@@ -28,7 +26,6 @@
       fillOpacity: 0.32,
       strokeOpacity: 0.62,
       strokeWeight: 1,
-      zIndex: 3,
     },
   };
 
@@ -36,38 +33,25 @@
     return window.BACKEND_BASE || 'http://127.0.0.1:5000';
   }
 
-  function ensureDataLayer(map) {
-    if (!state.dataLayer) {
-      state.dataLayer = new google.maps.Data();
-      state.dataLayer.setStyle(feature => {
-        const floodVar = Number(feature.getProperty('flood_var'));
-        const style = FLOOD_LAYER_STYLES[floodVar] || FLOOD_LAYER_STYLES[1];
-        const isDimmed = state.highlightVar && floodVar !== state.highlightVar;
-        return {
-          clickable: false,
-          fillColor: style.fillColor,
-          fillOpacity: isDimmed ? style.fillOpacity * 0.18 : style.fillOpacity,
-          strokeColor: style.strokeColor,
-          strokeOpacity: isDimmed ? style.strokeOpacity * 0.22 : style.strokeOpacity,
-          strokeWeight: style.strokeWeight,
-          zIndex: style.zIndex,
-        };
-      });
-    }
-
-    if (state.dataLayer.getMap() !== map) {
-      state.dataLayer.setMap(map);
-    }
-
-    return state.dataLayer;
+  function styleForFeature(feature) {
+    const floodVar = Number(feature?.properties?.flood_var);
+    const style = FLOOD_LAYER_STYLES[floodVar] || FLOOD_LAYER_STYLES[1];
+    const isDimmed = state.highlightVar && floodVar !== state.highlightVar;
+    return {
+      interactive: false,
+      fillColor: style.fillColor,
+      fillOpacity: isDimmed ? style.fillOpacity * 0.18 : style.fillOpacity,
+      color: style.strokeColor,
+      opacity: isDimmed ? style.strokeOpacity * 0.22 : style.strokeOpacity,
+      weight: style.strokeWeight,
+    };
   }
 
   function clearLayer() {
-    if (!state.dataLayer) return;
-
-    const features = [];
-    state.dataLayer.forEach(feature => features.push(feature));
-    features.forEach(feature => state.dataLayer.remove(feature));
+    if (state.dataLayer) {
+      state.dataLayer.remove();
+      state.dataLayer = null;
+    }
   }
 
   async function loadHazardLayers(options = {}) {
@@ -107,32 +91,31 @@
     state.highlightVar = highlightVar ? Number(highlightVar) : null;
 
     if (!map || !hazardLayers) {
-      if (state.dataLayer) {
-        state.dataLayer.setMap(null);
-      }
       return;
     }
 
-    const layer = ensureDataLayer(map);
-    const filteredHazardLayers = Array.isArray(visibleVars) && visibleVars.length
-      ? {
-          ...hazardLayers,
-          features: (hazardLayers.features || []).filter(feature =>
-            visibleVars.includes(Number(feature?.properties?.flood_var))
-          ),
-        }
-      : hazardLayers;
+    const filteredFeatures = Array.isArray(visibleVars) && visibleVars.length
+      ? (hazardLayers.features || []).filter(feature =>
+          visibleVars.includes(Number(feature?.properties?.flood_var))
+        )
+      : (hazardLayers.features || []);
 
-    layer.addGeoJson(filteredHazardLayers);
+    // Sort low -> high severity so higher-risk zones paint on top when they
+    // overlap or nest inside a broader lower-risk area (mirrors the old
+    // per-level zIndex 1/2/3).
+    const sortedFeatures = [...filteredFeatures].sort(
+      (a, b) => Number(a?.properties?.flood_var) - Number(b?.properties?.flood_var)
+    );
+
+    state.dataLayer = L.geoJSON(
+      { ...hazardLayers, features: sortedFeatures },
+      { style: styleForFeature }
+    ).addTo(map);
   }
 
   function reset(options = {}) {
     const { clearCache = false } = options;
     clearLayer();
-
-    if (state.dataLayer) {
-      state.dataLayer.setMap(null);
-    }
 
     if (clearCache) {
       state.hazardCache.clear();

@@ -292,74 +292,63 @@ function trackRouteLayer(layer, routeGroup, mapLayers, kind) {
   return layer;
 }
 
+// Leaflet paths have no numeric z-index: layers painted later sit on top.
+// Drawing glow -> outline -> main (below) and eliminated -> available -> best
+// (in renderRoutesOnRoads) reproduces the old Google zIndex ordering "for
+// free" through insertion order alone. Only the interactive focus/highlight
+// state needs an explicit re-stack, handled in script.js via bringToFront().
 function addRouteGlow(route, pathCoords, gMap, mapLayers, routeGroup) {
   if (route.category === 'best') {
-    trackRouteLayer(new google.maps.Polyline({
-      path: pathCoords,
-      geodesic: false,
-      strokeColor: '#22c55e',
-      strokeOpacity: 0.06,
-      strokeWeight: 12,
-      map: gMap,
-      zIndex: 0,
-    }), routeGroup, mapLayers, 'glow');
+    trackRouteLayer(L.polyline(pathCoords, {
+      color: '#22c55e',
+      opacity: 0.06,
+      weight: 12,
+      interactive: false,
+    }).addTo(gMap), routeGroup, mapLayers, 'glow');
 
-    trackRouteLayer(new google.maps.Polyline({
-      path: pathCoords,
-      geodesic: false,
-      strokeColor: '#86efac',
-      strokeOpacity: 0.10,
-      strokeWeight: 7,
-      map: gMap,
-      zIndex: 1,
-    }), routeGroup, mapLayers, 'glow');
+    trackRouteLayer(L.polyline(pathCoords, {
+      color: '#86efac',
+      opacity: 0.10,
+      weight: 7,
+      interactive: false,
+    }).addTo(gMap), routeGroup, mapLayers, 'glow');
   }
 
   if (route.category === 'available') {
-    trackRouteLayer(new google.maps.Polyline({
-      path: pathCoords,
-      geodesic: false,
-      strokeColor: '#fcd34d',
-      strokeOpacity: 0.04,
-      strokeWeight: 4,
-      map: gMap,
-      zIndex: 2,
-    }), routeGroup, mapLayers, 'glow');
+    trackRouteLayer(L.polyline(pathCoords, {
+      color: '#fcd34d',
+      opacity: 0.04,
+      weight: 4,
+      interactive: false,
+    }).addTo(gMap), routeGroup, mapLayers, 'glow');
   }
 }
 
+// A white halo under the colored line -- same look already used for the
+// animated route-focus preview below -- keeps every route (best/available/
+// eliminated alike) crisp against the basemap and against each other,
+// instead of the colored strokes blending straight into the map underneath.
 function addRouteOutline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
-  return trackRouteLayer(new google.maps.Polyline({
-    path: pathCoords,
-    geodesic: false,
-    strokeColor: '#0f172a',
-    strokeOpacity: 0,
-    strokeWeight: cfg.weight + 4,
-    map: gMap,
-    zIndex: Math.max(1, cfg.zIndex - 1),
-  }), routeGroup, mapLayers, 'outline');
+  return trackRouteLayer(L.polyline(pathCoords, {
+    color: '#ffffff',
+    // Mirrors the main line's own opacity so eliminated/available routes
+    // stay visibly secondary to "best" instead of all halos popping equally.
+    opacity: cfg.opacity,
+    weight: cfg.weight + 4,
+    lineCap: 'round',
+    lineJoin: 'round',
+    interactive: false,
+  }).addTo(gMap), routeGroup, mapLayers, 'outline');
 }
 
 function addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
-  return trackRouteLayer(new google.maps.Polyline({
-    path: pathCoords,
-    geodesic: false,
-    strokeColor: cfg.color,
-    strokeOpacity: cfg.opacity,
-    strokeWeight: cfg.weight,
-    map: gMap,
-    zIndex: cfg.zIndex,
-  }), routeGroup, mapLayers, 'main');
-}
-
-function formatStreetPath(streetPath, maxItems = 6) {
-  if (!Array.isArray(streetPath) || streetPath.length === 0) {
-    return 'No named streets available';
-  }
-
-  const visible = streetPath.slice(0, maxItems);
-  const suffix = streetPath.length > maxItems ? ' ...' : '';
-  return visible.join(' -> ') + suffix;
+  return trackRouteLayer(L.polyline(pathCoords, {
+    color: cfg.color,
+    opacity: cfg.opacity,
+    weight: cfg.weight,
+    lineCap: 'round',
+    lineJoin: 'round',
+  }).addTo(gMap), routeGroup, mapLayers, 'main');
 }
 
 function drawFallbackPolyline(route, cfg, gMap, mapLayers, getLocationByName, routeGroup, startName, endName) {
@@ -382,57 +371,49 @@ function attachRouteInfo(poly, route, cfg, infoPopup, shortNodeLabel, activeInfo
     ? 'Available Route'
     : 'Eliminated Route';
 
-  poly.addListener('mouseover', () => {
+  poly.on('mouseover', () => {
     if (typeof window.highlightRouteRow === 'function') {
       window.highlightRouteRow(route.display_route_no, route.category);
     }
   });
 
-  poly.addListener('mouseout', () => {
+  poly.on('mouseout', () => {
     if (typeof window.clearRouteRowHighlight === 'function') {
       window.clearRouteRowHighlight();
     }
   });
 
-  poly.addListener('click', ev => {
+  poly.on('click', ev => {
     if (typeof window.focusRouteSelection === 'function') {
       window.focusRouteSelection(route.display_route_no, route.category, true);
     }
 
     const extraRows = Array.isArray(route.info_rows) ? route.info_rows : [];
     const isEarthquakeRoute = route.simulation_mode === 'earthquake';
-    const contextLabel = isEarthquakeRoute ? 'Hazards' : 'Flood Zones';
+    // One shared "how bad does this route get" row for both hazard types,
+    // plus a hazard-specific breakdown below it -- no raw internal scores.
+    const contextLabel = isEarthquakeRoute ? 'Hazards Crossed' : 'Flood Levels Crossed';
     const contextValue = isEarthquakeRoute
-      ? (route.hazard_signature || 'N/A')
+      ? (typeof window.formatEarthquakeHazardSummary === 'function' ? window.formatEarthquakeHazardSummary(route) : 'N/A')
       : (route.display_flood_classes || 'None');
-    const peakRiskLabel = !isEarthquakeRoute && typeof window.formatFloodPeakRisk === 'function'
-      ? `${window.formatFloodPeakRisk(route)} (${route.max_hazard ?? 'N/A'}/5)`
+    const peakRiskValue = typeof window.formatRoutePeakRiskLabel === 'function'
+      ? window.formatRoutePeakRiskLabel(route)
       : null;
-    const floodExposureRows = !isEarthquakeRoute
-      ? [
-          ['Flood Exposure Score', route.display_flood_exposure_score || 'N/A'],
-          ['What This Means', route.display_flood_exposure_meaning || 'N/A'],
-        ]
-      : [];
-    if (activeInfoWindowRef.current) activeInfoWindowRef.current.close();
-    activeInfoWindowRef.current = new google.maps.InfoWindow({
-      content: infoPopup(label, [
+    if (activeInfoWindowRef.current) activeInfoWindowRef.current.remove();
+    activeInfoWindowRef.current = L.popup()
+      .setLatLng(ev.latlng)
+      .setContent(infoPopup(label, [
         ['Route No.', `#${route.display_route_no ?? 'N/A'}`],
         ['Distance', route.display_distance || formatDistanceKm(route.distance)],
-        ['Max Hazard', route.max_hazard + '/5', cfg.color],
-        ...(peakRiskLabel ? [['Water Risk', peakRiskLabel]] : []),
-        ...floodExposureRows,
-        ['Unsafe Dist.', route.display_unsafe_distance || '0 m'],
-        ['Unsafe Segs', route.display_unsafe_segment_count ?? 0],
-        ['Summary', route.display_route_summary || route.path_label || 'N/A'],
-        ['Why', route.display_reason || 'No explanation available'],
+        ...(peakRiskValue ? [['Peak Risk', peakRiskValue, cfg.color]] : []),
+        ['Unsafe Distance', route.display_unsafe_distance || '0 m'],
+        ['Unsafe Road Sections', route.display_unsafe_segment_count ?? 0],
+        ['Roads Used', route.display_route_summary || route.path_label || 'N/A'],
+        ['Why This Route', route.display_reason || 'No explanation available'],
         [contextLabel, contextValue],
-        ['Streets', formatStreetPath(route.street_path)],
         ...extraRows,
-      ]),
-      position: ev.latLng,
-    });
-    activeInfoWindowRef.current.open(gMap);
+      ]))
+      .openOn(gMap);
   });
 }
 
@@ -453,7 +434,7 @@ async function renderRoutesOnRoads({
     window.clearRouteAnimation();
   }
 
-  mapLayers.routes.forEach(l => l.setMap(null));
+  mapLayers.routes.forEach(l => l.remove());
   mapLayers.routes = [];
   mapLayers.routeGroups = [];
 
@@ -503,9 +484,8 @@ async function renderRoutesOnRoads({
     : getRoutePoints(bestRoute || {}, getLocationByName);
 
   if (defaultCoords.length) {
-    const bounds = new google.maps.LatLngBounds();
-    defaultCoords.forEach(point => bounds.extend(point));
-    gMap.fitBounds(bounds, 36);
+    const bounds = L.latLngBounds(defaultCoords);
+    gMap.fitBounds(bounds, { padding: [36, 36] });
   }
 
   drawSelectedPinsOnly(start, end);

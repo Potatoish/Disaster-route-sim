@@ -22,7 +22,6 @@ let simulationInProgress = false;
 let backendSimulationBusy = false;
 let backendSimulationStatus = null;
 let backendBusyPollTimer = null;
-// A selected mode is a visual highlight, not a layer-reveal switch - all levels stay visible.
 let floodHazardOverlayMode = 'all';
 const activeInfoWindowRef = { current: null };
 const loaderState = {
@@ -32,6 +31,7 @@ const loaderState = {
   stage: '',
 };
 const LOADER_PATIENCE_DELAY_MS = 8000;
+const LOADER_FADE_OUT_MS = 260;
 let loaderPatienceTimer = null;
 let loaderPatienceDismissed = false;
 const LOADER_PROGRESS_POLL_MS = 900;
@@ -306,11 +306,6 @@ let resultsResizeState = null;
 let ALL_LOCATIONS = [];
 let LOCATIONS_BY_BARANGAY = {};
 
-function getMapThemeStyles() {
-  // Keep the Google map UI and base map on the default light style in all site themes.
-  return null;
-}
-
 function applyHazardTheme() {
   const modeKey = document.body.classList.contains('dark') ? 'dark' : 'light';
   const hazardKey = String(selectedHazard || '').trim().toLowerCase();
@@ -357,16 +352,39 @@ function getBarangayBoundaryHaloColor() {
   return '#0f172a';
 }
 
+// A single world-spanning ring with each boundary ring punched into it as a
+// hole - Leaflet/SVG renders the holes transparent, dimming everything
+// outside the selected barangay's scope without needing per-region tiles.
+const WORLD_MASK_RING = [
+  [85, -180],
+  [85, 180],
+  [-85, 180],
+  [-85, -180],
+];
+
+function buildBarangayScopeMask(rings) {
+  const holes = rings.filter(ring => ring.length >= 3);
+  if (!holes.length) return null;
+
+  return L.polygon([WORLD_MASK_RING, ...holes], {
+    stroke: false,
+    fillColor: '#020617',
+    fillOpacity: 0.45,
+    interactive: false,
+    className: 'barangay-scope-mask',
+  });
+}
+
 function syncBarangayBoundaryTheme() {
   const strokeColor = getBarangayBoundaryStrokeColor();
   const haloColor = getBarangayBoundaryHaloColor();
   (mapLayers.boundaries || []).forEach(layer => {
+    if (layer?.boundaryRole === 'mask') return;
     const isHalo = layer?.boundaryRole === 'halo';
-    layer.setOptions({
-      strokeColor: isHalo ? haloColor : strokeColor,
-      strokeOpacity: isHalo ? 0.92 : 1,
-      strokeWeight: isHalo ? 10 : 5,
-      zIndex: isHalo ? 2 : 3,
+    layer.setStyle({
+      color: isHalo ? haloColor : strokeColor,
+      opacity: isHalo ? 0.92 : 1,
+      weight: isHalo ? 10 : 5,
     });
   });
 }
@@ -392,10 +410,6 @@ function animateMapThemeTransition() {
 function syncMapTheme(animated = false) {
   if (!gMap) return;
 
-  gMap.setOptions({
-    styles: getMapThemeStyles(),
-    backgroundColor: '#ffffff',
-  });
   syncBarangayBoundaryTheme();
 
   if (animated) {
@@ -534,6 +548,37 @@ document.getElementById('aboutModal')?.addEventListener('mousedown', event => {
   if (event.target === event.currentTarget) closeAboutModal();
 });
 
+let emergencyContactReturnFocusEl = null;
+
+function openEmergencyContactModal(event) {
+  const modal = document.getElementById('emergencyContactModal');
+  if (!modal) return;
+
+  emergencyContactReturnFocusEl = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : document.activeElement;
+
+  modal.hidden = false;
+  window.requestAnimationFrame(() => {
+    modal.querySelector('.emergency-modal-close')?.focus({ preventScroll: true });
+  });
+}
+
+function closeEmergencyContactModal() {
+  const modal = document.getElementById('emergencyContactModal');
+  if (!modal || modal.hidden) return;
+
+  modal.hidden = true;
+
+  const focusTarget = emergencyContactReturnFocusEl;
+  emergencyContactReturnFocusEl = null;
+  focusTarget?.focus?.({ preventScroll: true });
+}
+
+document.getElementById('emergencyContactModal')?.addEventListener('mousedown', event => {
+  if (event.target === event.currentTarget) closeEmergencyContactModal();
+});
+
 function syncMapOverlayLayout() {
   const legend = document.getElementById('mapLegend');
   if (!legend) return;
@@ -553,30 +598,23 @@ try { window.localStorage?.removeItem(LEGACY_SIDEBAR_STATE_KEY); } catch (err) {
 
 function applySetupSidebarState(shouldCollapse) {
   const shell = document.getElementById('appShell');
-  const inlineToggle = document.getElementById('setupSidebarToggle');
-  const mapToggle = document.getElementById('mapSidebarToggle');
+  // Lives in the topbar, outside .left-panel, so it's never part of what
+  // gets hidden - one button, always present, just changes label/icon state.
+  const toggleBtn = document.getElementById('sidebarToggleBtn');
   if (!shell) return;
 
   shell.classList.toggle('sidebar-collapsed', shouldCollapse);
 
-  if (inlineToggle) {
-    inlineToggle.setAttribute('aria-expanded', String(!shouldCollapse));
-    inlineToggle.setAttribute('aria-label', 'Hide simulation setup');
-    const tipLabel = inlineToggle.querySelector('[data-sidebar-tip-label]');
-    if (tipLabel) tipLabel.textContent = 'Hide sidebar';
-  }
-
-  if (mapToggle) {
-    mapToggle.hidden = !shouldCollapse;
-    mapToggle.setAttribute('aria-expanded', String(!shouldCollapse));
-    mapToggle.setAttribute('aria-label', 'Show simulation setup');
-    const tipLabel = mapToggle.querySelector('[data-sidebar-tip-label]');
-    if (tipLabel) tipLabel.textContent = 'Show sidebar';
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-expanded', String(!shouldCollapse));
+    toggleBtn.setAttribute('aria-label', shouldCollapse ? 'Show simulation setup' : 'Hide simulation setup');
+    const tipLabel = toggleBtn.querySelector('[data-sidebar-tip-label]');
+    if (tipLabel) tipLabel.textContent = shouldCollapse ? 'Show sidebar' : 'Hide sidebar';
   }
 
   window.setTimeout(() => {
-    if (gMap && window.google?.maps?.event) {
-      window.google.maps.event.trigger(gMap, 'resize');
+    if (gMap) {
+      gMap.invalidateSize();
     }
   }, 240);
 }
@@ -590,10 +628,7 @@ function toggleSetupSidebar(forceOpen = null) {
     : !forceOpen;
   applySetupSidebarState(shouldCollapse);
 
-  const focusTarget = shouldCollapse
-    ? document.getElementById('mapSidebarToggle')
-    : document.getElementById('setupSidebarToggle');
-  if (focusTarget && !focusTarget.hidden) focusTarget.focus({ preventScroll: true });
+  document.getElementById('sidebarToggleBtn')?.focus({ preventScroll: true });
 }
 
 // Setup panel always starts open; the hide/show toggle is per-session only.
@@ -700,7 +735,7 @@ function syncSimulationConfigLock() {
     card.classList.toggle('interaction-locked', interactionLocked);
   });
 
-  ['startSel', 'endSel', 'showEvacBtn', 'runBtn', 'changeBarangayBtn', 'changeHazardBtn', 'changeRouteBtn', 'resetRouteBtn']
+  ['startSel', 'endSel', 'showEvacBtn', 'runBtn', 'changeBarangayBtn', 'changeHazardBtn', 'changeRouteBtn']
     .forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1109,31 +1144,37 @@ function hideLoaderSteps() {
 }
 
 function initMap() {
-  gMap = new google.maps.Map(document.getElementById('map'), {
-    center: { lat: 14.5590, lng: 121.0955 },
+  // Leaflet's touch handling already lets one finger drag/pinch the map on
+  // every device (no "page becomes scrollable" quirk to work around here),
+  // so there's no gestureHandling-style option needed.
+  gMap = L.map('map', {
+    center: [14.5590, 121.0955],
     zoom: 15,
-    tilt: 0,
-    heading: 0,
-    mapTypeId: google.maps.MapTypeId.ROADMAP,
-    styles: getMapThemeStyles(),
-    backgroundColor: '#ffffff',
-    mapTypeControl: true,
-    mapTypeControlOptions: {
-      style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
-      position: google.maps.ControlPosition.TOP_RIGHT,
-    },
-    streetViewControl: false,
-    fullscreenControl: true,
-    zoomControl: true,
-    tiltControl: false,
-    rotationControl: false,
-    // Default "auto" gesture handling falls back to two-finger panning once the
-    // page itself becomes scrollable (the phone/tablet layout), which reads as
-    // "the map doesn't respond to touch." Greedy keeps one-finger drag/pinch
-    // working on the map on every device; page scrolling still works from any
-    // area outside the map surface.
-    gestureHandling: 'greedy',
+    zoomControl: false,
+    // Defaults snap to whole zoom levels (zoomSnap:1), which makes both
+    // the +/- buttons and scroll-wheel zoom feel like discrete jumps.
+    // Fractional levels let it ease to a smooth in-between stop instead.
+    zoomSnap: 0.25,
+    zoomDelta: 0.5,
+    wheelPxPerZoomLevel: 100,
   });
+
+  const streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(gMap);
+
+  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20,
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+  });
+
+  L.control.zoom({ position: 'topright' }).addTo(gMap);
+  // collapsed:false keeps the Map/Satellite choice always visible instead of
+  // hiding it behind Leaflet's default collapsed icon (a hover-to-reveal
+  // layers glyph that doesn't render here since this page never loads
+  // Leaflet's marker/layers image sprites, only its CSS/JS).
+  L.control.layers({ 'Map': streetLayer, 'Satellite': satelliteLayer }, null, { position: 'topright', collapsed: false }).addTo(gMap);
 
   let mapResizeDebounceTimer = null;
   window.addEventListener('resize', () => {
@@ -1143,14 +1184,14 @@ function initMap() {
       applyResultsPanelHeight(resultsPanel.getBoundingClientRect().height || 320);
     }
 
-    // Google Maps caches its canvas size at creation time and after layout
-    // changes, so rotating the phone or toggling the browser's mobile address
-    // bar (both fire 'resize') needs an explicit nudge or the map keeps the
-    // old dimensions and shows blank/cropped tiles.
+    // Leaflet caches its container size, so rotating the phone or toggling
+    // the browser's mobile address bar (both fire 'resize') needs an
+    // explicit nudge or the map keeps the old dimensions and shows
+    // blank/cropped tiles.
     clearTimeout(mapResizeDebounceTimer);
     mapResizeDebounceTimer = window.setTimeout(() => {
-      if (gMap && window.google?.maps?.event) {
-        window.google.maps.event.trigger(gMap, 'resize');
+      if (gMap) {
+        gMap.invalidateSize();
       }
     }, 150);
   });
@@ -1177,24 +1218,14 @@ function clearRoutePreview(group) {
     group.previewTimer = null;
   }
 
-  if (group.previewDotsHaloLayer) {
-    group.previewDotsHaloLayer.setMap(null);
-    group.previewDotsHaloLayer = null;
+  if (group.previewHaloLayer) {
+    group.previewHaloLayer.remove();
+    group.previewHaloLayer = null;
   }
 
   if (group.previewDotsLayer) {
-    group.previewDotsLayer.setMap(null);
+    group.previewDotsLayer.remove();
     group.previewDotsLayer = null;
-  }
-
-  if (group.previewArrowHaloLayer) {
-    group.previewArrowHaloLayer.setMap(null);
-    group.previewArrowHaloLayer = null;
-  }
-
-  if (group.previewArrowLayer) {
-    group.previewArrowLayer.setMap(null);
-    group.previewArrowLayer = null;
   }
 }
 
@@ -1204,24 +1235,24 @@ function clearRouteAnimation() {
 }
 
 function clearBoundaryLayers() {
-  (mapLayers.boundaries || []).forEach(layer => layer.setMap(null));
+  (mapLayers.boundaries || []).forEach(layer => layer.remove());
   mapLayers.boundaries = [];
 }
 
 function clearLayers() {
   clearRouteAnimation();
   clearBoundaryLayers();
-  [...mapLayers.edges, ...mapLayers.nodes, ...mapLayers.routes].forEach(o => o.setMap(null));
+  [...mapLayers.edges, ...mapLayers.nodes, ...mapLayers.routes].forEach(o => o.remove());
   mapLayers = { boundaries: [], edges: [], nodes: [], routes: [], routeGroups: [] };
   selectedRouteFocus = null;
 
   if (activeInfoWindow) {
-    activeInfoWindow.close();
+    activeInfoWindow.remove();
     activeInfoWindow = null;
   }
 
   if (activeInfoWindowRef.current) {
-    activeInfoWindowRef.current.close();
+    activeInfoWindowRef.current.remove();
     activeInfoWindowRef.current = null;
   }
 
@@ -1243,13 +1274,13 @@ function clearLayers() {
 
 function clearRenderedRoutesOnly() {
   clearRouteAnimation();
-  mapLayers.routes.forEach(layer => layer.setMap(null));
+  mapLayers.routes.forEach(layer => layer.remove());
   mapLayers.routes = [];
   mapLayers.routeGroups = [];
   selectedRouteFocus = null;
 
   if (activeInfoWindowRef.current) {
-    activeInfoWindowRef.current.close();
+    activeInfoWindowRef.current.remove();
     activeInfoWindowRef.current = null;
   }
 
@@ -1348,13 +1379,28 @@ function formatDistanceCompact(distanceMeters, fallback = 'N/A') {
   return `${(numericDistance / 1000).toFixed(2)} km`;
 }
 
-function formatHazardScoreText(hazardValue, fallback = 'Unknown') {
-  const numericHazard = Number(hazardValue);
-  if (!Number.isFinite(numericHazard)) {
+// Every route here is walked (GRAPH_NETWORK_TYPE is 'walk' on the backend),
+// so one average walking pace works for both flood and earthquake results.
+const WALKING_SPEED_METERS_PER_MINUTE = 5000 / 60; // 5 km/h
+
+function formatWalkingDuration(distanceMeters, fallback = 'N/A') {
+  const numericDistance = Number(distanceMeters);
+  if (!Number.isFinite(numericDistance) || numericDistance < 0) {
     return fallback;
   }
 
-  return `${numericHazard}/5`;
+  const totalMinutes = numericDistance / WALKING_SPEED_METERS_PER_MINUTE;
+  if (totalMinutes < 1) {
+    return '< 1 min';
+  }
+
+  if (totalMinutes < 60) {
+    return `${Math.round(totalMinutes)} min`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  return minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`;
 }
 
 function formatFloodClasses(route) {
@@ -1396,36 +1442,56 @@ function formatFloodPeakRisk(route) {
   return getFloodRiskLabelFromHazard(route?.max_hazard);
 }
 
+// The source flood layers only carry a Low/Moderate/High class (Var 1/2/3),
+// not a measured depth, so these are typical/representative ranges for each
+// class rather than a per-location reading.
+const FLOOD_DEPTH_RANGE_BY_VAR = {
+  1: '0.1–0.5 m',
+  2: '0.5–1.0 m',
+  3: '1.0 m+',
+};
+
+function getFloodDepthRangeFromVar(varValue) {
+  return FLOOD_DEPTH_RANGE_BY_VAR[Number(varValue)] || FLOOD_DEPTH_RANGE_BY_VAR[1];
+}
+
+function getFloodDepthRangeFromHazard(hazardValue) {
+  const numericHazard = Number(hazardValue);
+  if (!Number.isFinite(numericHazard)) return 'Unknown';
+  if (numericHazard >= 5) return FLOOD_DEPTH_RANGE_BY_VAR[3];
+  if (numericHazard >= 3) return FLOOD_DEPTH_RANGE_BY_VAR[2];
+  return FLOOD_DEPTH_RANGE_BY_VAR[1];
+}
+
+function getFloodPeakDepthRange(route) {
+  const vars = Array.isArray(route?.flood_vars_encountered) ? route.flood_vars_encountered : [];
+  if (vars.length) {
+    return getFloodDepthRangeFromVar(Math.max(...vars));
+  }
+
+  return getFloodDepthRangeFromHazard(route?.max_hazard);
+}
+
 function formatFloodPeakRiskWithHazard(route) {
-  return `${formatFloodPeakRisk(route)} (${formatHazardScoreText(route?.max_hazard)})`;
+  return `${formatFloodPeakRisk(route)} (${getFloodPeakDepthRange(route)})`;
 }
 
-function formatRouteScore(value, digits = 2, fallback = 'N/A') {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return fallback;
-  }
-
-  return numericValue.toFixed(digits);
+// One shared "peak severity" label for the map popup, regardless of hazard
+// type -- mirrors the wording already used in the main results panel.
+function formatRoutePeakRiskLabel(route) {
+  return isEarthquakeRouteRecord(route)
+    ? getRiskLevelLabelFromScore(route?.max_hazard)
+    : formatFloodPeakRiskWithHazard(route);
 }
 
-function buildFloodExposureDisplay(route) {
-  if (isEarthquakeRouteRecord(route)) {
-    return null;
+function formatEarthquakeHazardSummary(route) {
+  const maxima = route?.hazard_maxima || {};
+  if (maxima.liquefaction == null && maxima.ground_shaking == null) {
+    return 'N/A';
   }
 
-  const score = formatRouteScore(route?.risk_distance, 2);
-  if (score === 'N/A') {
-    return {
-      meaning: 'Unavailable',
-      score: 'N/A',
-    };
-  }
-
-  return {
-    meaning: 'Smaller scores mean less total flood exposure along the route.',
-    score,
-  };
+  return `Liquefaction: ${getRiskLevelLabelFromScore(maxima.liquefaction)}, `
+    + `Ground shaking: ${getRiskLevelLabelFromScore(maxima.ground_shaking)}`;
 }
 
 function getAcoRankingRuleText() {
@@ -1485,16 +1551,12 @@ function getRouteRiskSubtext(route) {
   const unsafeRoadParts = Number(route?.display_unsafe_segment_count || 0);
 
   if (isEarthquakeRouteRecord(route)) {
-    return `Highest score: ${formatHazardScoreText(route?.max_hazard)} · Unsafe road parts: ${unsafeRoadParts}`;
+    return `Highest risk level: ${getRiskLevelLabelFromScore(route?.max_hazard)} · Unsafe road parts: ${unsafeRoadParts}`;
   }
 
   const parts = [
-    `Peak score: ${formatHazardScoreText(route?.max_hazard)}`,
+    `Peak flood depth: ${getFloodPeakDepthRange(route)}`,
   ];
-
-  if (route?.display_flood_exposure_score) {
-    parts.push(`Flood exposure score: ${route.display_flood_exposure_score}`);
-  }
 
   if (unsafeRoadParts > 0) {
     parts.push(`Unsafe road parts: ${unsafeRoadParts}`);
@@ -1527,14 +1589,14 @@ function buildRouteReason(route) {
   if (route?.category === 'eliminated') {
     if (route?.status === 'Best') {
       return unsafeSections > 0
-        ? `Best fallback route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
-        : `Best fallback route${destinationNote}, but some road parts are above the safety limit.`;
+        ? `Best backup route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
+        : `Best backup route${destinationNote}, but some road parts are above the safety limit.`;
     }
 
     if (route?.status === 'Available') {
       return unsafeSections > 0
-        ? `Available fallback route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
-        : `Available fallback route${destinationNote}, but some road parts are above the safety limit.`;
+        ? `Available backup route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
+        : `Available backup route${destinationNote}, but some road parts are above the safety limit.`;
     }
 
     return unsafeSections > 0
@@ -1562,14 +1624,13 @@ function buildRouteEvidenceChips(route) {
     return [
       route?.destination_name ? { label: 'Shelter', value: route.destination_name } : null,
       { label: 'Risk view', value: route?.lens_label || 'Overall' },
-      { label: 'Highest risk score', value: formatHazardScoreText(route?.max_hazard) },
+      { label: 'Highest risk level', value: getRiskLevelLabelFromScore(route?.max_hazard) },
     ].filter(Boolean);
   }
 
   return [
     { label: 'Flood levels crossed', value: route?.display_flood_classes || 'None' },
     { label: 'Highest flood level', value: formatFloodPeakRiskWithHazard(route) },
-    { label: 'Flood exposure score', value: route?.display_flood_exposure_score || 'N/A' },
   ];
 }
 
@@ -1600,9 +1661,10 @@ function buildSummaryCallout(result, safeRoutes, bestRoute, earthquakeSummary) {
     const selectedSite = earthquakeSummary?.selected_evacuation_site?.name || 'the selected evacuation site';
     const viewLabel = result.active_view_label || earthquakeSummary?.view_label || 'Overall';
     const distanceText = bestRoute?.display_distance || 'N/A';
+    const durationText = bestRoute?.display_duration || 'N/A';
     return earthquakeSummary?.selected_evacuation_site
-      ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route goes to <strong>${escapeHtml(selectedSite)}</strong> and is about <strong>${escapeHtml(distanceText)}</strong> long.</div><div class="summary-callout-copy">This result uses the <strong>${escapeHtml(viewLabel)}</strong> earthquake view and shows the safest option first.</div>`
-      : `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route is about <strong>${escapeHtml(distanceText)}</strong> long.</div><div class="summary-callout-copy">This result uses the <strong>${escapeHtml(viewLabel)}</strong> earthquake view and shows the safest option first.</div>`;
+      ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route goes to <strong>${escapeHtml(selectedSite)}</strong> and is about <strong>${escapeHtml(distanceText)}</strong> long, roughly <strong>${escapeHtml(durationText)}</strong> on foot.</div><div class="summary-callout-copy">This result uses the <strong>${escapeHtml(viewLabel)}</strong> earthquake view and shows the safest option first.</div>`
+      : `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route is about <strong>${escapeHtml(distanceText)}</strong> long, roughly <strong>${escapeHtml(durationText)}</strong> on foot.</div><div class="summary-callout-copy">This result uses the <strong>${escapeHtml(viewLabel)}</strong> earthquake view and shows the safest option first.</div>`;
   }
 
   if (!safeRoutes.length) {
@@ -1611,13 +1673,14 @@ function buildSummaryCallout(result, safeRoutes, bestRoute, earthquakeSummary) {
 
   const highestFloodLevel = bestRoute ? formatFloodPeakRiskWithHazard(bestRoute) : 'N/A';
   const distanceText = bestRoute?.display_distance || 'N/A';
+  const durationText = bestRoute?.display_duration || 'N/A';
 
   return bestRoute
-    ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route is about <strong>${escapeHtml(distanceText)}</strong> long.</div><div class="summary-callout-copy">Its highest flood level is <strong>${escapeHtml(highestFloodLevel)}</strong>, and it stays within the safe limit.</div>`
+    ? `<div class="summary-callout-title">Quick Summary</div><div class="summary-callout-copy">The recommended route is about <strong>${escapeHtml(distanceText)}</strong> long, roughly <strong>${escapeHtml(durationText)}</strong> on foot.</div><div class="summary-callout-copy">Its highest flood level is <strong>${escapeHtml(highestFloodLevel)}</strong>, and it stays within the safe limit.</div>`
     : 'Route summary unavailable.';
 }
 
-function decorateRouteForDisplay(route, exposureDisplay = null) {
+function decorateRouteForDisplay(route) {
   const segmentCount = typeof route?.segments === 'number'
     ? route.segments
     : Array.isArray(route?.path)
@@ -1631,6 +1694,7 @@ function decorateRouteForDisplay(route, exposureDisplay = null) {
   return {
     ...route,
     display_distance: formatDistanceCompact(route?.distance),
+    display_duration: formatWalkingDuration(route?.distance),
     display_unsafe_distance: formatDistanceCompact(route?.unsafe_distance, '0 m'),
     display_flood_classes: formatFloodClasses(route),
     display_hazard_breakdown: formatHazardBreakdown(route),
@@ -1639,14 +1703,11 @@ function decorateRouteForDisplay(route, exposureDisplay = null) {
     display_reason: buildRouteReason(route),
     display_segment_count: segmentCount,
     display_unsafe_segment_count: unsafeSegmentCount,
-    display_flood_exposure_score: exposureDisplay?.score || '',
-    display_flood_exposure_meaning: exposureDisplay?.meaning || '',
   };
 }
 
 function decorateRoutesForDisplay(routes) {
-  const exposureDisplays = routes.map(route => buildFloodExposureDisplay(route));
-  return routes.map((route, index) => decorateRouteForDisplay(route, exposureDisplays[index]));
+  return routes.map(route => decorateRouteForDisplay(route));
 }
 
 function getCurrentSelections() {
@@ -2027,8 +2088,6 @@ function syncEarthquakeRouteUi() {
   const routeCardLabel = document.getElementById('routeCardLabel');
   const startNodeLabel = document.getElementById('startNodeLabel');
   const endField = document.getElementById('endField');
-  const routeDivider = document.getElementById('routeDivider');
-  const earthquakeModeFlag = document.getElementById('earthquakeModeFlag');
   const earthquakeRoutePanel = document.getElementById('earthquakeRoutePanel');
   const earthquakeRouteCopy = document.getElementById('earthquakeRouteCopy');
   const showEvacBtn = document.getElementById('showEvacBtn');
@@ -2044,21 +2103,11 @@ function syncEarthquakeRouteUi() {
   }
 
   if (startNodeLabel) {
-    startNodeLabel.textContent = isEarthquakeMode()
-      ? 'START NODE - Earthquake Origin'
-      : 'START NODE - Safety Origin';
+    startNodeLabel.textContent = 'Your location';
   }
 
   if (endField) {
     endField.hidden = isEarthquakeMode();
-  }
-
-  if (routeDivider) {
-    routeDivider.hidden = isEarthquakeMode();
-  }
-
-  if (earthquakeModeFlag) {
-    earthquakeModeFlag.hidden = !isEarthquakeMode();
   }
 
   if (earthquakeRoutePanel) {
@@ -2157,8 +2206,8 @@ function setFloodLegendContent(options = {}) {
     <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Available Route</span></div>
     <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
     <div style="margin-top:5px;">
-      <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">Start Node</span></div>
-      <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">End Node</span></div>
+      <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Start Node</span></div>
+      <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">End Node</span></div>
       ${(showHazardLayers || selectedHazard === 'Flood') ? '' : `
         <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.78rem;">Safe</span></div>
         <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Moderate</span></div>
@@ -2193,6 +2242,7 @@ function clearEarthquakeSimulationOutput() {
     window.earthquakeUI?.syncLegend(activeEarthquakeView, {
       showRouteKeys: false,
       showHazardLayers: false,
+      showHazardSection: false,
     });
     document.getElementById('mapLegend').style.display = 'block';
     syncLegendVisibility();
@@ -2221,9 +2271,9 @@ function populateBarangayNodeSelectors(name) {
   const startSel = document.getElementById('startSel');
   const endSel = document.getElementById('endSel');
 
-  function populate(sel, exclude) {
+  function populate(sel, exclude, placeholder) {
     const kept = sel.value !== exclude ? sel.value : '';
-    sel.innerHTML = '<option value="">— Select node —</option>';
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
 
     locs.forEach(l => {
       if (l === exclude) return;
@@ -2233,21 +2283,129 @@ function populateBarangayNodeSelectors(name) {
     sel.value = kept;
   }
 
-  populate(startSel, null);
-  populate(endSel, null);
+  populate(startSel, null, 'Your location');
+  populate(endSel, null, 'Your destination');
 
   startSel.disabled = !selectedHazard;
   endSel.disabled = !selectedHazard;
 
   startSel.onchange = () => {
-    populate(endSel, startSel.value);
+    populate(endSel, startSel.value, 'Your destination');
     onNodeChange();
   };
 
   endSel.onchange = () => {
-    populate(startSel, endSel.value);
+    populate(startSel, endSel.value, 'Your location');
     onNodeChange();
   };
+}
+
+// startSel/endSel stay in the DOM as the source of truth (value/disabled/onchange
+// all keep working exactly as before) but are visually hidden; this renders a
+// themeable listbox on top of them because a native <select>'s open popup is
+// OS-drawn and its hover/selected colors can't be restyled with CSS.
+function initLocationCombo(selectId) {
+  const select = document.getElementById(selectId);
+  const trigger = document.getElementById(`${selectId}Trigger`);
+  const valueEl = document.getElementById(`${selectId}Value`);
+  const list = document.getElementById(`${selectId}List`);
+  if (!select || !trigger || !valueEl || !list) return;
+
+  function closeList() {
+    if (list.hidden) return;
+    list.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+
+  function renderOptions() {
+    list.innerHTML = '';
+    Array.from(select.options).forEach(opt => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.className = 'location-combo-option';
+      li.textContent = opt.text;
+      li.dataset.value = opt.value;
+      li.tabIndex = -1;
+      const isSelected = opt.value === select.value;
+      li.setAttribute('aria-selected', String(isSelected));
+      if (isSelected) li.classList.add('selected');
+      li.addEventListener('click', () => chooseValue(opt.value));
+      li.addEventListener('keydown', onOptionKeydown);
+      list.appendChild(li);
+    });
+  }
+
+  function openList() {
+    if (trigger.disabled || !list.hidden) return;
+    renderOptions();
+    list.hidden = false;
+    trigger.setAttribute('aria-expanded', 'true');
+    (list.querySelector('[aria-selected="true"]') || list.firstElementChild)?.focus();
+  }
+
+  function chooseValue(value) {
+    if (select.value !== value) {
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    sync();
+    closeList();
+    trigger.focus();
+  }
+
+  function onOptionKeydown(e) {
+    const items = Array.from(list.children);
+    const idx = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      (items[idx + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      (items[idx - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      chooseValue(document.activeElement.dataset.value);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeList();
+      trigger.focus();
+    } else if (e.key === 'Tab') {
+      closeList();
+    }
+  }
+
+  function sync() {
+    // No <option>s exist yet before a barangay is picked - leave the
+    // HTML-authored placeholder ("Your location" / "Your destination") alone.
+    const selectedOption = select.options[select.selectedIndex];
+    if (selectedOption) valueEl.textContent = selectedOption.text;
+    trigger.disabled = select.disabled;
+    if (!list.hidden) renderOptions();
+  }
+
+  trigger.addEventListener('click', () => {
+    if (list.hidden) openList();
+    else closeList();
+  });
+
+  trigger.addEventListener('keydown', e => {
+    // Enter/Space already reach us as a native click on a <button> - only
+    // ArrowDown needs handling here, or opening would immediately re-close.
+    if (!list.hidden) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      openList();
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (list.hidden || trigger.contains(e.target) || list.contains(e.target)) return;
+    closeList();
+  });
+
+  new MutationObserver(sync).observe(select, { attributes: true, attributeFilter: ['disabled'], childList: true });
+
+  sync();
 }
 
 function clearBarangaySelections(options = {}) {
@@ -2263,9 +2421,11 @@ function clearBarangaySelections(options = {}) {
 
   ['startSel', 'endSel'].forEach(id => {
     const select = document.getElementById(id);
-    const placeholder = selectedHazard
-      ? '— Select node —'
-      : '— Select disaster type first —';
+    const placeholder = !selectedHazard
+      ? '— Select disaster type first —'
+      : id === 'startSel'
+      ? 'Your location'
+      : 'Your destination';
 
     select.innerHTML = `<option value="">${placeholder}</option>`;
     select.value = '';
@@ -2333,8 +2493,8 @@ function showResultsPanelDrawer() {
 }
 
 function nodeColor(haz, id, start, end) {
-  if (id === start) return '#a855f7';
-  if (id === end) return '#06b6d4';
+  if (id === start) return '#06b6d4';
+  if (id === end) return '#a855f7';
   if (haz == null) return '#94a3b8';
   if (haz <= 2) return '#22c55e';
   if (haz === 3) return '#eab308';
@@ -2468,19 +2628,16 @@ function updateMapContextBadge() {
 function fitMapToLocations(locations, padding = 60) {
   if (!locations.length) return;
 
-  const bounds = new google.maps.LatLngBounds();
-  locations.forEach(loc => bounds.extend({ lat: loc.lat, lng: loc.lng }));
-  gMap.fitBounds(bounds, padding);
+  const bounds = L.latLngBounds(locations.map(loc => ({ lat: loc.lat, lng: loc.lng })));
+  gMap.fitBounds(bounds, { padding: [padding, padding] });
 }
 
 function buildScopeBounds(points) {
-  const bounds = new google.maps.LatLngBounds();
-  points.forEach(point => bounds.extend(point));
-  return bounds;
+  return L.latLngBounds(points);
 }
 
 function fitMapToBoundaryPaths(paths, padding = 42) {
-  const bounds = new google.maps.LatLngBounds();
+  const bounds = L.latLngBounds();
   let hasPoints = false;
 
   (paths || []).forEach(path => {
@@ -2497,7 +2654,7 @@ function fitMapToBoundaryPaths(paths, padding = 42) {
 
   if (!hasPoints) return false;
 
-  gMap.fitBounds(bounds, padding);
+  gMap.fitBounds(bounds, { padding: [padding, padding] });
   return true;
 }
 
@@ -2511,17 +2668,17 @@ function fitMapToRoute(route, padding = 34) {
   if (!routePoints.length) return false;
 
   const bounds = buildScopeBounds(routePoints);
-  gMap.fitBounds(bounds, padding);
+  gMap.fitBounds(bounds, { padding: [padding, padding] });
 
-  google.maps.event.addListenerOnce(gMap, 'idle', () => {
+  gMap.once('moveend', () => {
     const currentZoom = gMap.getZoom();
     if (!Number.isFinite(currentZoom)) return;
 
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
     const maxSpan = Math.max(
-      Math.abs(ne.lat() - sw.lat()),
-      Math.abs(ne.lng() - sw.lng())
+      Math.abs(ne.lat - sw.lat),
+      Math.abs(ne.lng - sw.lng)
     );
 
     let minZoom = null;
@@ -2628,7 +2785,7 @@ function fitEarthquakeMapScope(options = {}) {
     return false;
   }
 
-  const bounds = new google.maps.LatLngBounds();
+  const bounds = L.latLngBounds();
   let hasPoints = false;
 
   const startNode = getLocationByName(getCurrentStartValue());
@@ -2662,8 +2819,8 @@ function fitEarthquakeMapScope(options = {}) {
     return false;
   }
 
-  gMap.fitBounds(bounds, 52);
-  google.maps.event.addListenerOnce(gMap, 'idle', () => {
+  gMap.fitBounds(bounds, { padding: [52, 52] });
+  gMap.once('moveend', () => {
     if (gMap.getZoom() < EARTHQUAKE_MIN_FOCUS_ZOOM) {
       gMap.setZoom(EARTHQUAKE_MIN_FOCUS_ZOOM);
     }
@@ -2693,40 +2850,39 @@ async function loadBarangayMapOnly(bgyName) {
     const paths = Array.isArray(data.boundary?.paths) ? data.boundary.paths : [];
     let hasBoundary = false;
 
-    paths.forEach(path => {
-      const normalizedPath = (path || [])
-        .filter(point => point && point.lat != null && point.lng != null)
-        .map(point => ({
-          lat: Number(point.lat),
-          lng: Number(point.lng),
-        }));
+    const normalizedPaths = paths.map(path => (path || [])
+      .filter(point => point && point.lat != null && point.lng != null)
+      .map(point => ({
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+      })));
 
+    const scopeMask = buildBarangayScopeMask(normalizedPaths);
+    if (scopeMask) {
+      scopeMask.addTo(gMap);
+      scopeMask.boundaryRole = 'mask';
+      mapLayers.boundaries.push(scopeMask);
+    }
+
+    normalizedPaths.forEach(normalizedPath => {
       if (normalizedPath.length < 2) return;
 
-      const halo = new google.maps.Polyline({
-        path: normalizedPath,
-        geodesic: false,
-        strokeColor: getBarangayBoundaryHaloColor(),
-        strokeOpacity: 0.92,
-        strokeWeight: 10,
-        clickable: false,
-        map: gMap,
-        zIndex: 2,
-      });
+      const halo = L.polyline(normalizedPath, {
+        color: getBarangayBoundaryHaloColor(),
+        opacity: 0.92,
+        weight: 10,
+        interactive: false,
+      }).addTo(gMap);
 
       halo.boundaryRole = 'halo';
       mapLayers.boundaries.push(halo);
 
-      const outline = new google.maps.Polyline({
-        path: normalizedPath,
-        geodesic: false,
-        strokeColor: getBarangayBoundaryStrokeColor(),
-        strokeOpacity: 1,
-        strokeWeight: 5,
-        clickable: false,
-        map: gMap,
-        zIndex: 3,
-      });
+      const outline = L.polyline(normalizedPath, {
+        color: getBarangayBoundaryStrokeColor(),
+        opacity: 1,
+        weight: 5,
+        interactive: false,
+      }).addTo(gMap);
 
       outline.boundaryRole = 'main';
       mapLayers.boundaries.push(outline);
@@ -2748,40 +2904,41 @@ function drawNode(n, start, end) {
   const special = n.name === start || n.name === end;
   const role = n.name === start ? 'start' : n.name === end ? 'end' : null;
 
-  const marker = new google.maps.Marker({
-    position: { lat: n.lat, lng: n.lng },
-    map: gMap,
-    title: n.name,
-    zIndex: special ? 34 : 10,
-    icon: special
-      ? makeRouteEndpointPinIcon(role)
-      : {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: col,
-          fillOpacity: 0.95,
-          strokeColor: '#ffffff',
-          strokeWeight: 2.5,
-        },
-    label: special
-      ? undefined
-      : {
-          text: shortNodeLabel(n.name),
-          color: '#ffffff',
-          fontSize: '10px',
-          fontFamily: 'Plus Jakarta Sans, Nunito, sans-serif',
-          fontWeight: '700'
-        }
-  });
+  // Special (start/end) pins are real Leaflet markers, which always paint
+  // above plain vector paths regardless of insertion order (markerPane sits
+  // above overlayPane) - that alone reproduces the old special-vs-regular
+  // zIndex contrast. Regular nodes are lightweight circleMarkers (a Path,
+  // like the old SymbolPath.CIRCLE icon) with their label as a permanent,
+  // centered tooltip instead of Google's marker `label` option.
+  const marker = special
+    ? L.marker({ lat: n.lat, lng: n.lng }, {
+        title: n.name,
+        zIndexOffset: 3400,
+        icon: makeRouteEndpointPinIcon(role),
+      }).addTo(gMap)
+    : L.circleMarker({ lat: n.lat, lng: n.lng }, {
+        title: n.name,
+        radius: 10,
+        fillColor: col,
+        fillOpacity: 0.95,
+        color: '#ffffff',
+        weight: 2.5,
+      }).addTo(gMap);
 
-  const iw = new google.maps.InfoWindow({
-    content: infoPopup(n.name, buildNodePopupRows(n, start, end))
-  });
+  if (!special) {
+    marker.bindTooltip(shortNodeLabel(n.name), {
+      permanent: true,
+      direction: 'center',
+      className: 'agnas-node-label',
+    });
+  }
 
-  marker.addListener('click', () => {
-    if (activeInfoWindow) activeInfoWindow.close();
-    iw.open(gMap, marker);
-    activeInfoWindow = iw;
+  marker.on('click', () => {
+    if (activeInfoWindow) activeInfoWindow.remove();
+    activeInfoWindow = L.popup()
+      .setLatLng(marker.getLatLng())
+      .setContent(infoPopup(n.name, buildNodePopupRows(n, start, end)))
+      .openOn(gMap);
   });
 
   mapLayers.nodes.push(marker);
@@ -2803,20 +2960,20 @@ function makeNodeBadgeIcon(text) {
     </svg>
   `;
 
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new google.maps.Size(184, 56),
-    anchor: new google.maps.Point(92, 51),
-  };
+  return L.icon({
+    iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    iconSize: [184, 56],
+    iconAnchor: [92, 51],
+  });
 }
 
 function makeRouteEndpointPinIcon(kind = 'start') {
   const isStart = kind === 'start';
-  const fill = isStart ? '#a855f7' : '#06b6d4';
-  const stroke = isStart ? '#6b21a8' : '#155e75';
+  const fill = isStart ? '#06b6d4' : '#a855f7';
+  const stroke = isStart ? '#155e75' : '#6b21a8';
   const glyph = isStart ? 'S' : 'E';
-  const outerGlow = isStart ? 'rgba(168,85,247,0.22)' : 'rgba(6,182,212,0.22)';
-  const innerFill = isStart ? '#9333ea' : '#0891b2';
+  const outerGlow = isStart ? 'rgba(6,182,212,0.22)' : 'rgba(168,85,247,0.22)';
+  const innerFill = isStart ? '#0891b2' : '#9333ea';
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="72" height="88" viewBox="0 0 72 88">
       <defs>
@@ -2854,15 +3011,19 @@ function makeRouteEndpointPinIcon(kind = 'start') {
     </svg>
   `;
 
-  return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    scaledSize: new google.maps.Size(48, 60),
-    anchor: new google.maps.Point(24, 55),
-  };
+  return L.icon({
+    iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    iconSize: [48, 60],
+    // The pin's tip sits at (36, 78) in the 72x88 source viewBox; scaled to
+    // the 48x60 rendered size that's (24, 53.2) -- not (24, 55) -- which was
+    // pulling the marker's true anchor a couple of px off the route's actual
+    // endpoint coordinate.
+    iconAnchor: [24, 53],
+  });
 }
 
 function drawSelectedPinsOnly(start, end) {
-  mapLayers.nodes.forEach(m => m.setMap(null));
+  mapLayers.nodes.forEach(m => m.remove());
   mapLayers.nodes = [];
 
   if (!selectedBarangay) return;
@@ -2872,24 +3033,18 @@ function drawSelectedPinsOnly(start, end) {
   nodes.forEach(n => {
     if (n.name !== start && n.name !== end) return;
 
-    const col = nodeColor(n.haz, n.name, start, end);
-
-    const marker = new google.maps.Marker({
-      position: { lat: n.lat, lng: n.lng },
-      map: gMap,
+    const marker = L.marker({ lat: n.lat, lng: n.lng }, {
       title: n.name,
-      zIndex: 36,
-      icon: makeRouteEndpointPinIcon(n.name === start ? 'start' : 'end')
-    });
+      zIndexOffset: 3600,
+      icon: makeRouteEndpointPinIcon(n.name === start ? 'start' : 'end'),
+    }).addTo(gMap);
 
-    const iw = new google.maps.InfoWindow({
-      content: infoPopup(n.name, buildNodePopupRows(n, start, end))
-    });
-
-    marker.addListener('click', () => {
-      if (activeInfoWindow) activeInfoWindow.close();
-      iw.open(gMap, marker);
-      activeInfoWindow = iw;
+    marker.on('click', () => {
+      if (activeInfoWindow) activeInfoWindow.remove();
+      activeInfoWindow = L.popup()
+        .setLatLng(marker.getLatLng())
+        .setContent(infoPopup(n.name, buildNodePopupRows(n, start, end)))
+        .openOn(gMap);
     });
 
     mapLayers.nodes.push(marker);
@@ -2899,7 +3054,7 @@ function drawSelectedPinsOnly(start, end) {
 function redrawNodes(start, end) {
   if (!selectedBarangay) return;
 
-  mapLayers.nodes.forEach(m => m.setMap(null));
+  mapLayers.nodes.forEach(m => m.remove());
   mapLayers.nodes = [];
 
   getBarangayLocations(selectedBarangay).forEach(n => drawNode(n, start, end));
@@ -2955,9 +3110,9 @@ async function selectBarangay(name) {
   const startSel = document.getElementById('startSel');
   const endSel = document.getElementById('endSel');
 
-  function populate(sel, exclude) {
+  function populate(sel, exclude, placeholder) {
     const kept = sel.value !== exclude ? sel.value : '';
-    sel.innerHTML = '<option value="">— Select node —</option>';
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
 
     locs.forEach(l => {
       if (l === exclude) return;
@@ -2967,19 +3122,19 @@ async function selectBarangay(name) {
     sel.value = kept;
   }
 
-  populate(startSel, null);
-  populate(endSel, null);
+  populate(startSel, null, 'Your location');
+  populate(endSel, null, 'Your destination');
 
   startSel.disabled = !selectedHazard;
   endSel.disabled = !selectedHazard;
 
   startSel.onchange = () => {
-    populate(endSel, startSel.value);
+    populate(endSel, startSel.value, 'Your destination');
     onNodeChange();
   };
 
   endSel.onchange = () => {
-    populate(startSel, endSel.value);
+    populate(startSel, endSel.value, 'Your location');
     onNodeChange();
   };
 
@@ -3063,7 +3218,7 @@ function onNodeChange() {
         `<strong>Earthquake Routing</strong> is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`;
     } else if (canRun) {
       document.getElementById('infoBox').innerHTML =
-        `Ready! The system will compare routes from <strong>${start}</strong> to the evacuation sites that can still be reached. Click <strong>Run Earthquake Simulation</strong> to view the results.`;
+        `The system will compare routes from <strong>${start}</strong> to the evacuation sites that can still be reached. Click <strong>Run Earthquake Simulation</strong> to view the results.`;
     } else if (!start) {
       document.getElementById('infoBox').innerHTML =
         `Choose a <strong>start node</strong> to begin the earthquake routing flow.`;
@@ -3289,7 +3444,6 @@ function syncWorkflowSummaries() {
 
   const summaryBarangay = document.getElementById('summaryBarangay');
   const summaryHazard = document.getElementById('summaryHazard');
-  const summaryRoute = document.getElementById('summaryRoute');
   const summaryRun = document.getElementById('summaryRun');
 
   if (summaryBarangay) {
@@ -3310,36 +3464,16 @@ function syncWorkflowSummaries() {
       : 'Choose a barangay first to unlock hazard testing.';
   }
 
-  if (summaryRoute) {
-    if (isEarthquakeMode()) {
-      summaryRoute.textContent = !isEarthquakeBarangaySupported()
-        ? `Earthquake routing is currently locked outside ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`
-        : earthquakeEvacSitesVisible && start
-        ? `Start node: ${shortNodeLabel(start)}. ${earthquakeEvacSites.length} evacuation site(s) are visible.`
-        : start
-        ? `Start node: ${shortNodeLabel(start)}. Reveal the evacuation sites next.`
-        : 'Pick the earthquake start node inside the selected barangay.';
-    } else {
-      summaryRoute.textContent = start && end
-        ? `${shortNodeLabel(start)} → ${shortNodeLabel(end)}`
-        : start
-        ? `Start node: ${shortNodeLabel(start)}. Choose an end node next.`
-        : selectedHazard
-        ? 'Pick the origin and destination nodes inside the selected barangay.'
-        : 'Choose a barangay and disaster type before selecting nodes.';
-    }
-  }
-
   if (summaryRun) {
     summaryRun.textContent = simulationInProgress
-      ? 'Simulation is running. Inputs are temporarily locked until the results are ready.'
+      ? 'Simulation is running.'
       : backendSimulationBusy
       ? 'The backend is still finishing a previous simulation. Wait until it clears before starting another run.'
       : simulationConfigLocked
       ? 'Setup is locked for this run. Click New Simulation to change it.'
       : isEarthquakeMode()
       ? canRun
-        ? 'Earthquake setup is complete. Run the simulation to see which evacuation sites can still be reached and which routes are safer.'
+        ? 'Everything is ready. Launch the simulation when you are set.'
         : 'Review the earthquake setup, then launch the simulation.'
       : canRun
       ? 'Everything is ready. Launch the simulation when you are set.'
@@ -3349,7 +3483,6 @@ function syncWorkflowSummaries() {
   const changeBarangayBtn = document.getElementById('changeBarangayBtn');
   const changeHazardBtn = document.getElementById('changeHazardBtn');
   const changeRouteBtn = document.getElementById('changeRouteBtn');
-  const resetRouteBtn = document.getElementById('resetRouteBtn');
 
   if (changeBarangayBtn) {
     changeBarangayBtn.textContent = selectedBarangay ? 'Change' : 'Select';
@@ -3363,12 +3496,6 @@ function syncWorkflowSummaries() {
 
   if (changeRouteBtn) {
     changeRouteBtn.disabled = isSimulationInteractionLocked() || !(selectedBarangay && selectedHazard);
-  }
-
-  if (resetRouteBtn) {
-    resetRouteBtn.disabled = isSimulationInteractionLocked() || (isEarthquakeMode()
-      ? !(start || earthquakeEvacSitesVisible)
-      : !(start || end));
   }
 
   syncEarthquakeRouteUi();
@@ -3410,33 +3537,6 @@ function focusWorkflowSection(sectionKey) {
   if (target && typeof target.scrollIntoView === 'function') {
     target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-}
-
-async function resetRouteSelection() {
-  if (isSimulationInteractionLocked()) return;
-  if (!selectedBarangay) return;
-
-  workflowFocusSection = 'route';
-  clearBarangaySelections({ keepResults: false, keepInfoText: true });
-
-  if (selectedHazard) {
-    populateBarangayNodeSelectors(selectedBarangay);
-    setRouteSelectorsEnabled(!isEarthquakeMode());
-    document.getElementById('infoBox').innerHTML = isEarthquakeMode()
-      ? isEarthquakeBarangaySupported()
-        ? `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start node</strong>, then reveal the <strong>evacuation sites</strong> again.`
-        : `<strong>Earthquake Routing</strong> is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`
-      : `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose your <strong>start</strong> and <strong>end</strong> nodes again.`;
-    advanceStep(isEarthquakeMode() && !isEarthquakeBarangaySupported() ? 2 : 3);
-  } else {
-    document.getElementById('infoBox').innerHTML =
-      `<strong>Brgy. ${selectedBarangay}</strong> kept. Choose a <strong>disaster type</strong> first.`;
-    advanceStep(2);
-  }
-
-  document.getElementById('emptyMap').style.display = 'none';
-  await loadBarangayMapOnly(selectedBarangay);
-  syncEarthquakeRouteUi();
 }
 
 function advanceStep(n) {
@@ -3651,7 +3751,7 @@ async function showEvacuationSites() {
             showRouteKeys: true,
             showHazardLayers: shouldShowEarthquakeHazardOverlays(activeEarthquakeView),
           }
-        : { showRouteKeys: false, showHazardLayers: false }
+        : { showRouteKeys: false, showHazardLayers: false, showHazardSection: false }
     );
     document.getElementById('mapLegend').style.display = 'block';
     syncLegendVisibility();
@@ -3731,9 +3831,14 @@ async function runSimulation() {
     }
 
     loaderHideTimer = window.setTimeout(() => {
-      loader.classList.remove('show');
-      resetLoaderState();
-      loaderHideTimer = null;
+      // display:none can't be transitioned, so fade opacity out first via the
+      // 'leaving' class, then drop 'show' (and display) once that's done.
+      loader.classList.add('leaving');
+      loaderHideTimer = window.setTimeout(() => {
+        loader.classList.remove('show', 'leaving');
+        resetLoaderState();
+        loaderHideTimer = null;
+      }, LOADER_FADE_OUT_MS);
     }, delay);
   };
 
@@ -3785,8 +3890,6 @@ async function runSimulation() {
       showResultsPanel(simData);
       setLoaderStep('draw', 92);
       statusTxt.textContent = 'Opening results…';
-      loaderHideDelay = 140;
-      hideLoader(loaderHideDelay);
       syncEarthquakeViewSelector();
       clearBoundaryLayers();
       await renderActiveSimulationRoutes();
@@ -3813,8 +3916,6 @@ async function runSimulation() {
       showResultsPanel(simData);
       setLoaderStep('draw', 92);
       statusTxt.textContent = 'Opening results…';
-      loaderHideDelay = 140;
-      hideLoader(loaderHideDelay);
       clearBoundaryLayers();
       setFloodLegendContent();
       await renderActiveSimulationRoutes();
@@ -3827,12 +3928,15 @@ async function runSimulation() {
     applySetupSidebarState(true);
     document.getElementById('resetBtn').classList.add('show');
     document.getElementById('infoBox').innerHTML =
-      `This setup is now <strong>locked</strong> to keep the result stable. Click <strong>New Simulation</strong> if you want to change the barangay, disaster, or nodes.`;
+      `This setup is now <strong>locked</strong> to keep the result stable. Click <strong>New Simulation</strong> if you want to change the barangay, starting and end point, and disaster type`;
     setSimulationConfigLocked(true);
     updateMapContextBadge();
 
     setLoaderStep('complete', 100);
     statusTxt.textContent = 'Simulation Complete';
+    // Only hide once the bar has actually eased up to 100 (previously this fired
+    // right after the 'draw' step, so the bar visibly jumped to results mid-animation).
+    hideLoader(650);
   } catch (err) {
     await syncBackendBusyStateAfterRequestError(err);
     console.error(err);
@@ -3859,6 +3963,9 @@ function safetyIcon(name) {
     droplet: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.5 6 11a6 6 0 1 1-12 0c0-4.5 6-11 6-11Z"/></svg>',
     road: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20 9 4m6 16-4-16M12 6v2m0 3v2m0 3v2"/></svg>',
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><path d="M12 10h.01"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+    flag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h13l-3 3.5L19 11H6"/></svg>',
+    walk: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14" cy="4" r="1.6"/><path d="M13 6.5 11.5 13M12.3 8 9 7M12 9.3 15.6 11.6M11.5 13 8 15.5 8.6 19M11.5 13 14.6 16.8 16.2 20"/></svg>',
   };
   return icons[name] || icons.alert;
 }
@@ -3876,8 +3983,8 @@ function setRouteSafetyPanelVisible(visible) {
 
   shell.classList.toggle('safety-open', visible);
   window.setTimeout(() => {
-    if (gMap && window.google?.maps?.event) {
-      window.google.maps.event.trigger(gMap, 'resize');
+    if (gMap) {
+      gMap.invalidateSize();
     }
   }, 240);
 }
@@ -3892,10 +3999,45 @@ function resetRouteSafetyPanel() {
   closeRouteListModal();
 }
 
-function getRouteStreetNames(route) {
-  return Array.isArray(route?.street_path)
-    ? route.street_path.map(name => String(name).trim()).filter(Boolean)
-    : [];
+function getRouteTurnSteps(route) {
+  return Array.isArray(route?.turn_steps) ? route.turn_steps : [];
+}
+
+// A single up-arrow glyph rotated per direction, plus a distinct pin for
+// the first step -- avoids needing one bespoke icon per turn type.
+const TURN_ARROW_ROTATION_DEGREES = {
+  left: -90,
+  slight_left: -45,
+  straight: 0,
+  slight_right: 45,
+  right: 90,
+  u_turn: 180,
+};
+
+const TURN_INSTRUCTION_VERB = {
+  left: 'Turn left',
+  slight_left: 'Turn slightly left',
+  straight: 'Continue straight',
+  slight_right: 'Turn slightly right',
+  right: 'Turn right',
+  u_turn: 'Make a U-turn',
+};
+
+function turnStepIcon(turn) {
+  if (turn === 'start') {
+    return safetyIcon('pin');
+  }
+  const rotation = TURN_ARROW_ROTATION_DEGREES[turn] ?? 0;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" style="transform:rotate(${rotation}deg);"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>`;
+}
+
+function formatTurnStepInstruction(step, index) {
+  const name = String(step?.name || '').trim();
+  if (index === 0 || step?.turn === 'start') {
+    return name ? `Head out on ${name}` : 'Head out toward your destination';
+  }
+  const verb = TURN_INSTRUCTION_VERB[step?.turn] || 'Continue';
+  return name ? `${verb} onto ${name}` : verb;
 }
 
 function toggleBestRouteStreets() {
@@ -3914,6 +4056,11 @@ function getBestRoute(routes) {
     || routes[0]
     || null;
 }
+
+const SAFETY_DISCLAIMER_TEXT = 'This site offers disaster planning information, not official '
+  + 'emergency alerts or professional safety advice. During an active flood or earthquake, '
+  + 'always follow the instructions of local authorities. Rely on this content at your own '
+  + 'risk; we assume no liability for any loss or damage.';
 
 function renderRouteSafetyPanel(result) {
   const routes = Array.isArray(result?.routes) ? result.routes : [];
@@ -3937,46 +4084,62 @@ function renderRouteSafetyPanel(result) {
     || 'Destination';
 
   const unsafeParts = Number(best?.display_unsafe_segment_count ?? best?.threshold_exceedance_count ?? 0);
-  const totalParts = Number(best?.display_segment_count ?? best?.segment_count ?? 0);
   const peakScore = Number(best?.max_hazard || 0);
   const peakValue = isEarthquake
     ? `${getRiskLevelLabelFromScore(best?.max_hazard)} road risk`
-    : `${formatFloodPeakRisk(best)} (${best?.max_hazard ?? '—'}/5)`;
-  // Spec: amber/warning for medium-high peak severity; unsafe-part count stays neutral.
-  const peakClass = peakScore >= 3 ? 'warning' : '';
-  const unsafeClass = '';
+    : `${formatFloodPeakRisk(best)} (${getFloodPeakDepthRange(best)})`;
+  // Danger/red once it's actually High; amber/warning for Moderate; neutral for Low.
+  const peakClass = peakScore >= 5 ? 'danger' : peakScore >= 3 ? 'warning' : '';
   const verdict = safeRouteFound ? 'Safe route found' : 'No safe route';
   const peakLabel = isEarthquake ? 'Peak road risk crossed' : 'Peak flood level crossed';
 
+  // Plain, non-technical wording -- this panel is read by barangay residents,
+  // not engineers, so it should make sense with no background on how the
+  // system works (no "ACO", "evaluated", "hazard lens", etc.). Kept short.
+  const routeCountLabel = `${routes.length} route${routes.length === 1 ? '' : 's'}`;
   const notes = [
-    `${routes.length} route${routes.length === 1 ? '' : 's'} evaluated, ${safe.length} fully safe.`,
     safeRouteFound
-      ? 'Routes are ordered safer first, then by the ACO ranking rule.'
-      : `Best fallback still crosses ${unsafeParts || 'unsafe'} road section${unsafeParts === 1 ? '' : 's'}.`,
+      ? `We checked ${routeCountLabel} — ${safe.length} ${safe.length === 1 ? 'is' : 'are'} completely safe.`
+      : `We checked ${routeCountLabel} — none are completely safe.`,
+    safeRouteFound
+      ? 'The safest route is always shown first.'
+      : `Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'} — be extra careful.`,
   ];
   if (isEarthquake) {
     if (result.active_view_label) {
-      notes.push(`Scores use the ${String(result.active_view_label).toLowerCase()} hazard lens.`);
+      notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
     }
     notes.push('These hazard levels are based on Hazard Hunter PH data.');
   } else {
     notes.push('These hazard levels are based on Project NOAH flood historical data.');
   }
 
-  const bestStreets = getRouteStreetNames(best);
+  const bestTurnSteps = getRouteTurnSteps(best);
   const chipLabel = `${start} → ${end}`;
 
-  // Only clickable when there's a street-by-street path to show.
-  const routeChipMarkup = bestStreets.length
+  const routeChipMarkup = bestTurnSteps.length
     ? `
-    <div class="safety-route-hint">Tap the route below to see every street on the way to your destination.</div>
+    <div class="safety-route-hint">Tap the route below for turn-by-turn directions to your destination.</div>
     <button class="safety-route-chip is-interactive" type="button" id="safetyRouteChip"
         aria-expanded="false" aria-controls="safetyRouteStreets" onclick="toggleBestRouteStreets()">
       ${safetyIcon('pin')}<span title="${escapeHtml(chipLabel)}">${escapeHtml(start)} &rarr; ${escapeHtml(end)}</span>
       <svg class="safety-route-chip-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
     </button>
     <ol class="safety-route-streets" id="safetyRouteStreets" hidden>
-      ${bestStreets.map(name => `<li>${escapeHtml(name)}</li>`).join('')}
+      ${bestTurnSteps.map((step, index) => `
+        <li class="turn-step">
+          <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>
+          <span class="turn-step-text">
+            <span class="turn-step-instruction">${escapeHtml(formatTurnStepInstruction(step, index))}</span>
+            ${Number(step.distance) > 0 ? `<span class="turn-step-distance">${escapeHtml(formatDistanceCompact(step.distance))}</span>` : ''}
+          </span>
+        </li>`).join('')}
+      <li class="turn-step">
+        <span class="turn-step-icon">${safetyIcon('flag')}</span>
+        <span class="turn-step-text">
+          <span class="turn-step-instruction">Your destination</span>
+        </span>
+      </li>
     </ol>`
     : `<div class="safety-route-chip">${safetyIcon('pin')}<span title="${escapeHtml(chipLabel)}">${escapeHtml(start)} &rarr; ${escapeHtml(end)}</span></div>`;
 
@@ -3994,26 +4157,30 @@ function renderRouteSafetyPanel(result) {
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
         <div><div class="safety-card-label">Best route distance</div><div class="safety-card-value">${escapeHtml(best?.display_distance || 'Unavailable')}</div></div>
       </button>
+      <div class="safety-result-card">
+        <div class="safety-icon-box">${safetyIcon('walk')}</div>
+        <div><div class="safety-card-label">Estimated time to destination</div><div class="safety-card-value">${escapeHtml(best?.display_duration || 'Unavailable')}</div></div>
+      </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon('droplet')}</div>
         <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div></div>
       </div>
-      <div class="safety-result-card ${unsafeClass}" title="How many of this recommended route's own road segments cross the hazard threshold — not the other candidate routes shown on the map.">
-        <div class="safety-icon-box">${safetyIcon('road')}</div>
-        <div><div class="safety-card-label">Unsafe parts on this route</div><div class="safety-card-value">${escapeHtml(totalParts ? `${unsafeParts} of ${totalParts}` : String(unsafeParts))}</div></div>
+    </div>
+    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>
+      <div class="safety-disclaimer">
+        <em class="safety-disclaimer-label">Disclaimer:</em>
+        <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
+        <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Click here for emergency contact information</button>
       </div>
     </div>
-    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul></div>
-    <button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See all ${routes.length} route${routes.length === 1 ? '' : 's'}</button>
+    <button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See all ${Math.max(routes.length - 1, 0)} alternative route${Math.max(routes.length - 1, 0) === 1 ? '' : 's'}</button>
     <button class="safety-secondary-btn" type="button" onclick="downloadCSV()">Download CSV</button>`;
 }
 
 let routeListModalReturnFocus = null;
 
-function buildRouteModalCard(route, index, best) {
+function buildRouteModalCard(route, index) {
   const routeNo = route.display_route_no ?? index + 1;
-  const isBest = route === best;
-  const isEliminated = route.category === 'eliminated';
   const unsafe = Number(route.display_unsafe_segment_count ?? route.threshold_exceedance_count ?? 0);
   const risk = isEarthquakeRouteRecord(route)
     ? getRiskLevelLabelFromScore(route.max_hazard)
@@ -4021,7 +4188,6 @@ function buildRouteModalCard(route, index, best) {
   const isActive = selectedRouteFocus
     && String(selectedRouteFocus.routeNo) === String(routeNo)
     && (selectedRouteFocus.category || '') === (route.category || '');
-  const suffix = isBest && isEliminated ? ' — best fallback' : '';
   const stats = [
     route.display_distance || 'Distance unavailable',
     risk,
@@ -4032,10 +4198,9 @@ function buildRouteModalCard(route, index, best) {
       aria-label="Focus route ${escapeHtml(routeNo)} on the map"
       data-focus-route="${escapeHtml(routeNo)}" data-focus-category="${escapeHtml(route.category || '')}">
       <div>
-        <div class="route-modal-card-title">Route ${escapeHtml(routeNo)}${suffix}</div>
+        <div class="route-modal-card-title">Route ${escapeHtml(routeNo)}</div>
         <div class="route-modal-card-stats">${stats.map(escapeHtml).join(' &middot; ')}</div>
       </div>
-      ${isBest ? '<span class="route-best-badge">Best</span>' : ''}
     </article>`;
 }
 
@@ -4047,14 +4212,20 @@ function openRouteListModal() {
   if (!modal || !body || !routes.length) return;
 
   const best = getBestRoute(routes);
-  const safe = routes.filter(route => route.category !== 'eliminated');
-  const caution = safe.length === 0
-    ? `<div class="route-modal-caution">${safetyIcon('alert')}<span>No fully safe route was found. Every route below crosses a hazardous section, so treat them as fallback options and review each one carefully.</span></div>`
-    : '';
+  // The best route is already shown in the main results panel, so this
+  // modal only needs to list the other candidates.
+  const alternativeRoutes = routes.filter(route => route !== best);
+  const safeAlternatives = alternativeRoutes.filter(route => route.category !== 'eliminated');
+  const overallSafeFound = routes.some(route => route.category !== 'eliminated');
+  const caution = overallSafeFound
+    ? ''
+    : `<div class="route-modal-caution">${safetyIcon('alert')}<span>No fully safe route was found. Every route below still passes through a risky area, so treat them as backup options and review each one carefully.</span></div>`;
 
-  body.innerHTML = caution + routes.map((route, index) => buildRouteModalCard(route, index, best)).join('');
+  body.innerHTML = caution + (alternativeRoutes.length
+    ? alternativeRoutes.map((route, index) => buildRouteModalCard(route, index)).join('')
+    : '<div class="route-modal-empty">No other alternative routes were found for this trip.</div>');
   if (count) {
-    count.textContent = `${routes.length} route${routes.length === 1 ? '' : 's'} · ${safe.length} safe`;
+    count.textContent = `${alternativeRoutes.length} alternative${alternativeRoutes.length === 1 ? '' : 's'} · ${safeAlternatives.length} safe`;
   }
 
   routeListModalReturnFocus = document.activeElement;
@@ -4279,125 +4450,42 @@ function createRoutePreview(group) {
   clearRoutePreview(group);
   const previewColor = getRoutePreviewColor(group);
 
-  const haloDotSymbol = {
-    path: google.maps.SymbolPath.CIRCLE,
-    scale: 7.6,
-    fillColor: '#ffffff',
-    fillOpacity: 0.98,
-    strokeColor: '#ffffff',
-    strokeWeight: 2.8,
-  };
+  // Leaflet paths have no Google-style "repeating icon along a polyline"
+  // feature. A white halo dash under a colored dash, both animated via
+  // stroke dashOffset, reproduces the same "marching, flowing toward the
+  // destination" cue as the old halo-dot/arrow icon pairs without needing an
+  // extra plugin.
+  const dashPattern = '1, 17';
 
-  const dotSymbol = {
-    path: google.maps.SymbolPath.CIRCLE,
-    scale: 5.8,
-    fillColor: previewColor,
-    fillOpacity: 1,
-    strokeColor: '#0f172a',
-    strokeWeight: 1.8,
-  };
+  group.previewHaloLayer = L.polyline(path, {
+    color: '#ffffff',
+    weight: 7.6,
+    opacity: 0.98,
+    dashArray: dashPattern,
+    lineCap: 'round',
+    interactive: false,
+  }).addTo(gMap);
 
-  const haloArrowSymbol = {
-    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 8.6,
-    fillColor: '#ffffff',
-    fillOpacity: 0.99,
-    strokeColor: '#ffffff',
-    strokeWeight: 3.6,
-  };
+  group.previewDotsLayer = L.polyline(path, {
+    color: previewColor,
+    weight: 5.4,
+    opacity: 1,
+    dashArray: dashPattern,
+    lineCap: 'round',
+    interactive: false,
+  }).addTo(gMap);
 
-  const arrowSymbol = {
-    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    scale: 6.7,
-    fillColor: previewColor,
-    fillOpacity: 1,
-    strokeColor: '#0f172a',
-    strokeWeight: 1.9,
-  };
+  group.previewHaloLayer.bringToFront();
+  group.previewDotsLayer.bringToFront();
 
-  group.previewDotsHaloLayer = new google.maps.Polyline({
-    path,
-    geodesic: false,
-    strokeOpacity: 0,
-    clickable: false,
-    icons: [{
-      icon: haloDotSymbol,
-      offset: '0px',
-      repeat: '24px',
-    }],
-    map: gMap,
-    zIndex: 18,
-  });
-
-  group.previewDotsLayer = new google.maps.Polyline({
-    path,
-    geodesic: false,
-    strokeOpacity: 0,
-    clickable: false,
-    icons: [{
-      icon: dotSymbol,
-      offset: '0px',
-      repeat: '24px',
-    }],
-    map: gMap,
-    zIndex: 19,
-  });
-
-  group.previewArrowHaloLayer = new google.maps.Polyline({
-    path,
-    geodesic: false,
-    strokeOpacity: 0,
-    clickable: false,
-    icons: [{
-      icon: haloArrowSymbol,
-      offset: '3%',
-    }],
-    map: gMap,
-    zIndex: 20,
-    });
-
-  group.previewArrowLayer = new google.maps.Polyline({
-    path,
-    geodesic: false,
-    strokeOpacity: 0,
-    clickable: false,
-      icons: [{
-        icon: arrowSymbol,
-        offset: '3%',
-      }],
-      map: gMap,
-      zIndex: 21,
-    });
-
-  let dotOffset = 0;
-  let arrowOffset = 0;
+  let dashOffset = 0;
   group.previewTimer = window.setInterval(() => {
-    if (!group.previewDotsHaloLayer || !group.previewDotsLayer || !group.previewArrowHaloLayer || !group.previewArrowLayer) return;
+    if (!group.previewHaloLayer || !group.previewDotsLayer) return;
 
-    dotOffset = (dotOffset + 1) % 24;
-    arrowOffset = (arrowOffset + 1.35) % 100;
+    dashOffset = (dashOffset - 1 + 18) % 18;
 
-    group.previewDotsHaloLayer.set('icons', [{
-      icon: haloDotSymbol,
-      offset: `${dotOffset}px`,
-      repeat: '24px',
-    }]);
-
-    group.previewDotsLayer.set('icons', [{
-      icon: dotSymbol,
-      offset: `${dotOffset}px`,
-      repeat: '24px',
-    }]);
-
-    group.previewArrowHaloLayer.set('icons', [{
-      icon: haloArrowSymbol,
-      offset: `${arrowOffset}%`,
-    }]);
-
-    group.previewArrowLayer.set('icons', [{
-      icon: arrowSymbol,
-      offset: `${arrowOffset}%`,
-    }]);
+    group.previewHaloLayer.setStyle({ dashOffset: String(dashOffset) });
+    group.previewDotsLayer.setStyle({ dashOffset: String(dashOffset) });
   }, 100);
 }
 
@@ -4425,46 +4513,48 @@ function hideRouteGroup(group) {
   if (!group) return;
 
   if (group.outlineLayer) {
-    group.outlineLayer.setVisible(false);
+    group.outlineLayer.setStyle({ opacity: 0 });
   }
 
   if (group.mainLayer) {
-    group.mainLayer.setVisible(false);
+    group.mainLayer.setStyle({ opacity: 0 });
   }
 
-  (group.glowLayers || []).forEach(layer => layer.setVisible(false));
+  (group.glowLayers || []).forEach(layer => layer.setStyle({ opacity: 0 }));
   clearRoutePreview(group);
 }
 
+// Leaflet paths have no zIndex option; bringRouteGroupToFront() (called only
+// for the focused route, below) handles the dynamic re-stacking that Google's
+// per-layer zIndex used to do here.
 function applyRouteGroupVisual(group, visual) {
   if (!group) return;
 
   if (group.outlineLayer) {
-    group.outlineLayer.setVisible((visual.outlineOpacity ?? 0) > 0.001);
-    group.outlineLayer.setOptions({
-      strokeOpacity: visual.outlineOpacity,
-      strokeWeight: visual.outlineWeight,
-      zIndex: Math.max(1, visual.zIndex - 1),
+    group.outlineLayer.setStyle({
+      opacity: visual.outlineOpacity,
+      weight: visual.outlineWeight,
     });
   }
 
   if (group.mainLayer) {
-    group.mainLayer.setVisible((visual.mainOpacity ?? 0) > 0.001);
-    group.mainLayer.setOptions({
-      strokeOpacity: visual.mainOpacity,
-      strokeWeight: visual.mainWeight,
-      zIndex: visual.zIndex,
+    group.mainLayer.setStyle({
+      opacity: visual.mainOpacity,
+      weight: visual.mainWeight,
     });
   }
 
   (group.glowLayers || []).forEach((layer, index) => {
     const glowOpacity = visual.glowOpacities[index] ?? 0;
-    layer.setVisible(glowOpacity > 0.001);
-    layer.setOptions({
-      strokeOpacity: glowOpacity,
-      zIndex: Math.max(1, visual.zIndex - 2 - index),
-    });
+    layer.setStyle({ opacity: glowOpacity });
   });
+}
+
+function bringRouteGroupToFront(group) {
+  if (!group) return;
+  (group.glowLayers || []).forEach(layer => layer.bringToFront());
+  if (group.outlineLayer) group.outlineLayer.bringToFront();
+  if (group.mainLayer) group.mainLayer.bringToFront();
 }
 
 function applyRouteFocusState(routeNo) {
@@ -4477,14 +4567,18 @@ function applyRouteFocusState(routeNo) {
       return;
     }
 
+    const isFocused = hasFocus && group.routeNo === routeNo;
     const visual = !hasFocus
       ? getDefaultRouteVisual(group)
-      : group.routeNo === routeNo
+      : isFocused
       ? getFocusedRouteVisual(group)
         : getDimmedRouteVisual(group);
 
       applyRouteGroupVisual(group, visual);
-      syncRoutePreview(group, hasFocus && group.routeNo === routeNo);
+      if (isFocused) {
+        bringRouteGroupToFront(group);
+      }
+      syncRoutePreview(group, isFocused);
     });
 }
 
@@ -4571,6 +4665,7 @@ function buildTable(routes, options = {}) {
       </td>
       <td>
         <div class="metric-strong">${escapeHtml(r.display_distance)}</div>
+        <div class="metric-sub">${escapeHtml(r.display_duration || '')} walking</div>
       </td>
       <td>
         <div class="hlevel">${pips}</div>
@@ -4589,7 +4684,7 @@ function buildTable(routes, options = {}) {
   }).join('');
 
   return `<div class="results-table-wrap"><table class="data-table">
-    <thead><tr><th>#</th><th>Recommendation</th><th>Distance</th><th>Risk &amp; Exposure</th><th>Route details</th></tr></thead>
+    <thead><tr><th>#</th><th>Recommendation</th><th>Distance &amp; Time</th><th>Risk &amp; Exposure</th><th>Route details</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -4767,7 +4862,6 @@ window.highlightRouteRow = function highlightRouteRow(routeNo, category, switchT
 
 window.clearSelectedRouteRow = clearSelectedRouteRow;
 window.focusWorkflowSection = focusWorkflowSection;
-window.resetRouteSelection = resetRouteSelection;
 window.syncLegendVisibility = syncLegendVisibility;
 window.acknowledgeFallbackWarning = acknowledgeFallbackWarning;
 
@@ -4799,7 +4893,8 @@ window.clearRouteAnimation = clearRouteAnimation;
 window.startResultsResize = startResultsResize;
 window.initMap = initMap;
 window.handleRouteRowKey = handleRouteRowKey;
-window.formatFloodPeakRisk = formatFloodPeakRisk;
+window.formatRoutePeakRiskLabel = formatRoutePeakRiskLabel;
+window.formatEarthquakeHazardSummary = formatEarthquakeHazardSummary;
 window.setFloodHazardOverlayMode = setFloodHazardOverlayMode;
 window.showEvacuationSites = showEvacuationSites;
 window.switchEarthquakeView = switchEarthquakeView;
@@ -4808,6 +4903,8 @@ window.downloadCSV = downloadCSV;
 window.openRouteListModal = openRouteListModal;
 window.closeRouteListModal = closeRouteListModal;
 window.focusRouteFromModal = focusRouteFromModal;
+window.openEmergencyContactModal = openEmergencyContactModal;
+window.closeEmergencyContactModal = closeEmergencyContactModal;
 
 // Clicking the dimmed backdrop closes the route list.
 document.getElementById('routeListModal')?.addEventListener('mousedown', event => {
@@ -4817,6 +4914,8 @@ document.getElementById('routeListModal')?.addEventListener('mousedown', event =
 syncLoaderContext();
 initLoaderGraphPulses();
 setFloodLegendContent();
+initLocationCombo('startSel');
+initLocationCombo('endSel');
 syncEarthquakeRouteUi();
 syncEarthquakeViewSelector();
 restoreSetupSidebarState();

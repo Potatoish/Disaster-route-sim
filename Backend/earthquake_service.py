@@ -23,6 +23,7 @@ from osm_routing import (
     estimate_boundary_graph_radius,
     get_barangay_base_graph,
     extract_route_street_path,
+    extract_route_turn_steps,
     get_barangay_boundary,
     get_edge_geometry,
     hydrate_route_edge_records,
@@ -261,6 +262,11 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
             route.get("path", []),
             resolved_edges=resolved_edges,
         ),
+        "turn_steps": extract_route_turn_steps(
+            base_graph,
+            route.get("path", []),
+            resolved_edges=resolved_edges,
+        ),
         "distance": round(total_distance, 2),
         "risk_distance": round(risk_distance, 2),
         "unsafe_distance": round(unsafe_distance, 2),
@@ -293,7 +299,6 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
         "info_rows": [
             ["Evacuation Site", evacuation_site["name"]],
             ["Lens", EARTHQUAKE_VIEW_CONFIG[view_key]["label"]],
-            ["Hazards", hazard_signature],
         ],
         "reason": (
             f"Earthquake route to {evacuation_site['name']} ranked by "
@@ -341,6 +346,15 @@ def _build_view_summary(view_key, routes, evacuation_sites):
         ),
         "best_distance": selected_route["distance"] if selected_route else None,
     }
+
+
+def _restrict_to_best_site(candidates):
+    if not candidates:
+        return candidates
+
+    best = min(candidates, key=_view_sort_key)
+    best_site_id = best["destination_id"]
+    return [route for route in candidates if route["destination_id"] == best_site_id]
 
 
 def _finalize_earthquake_view_routes(start_name, routes, evacuation_sites, view_key):
@@ -576,6 +590,7 @@ def simulate_earthquake(start, barangay_name):
                 evaluated_sites,
                 view_key,
             )
+            candidates = _restrict_to_best_site(candidates)
             views[view_key] = _finalize_earthquake_view_routes(
                 start_location["name"],
                 candidates,
