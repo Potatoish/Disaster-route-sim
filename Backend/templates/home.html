@@ -1,0 +1,67 @@
+{% extends "site_base.html" %}
+
+{% block content %}
+<div class="hero">
+  <canvas id="antCanvas"></canvas>
+  <div class="wrap hero-inner">
+    <span class="eyebrow">Ant Guided Navigation And Safety System</span>
+    <h1>Evacuation routes,<br><span>ranked safety-first.</span></h1>
+    <p class="lede">AGNAS simulates flood and earthquake evacuation for Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City — using Ant Colony Optimization to find routes that avoid hazards before it shortens distance.</p>
+
+    <div class="hero-ctas">
+      <a class="cta big" href="{{ url_for('simulator_app') }}" onclick="return launchSimulator(event, this);">
+        <span class="spinner"></span><span class="cta-label-default">Launch simulator</span><span class="cta-label-loading">Launching&hellip;</span>
+      </a>
+      <a class="cta big ghost" href="{{ url_for('about_page') }}">Learn more</a>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><b>2</b><span>Barangays covered</span></div>
+  <div class="stat"><b>ACO</b><span>Ant Colony Optimization</span></div>
+  <div class="stat"><b>Safety&nbsp;&gt;&nbsp;Distance</b><span>Ranking rule</span></div>
+  <div class="stat"><b>2</b><span>Hazard models: flood &amp; quake</span></div>
+</div>
+
+<section class="block">
+  <div class="wrap">
+    <div class="block-head">
+      <span class="eyebrow center">Why AGNAS</span>
+      <h2>Built around one rule</h2>
+      <p>A shorter route that crosses a flooded street or a liquefaction zone is not a good route. AGNAS eliminates unsafe paths before it ever compares distances.</p>
+    </div>
+    <div class="cards3">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 6v6c0 5 4 8.5 9 10 5-1.5 9-5 9-10V6l-9-4Z"/></svg></div>
+        <h3>Safety-first ranking</h3>
+        <p>Routes are compared on hazard exposure first, distance second — never averaged into a single score that could hide danger.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>
+        <h3>Two live hazard models</h3>
+        <p>Flood zones from Project NOAH, and liquefaction &amp; ground-shaking severity from Hazard Hunter PH.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.5-9.5-9C.5 8 2 4 6 3.5 8.5 3.2 11 5 12 7c1-2 3.5-3.8 6-3.5 4 .5 5.5 4.5 3.5 8.5-2.5 4.5-9.5 9-9.5 9Z"/></svg></div>
+        <h3>Built for two barangays</h3>
+        <p>Pinagbuhatan and Sta. Lucia in Pasig City, on real road graphs — not a generic map, the streets residents actually walk.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" style="padding-top:0;">
+  <div class="wrap">
+    <div class="block-head">
+      <span class="eyebrow center">How it works</span>
+      <h2>Three steps to a route</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="n">01</span><div><h3>Pick a barangay &amp; hazard</h3><p>Choose Pinagbuhatan or Sta. Lucia, then flood or earthquake.</p></div></div>
+      <div class="step"><span class="n">02</span><div><h3>Set start &amp; destination</h3><p>Drop points on the map, or pick a landmark and evacuation site.</p></div></div>
+      <div class="step"><span class="n">03</span><div><h3>Run the simulation</h3><p>Ants explore the graph; the safest, shortest routes are ranked and shown.</p></div></div>
+    </div>
+  </div>
+</section>
+{% endblock %}

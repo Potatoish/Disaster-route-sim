@@ -48,6 +48,9 @@ Disaster-route-sim/
 |   |-- simulation_progress.py
 |   |-- requirements.txt
 |   |-- templates/
+|   |   |-- site_base.html
+|   |   |-- home.html
+|   |   |-- about.html
 |   |   `-- index.html
 |   |-- static/
 |   |   |-- script.js
@@ -55,6 +58,8 @@ Disaster-route-sim/
 |   |   |-- earthquake.js
 |   |   |-- flood.js
 |   |   |-- style.css
+|   |   |-- home.js
+|   |   |-- home.css
 |   |   `-- assets/
 |   |-- data/
 |   |   |-- boundaries/
@@ -86,10 +91,12 @@ account or key setup is required.
 py Backend/app.py
 ```
 
-The Flask server serves both the web UI and API routes:
+The Flask server serves the marketing homepage, the simulator, and API routes:
 
 ```text
-http://127.0.0.1:5000
+http://127.0.0.1:5000        # Homepage
+http://127.0.0.1:5000/about  # About & Contact
+http://127.0.0.1:5000/app    # The route simulator
 ```
 
 For deployment, the app entrypoint is:
@@ -107,7 +114,9 @@ gunicorn app:app
 
 Main backend endpoints include:
 
-- `GET /`
+- `GET /` — homepage
+- `GET /about` — About & Contact page
+- `GET /app` — the route simulator (was served at `/`)
 - `GET /locations`
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`

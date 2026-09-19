@@ -284,6 +284,16 @@ def run_earthquake():
 
 @app.route("/", methods=["GET"])
 def home():
+    return render_template("home.html", active_page="home")
+
+
+@app.route("/about", methods=["GET"])
+def about_page():
+    return render_template("about.html", active_page="about")
+
+
+@app.route("/app", methods=["GET"])
+def simulator_app():
     return render_template(
         "index.html",
         google_maps_api_key=os.environ.get("GOOGLE_MAPS_API_KEY", ""),

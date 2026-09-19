@@ -1,3 +1,9 @@
+/* Cross-document view transition (Chromium): smooths navigation between
+   the homepage and this simulator instead of a hard cut. No-op elsewhere. */
+@view-transition {
+  navigation: auto;
+}
+
 :root {
   --font-body: 'Plus Jakarta Sans', 'Nunito', sans-serif;
   --font-heading: 'Rajdhani', sans-serif;
