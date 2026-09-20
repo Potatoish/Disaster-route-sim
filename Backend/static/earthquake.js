@@ -91,8 +91,6 @@
     return L.icon({
       iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
       iconSize: [58, 70],
-      // Pin tip is at (46, 99) in the 92x110 source viewBox; scaled to this
-      // 58x70 render size that's (29, 63), not (29, 62).
       iconAnchor: [29, 63],
     });
   }
@@ -159,20 +157,20 @@
     });
   }
 
+
   function getLayerEmphasis(layerKey, activeView, isLine = false) {
     if (activeView === 'overall') {
-      // Zones dim so overlapping fills don't muddy together; lines stay strong
-      // since a dim stroke becomes unreadable.
+      // Zones dim so overlapping fills don't muddy together; lines stay strong so they remain visible over the route lines.
       return isLine
-        ? { fillOpacity: 0, strokeOpacity: 0.82, strokeWeight: 2.6 }
-        : { fillOpacity: 0.18, strokeOpacity: 0.45, strokeWeight: 1.8 };
+        ? { fillOpacity: 0, strokeOpacity: 0.5, strokeWeight: 2.2 }
+        : { fillOpacity: 0.1, strokeOpacity: 0.28, strokeWeight: 1.6 };
     }
 
     const isActive = layerKey === activeView;
     return {
-      fillOpacity: isActive ? 0.24 : 0.08,
-      strokeOpacity: isActive ? 0.88 : 0.18,
-      strokeWeight: isActive ? 2.4 : 1.4,
+      fillOpacity: isActive ? 0.14 : 0.05,
+      strokeOpacity: isActive ? 0.5 : 0.12,
+      strokeWeight: isActive ? 2 : 1.2,
     };
   }
 
@@ -268,9 +266,6 @@
     const {
       showRouteKeys = true,
       showHazardLayers = true,
-      // Before a simulation has actually run, there's no hazard lens to
-      // pick yet, so the "Select Liquefaction or Ground Shaking" hint would
-      // be premature -- pass false to omit the hazard line entirely.
       showHazardSection = true,
     } = options;
     const body = document.getElementById('mapLegendBody');
@@ -278,9 +273,9 @@
 
     const routeLegend = showRouteKeys
       ? `
-        <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.78rem;">Best Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Available Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:#22c55e;height:4px;"></div><span style="font-size:.78rem;">Best Route</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:#f59e0b;"></div><span style="font-size:.78rem;">Available Route</span></div>
+        <div class="legend-row"><div class="legend-line" style="background:#ef4444;opacity:.8;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
       `
       : '';
     const liquefactionRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.78rem;">Liquefaction Layer</span></div>`;

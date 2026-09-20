@@ -14,106 +14,52 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body onload="initTheme(); maybeShowTutorial(); initMap();">
-
-<div class="topbar">
-  <div class="topbar-brand">
-    <a class="topbar-logo-link" href="/app" aria-label="Refresh AGNAS">
-      <svg class="topbar-logo" viewBox="0 0 104 104" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AGNAS logo">
-        <circle cx="50" cy="50" r="32" fill="var(--surface)" stroke="var(--border)" stroke-width="1"/>
-        <path d="M26,44 Q34,30 42,44 Q50,58 58,44 Q66,30 74,44" stroke="var(--accent2)" stroke-width="4.6" stroke-linecap="round" fill="none"/>
-        <path d="M28,58 L40,70 L50,60 L60,70 L72,58" stroke="var(--accent)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        <circle cx="86" cy="26" r="9" fill="none" stroke="#06b6d4" stroke-width="4"/>
-        <circle cx="85" cy="48.6" r="2.1" fill="var(--green)"/>
-        <circle cx="82" cy="62.4" r="2.4" fill="var(--green)"/>
-        <circle cx="75" cy="73.4" r="2.7" fill="var(--green)"/>
-        <circle cx="64" cy="81.7" r="3" fill="var(--green)"/>
-        <circle cx="48.9" cy="87.1" r="3.3" fill="var(--green)"/>
-        <circle cx="29.9" cy="89.8" r="3.6" fill="var(--green)"/>
-        <circle cx="15" cy="90" r="6.5" fill="#a855f7"/>
-      </svg>
-    </a>
-    <div class="topbar-copy">
-    <div class="topbar-title">Ant Guided Navigation And Safety System</div>
-    <div class="topbar-sub">Ant Colony Optimization - Safer Routes First - In selected Barangay in Pasig City</div>
-    </div>
-  </div>
-
-  <div class="topbar-right">
-    <button class="sidebar-toggle" id="sidebarToggleBtn" type="button" onclick="toggleSetupSidebar()" aria-label="Hide simulation setup" aria-controls="setupPanel" aria-expanded="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
-      <span class="sidebar-tip" aria-hidden="true"><span data-sidebar-tip-label>Hide sidebar</span><kbd>Ctrl B</kbd></span>
-    </button>
-
-    <button class="theme-toggle" id="themeToggleBtn" type="button" onclick="toggleTheme()" aria-label="Switch theme">
-      <span class="theme-toggle-track" aria-hidden="true">
-        <span class="theme-toggle-thumb">
-          <span class="theme-toggle-icon" id="themeToggleIcon">&#9790;</span>
-        </span>
-      </span>
-      <span class="theme-toggle-copy">
-        <span class="theme-toggle-kicker">Theme</span>
-        <span class="theme-toggle-label" id="themeToggleLabel">Light mode</span>
-      </span>
-    </button>
-
-    <button class="sidebar-toggle tutorial-trigger-btn" id="tutorialTriggerBtn" type="button" onclick="showTutorial(event)" aria-label="Show tutorial">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.75.35-1.1.85-1.1 1.7v.2"/><circle cx="12" cy="16.3" r=".9" fill="currentColor" stroke="none"/></svg>
-      <span class="sidebar-tip" aria-hidden="true">Show tutorial</span>
-    </button>
-
-    <button class="sidebar-toggle about-trigger-btn" id="aboutTriggerBtn" type="button" onclick="showAboutModal(event)" aria-label="About AGNAS">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2m0-8.4h.01"/></svg>
-      <span class="sidebar-tip" aria-hidden="true">About</span>
-    </button>
-
-    <span class="sr-only" id="statusTxt" role="status" aria-live="polite">Ready</span>
-  </div>
-</div>
+<body onload="initTheme(); initMap();">
+<script>
+  (function () {
+    try {
+      if (localStorage.getItem('disaster-route-sim-theme') === 'dark') {
+        document.body.classList.add('dark');
+      }
+    } catch (err) {}
+  })();
+</script>
 
 <div class="app" id="appShell">
 
+  <button class="sidebar-toggle sidebar-reopen-tab" id="sidebarReopenBtn" type="button" onclick="toggleSetupSidebar(true)" aria-label="Show simulation setup" aria-controls="setupPanel">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+  </button>
+
   <div class="left-panel" id="setupPanel">
     <div class="panel-head">
+      <div class="panel-head-brand">
+        <div class="panel-head-brand-copy">
+          <a class="panel-head-brand-link" href="{{ url_for('home') }}" aria-label="Back to AGNAS home">
+            <img class="panel-head-logo" id="topbarLogo" src="{{ url_for('static', filename='agnas-logo.png') }}"
+              data-logo-light="{{ url_for('static', filename='agnas-logo.png') }}"
+              data-logo-dark="{{ url_for('static', filename='agnas-logo-dark.png') }}" alt="AGNAS logo">
+            <span class="panel-head-brand-word">GNAS</span>
+          </a>
+          <span class="panel-head-brand-full">Ant Guided Navigation And Safety System</span>
+        </div>
+        <div class="panel-head-brand-actions">
+          <button class="sidebar-toggle" id="sidebarToggleBtn" type="button" onclick="toggleSetupSidebar()" aria-label="Hide simulation setup" aria-controls="setupPanel" aria-expanded="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></svg>
+            <span class="sidebar-tip" aria-hidden="true"><span data-sidebar-tip-label>Hide sidebar</span><kbd>Ctrl B</kbd></span>
+          </button>
+        </div>
+      </div>
       <div class="panel-head-title-row">
         <div class="panel-head-title">Simulation setup</div>
       </div>
       <div class="panel-head-sub">Configure and run ACO route simulation</div>
+      <span class="sr-only" id="statusTxt" role="status" aria-live="polite">Ready</span>
     </div>
 
     <div class="panel-body">
       <div class="workflow-main">
-      <div class="workflow-card active" id="cardBarangay" data-workflow-card="barangay">
-        <div class="workflow-card-head">
-          <div>
-            <div class="sec-label">Barangay</div>
-            <div class="workflow-card-summary" id="summaryBarangay">Select the scope you want to simulate.</div>
-          </div>
-          <div class="workflow-card-actions">
-            <button class="card-action-btn" id="changeBarangayBtn" type="button" onclick="focusWorkflowSection('barangay')">Select</button>
-          </div>
-        </div>
-        <div class="workflow-card-body">
-          <div class="bgy-grid">
-            <div class="bgy-card" id="bgyPbtn" data-barangay="Pinagbuhatan" onclick="selectBarangay('Pinagbuhatan')">
-              <div class="bgy-icon">&#127969;</div>
-              <div class="bgy-copy">
-                <div class="bgy-name">Pinagbuhatan</div>
-                <div class="bgy-tag">Pasig City</div>
-              </div>
-            </div>
-            <div class="bgy-card" id="bgyStaBtn" data-barangay="Sta. Lucia" onclick="selectBarangay('Sta. Lucia')">
-              <div class="bgy-icon">&#127969;</div>
-              <div class="bgy-copy">
-                <div class="bgy-name">Sta. Lucia</div>
-                <div class="bgy-tag">Pasig City</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="workflow-card" id="cardHazard" data-workflow-card="hazard">
+      <div class="workflow-card active" id="cardHazard" data-workflow-card="hazard">
         <div class="workflow-card-head">
           <div>
             <div class="sec-label">Disaster</div>
@@ -158,10 +104,10 @@
           <div class="workflow-route-flow">
             <div class="field route-field route-field-start" id="startField">
               <span class="location-icon location-icon-start" aria-hidden="true"></span>
-              <label id="startNodeLabel" class="sr-only" for="startSelTrigger">Your location</label>
+              <label id="startNodeLabel" class="sr-only" for="startSelTrigger">Pin location</label>
               <div class="location-combo">
                 <button type="button" class="location-combo-trigger" id="startSelTrigger" disabled aria-haspopup="listbox" aria-expanded="false" aria-labelledby="startNodeLabel">
-                  <span class="location-combo-value" id="startSelValue">Your location</span>
+                  <span class="location-combo-value" id="startSelValue">Pin location</span>
                 </button>
                 <ul class="location-combo-list" id="startSelList" role="listbox" hidden></ul>
               </div>
@@ -214,7 +160,7 @@
       </div>
 
       <div class="workflow-reset-all-row">
-        <button class="card-action-btn subtle" id="changeRunBtn" type="button" onclick="resetAll()">Reset all</button>
+        <button class="card-action-btn subtle" id="changeRunBtn" type="button" onclick="goToHomepageForNewScope()">Reset all</button>
       </div>
       </div>
     </div>
@@ -329,20 +275,6 @@
       </div>
     </div>
 
-    <div class="patience-notification" id="patienceNotice" hidden>
-      <div class="patience-content">
-        <div class="patience-copy">
-          <div class="patience-title" id="patienceTitle">Still working on your request</div>
-          <div class="patience-text" id="patienceText">
-            The system is still working on this route request. Larger or more complex areas can take longer.
-          </div>
-        </div>
-        <button class="patience-close" type="button" onclick="dismissPatienceNotification()" aria-label="Close loading notice">
-          &times;
-        </button>
-      </div>
-    </div>
-
     <div class="warning-modal-backdrop" id="fallbackWarningModal" hidden>
       <div class="warning-modal" role="dialog" aria-modal="true" aria-labelledby="fallbackWarningTitle" aria-describedby="fallbackWarningCopy">
         <div class="warning-modal-kicker" id="fallbackWarningKicker">Warning</div>
@@ -369,8 +301,7 @@
     </div>
 
     <div class="results-actions" id="resultsActions" hidden>
-      <button class="dl-btn primary" onclick="downloadCSV()">Download CSV</button>
-      <button class="dl-btn secondary" id="resultsNewSimulationBtn" onclick="resetAll()">New Simulation</button>
+      <button class="dl-btn secondary" id="resultsNewSimulationBtn" onclick="goToHomepageForNewScope()">New Simulation</button>
       <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
       <div class="results-summary-txt" style="margin-left:auto;align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
     </div>
@@ -384,7 +315,11 @@
       <h2>Ant guided navigation and safety system</h2>
     </div>
     <div id="routeSafetyContent" hidden></div>
-    <button class="reset-btn" id="resetBtn" type="button" onclick="resetAll()">
+    <button class="safety-download-btn" id="safetyDownloadBtn" type="button" onclick="downloadSimulationReport()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
+      Download Report (PDF)
+    </button>
+    <button class="reset-btn" id="resetBtn" type="button" onclick="goToHomepageForNewScope()">
       New Simulation
     </button>
   </aside>
@@ -404,71 +339,6 @@
       <button class="route-modal-btn primary" type="button" onclick="closeRouteListModal()">Close</button>
     </footer>
   </section>
-</div>
-
-<div class="tutorial-overlay-backdrop" id="tutorialOverlay" hidden>
-  <div class="tutorial-overlay-inner" role="dialog" aria-modal="true" aria-labelledby="tutorialOverlayTitle">
-    <h2 class="sr-only" id="tutorialOverlayTitle">AGNAS quick tutorial</h2>
-    <div class="tutorial-card-row" id="tutorialCardRow">
-      <div class="tutorial-card">
-        <div class="tutorial-card-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-light.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-dark.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
-        </div>
-        <div class="tutorial-card-title">Pick barangay</div>
-        <div class="tutorial-card-desc">Choose your barangay/area</div>
-      </div>
-      <div class="tutorial-card">
-        <div class="tutorial-card-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-light.png') }}" alt="Flood and Earthquake hazard selection cards">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-dark.png') }}" alt="Flood and Earthquake hazard selection cards">
-        </div>
-        <div class="tutorial-card-title">Pick disaster</div>
-        <div class="tutorial-card-desc">Sets the hazard you want to simulate.</div>
-      </div>
-      <div class="tutorial-card">
-        <div class="tutorial-card-shot">
-          <div class="tutorial-route-shot" aria-hidden="true">
-            <div class="field route-field route-field-start">
-              <span class="location-icon location-icon-start"></span>
-              <div class="location-combo">
-                <button type="button" class="location-combo-trigger" tabindex="-1">
-                  <span class="location-combo-value">Your location</span>
-                </button>
-              </div>
-            </div>
-            <div class="field route-field route-field-end">
-              <span class="location-icon location-icon-end"></span>
-              <div class="location-combo">
-                <button type="button" class="location-combo-trigger" tabindex="-1">
-                  <span class="location-combo-value">Your destination</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="tutorial-card-title">Set start / end</div>
-        <div class="tutorial-card-desc">For Flood: choose your route nodes.</div>
-      </div>
-      <div class="tutorial-card">
-        <div class="tutorial-card-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-light.png') }}" alt="Show Evacuation Sites button for earthquake mode">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-dark.png') }}" alt="Show Evacuation Sites button for earthquake mode">
-        </div>
-        <div class="tutorial-card-title">Reveal evacuation sites</div>
-        <div class="tutorial-card-desc">For earthquake: pick a start, then click to reveal shelters.</div>
-      </div>
-      <div class="tutorial-card">
-        <div class="tutorial-card-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/run-simulation-light.png') }}" alt="Run Simulation button, ready to launch">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/run-simulation-dark.png') }}" alt="Run Simulation button, ready to launch">
-        </div>
-        <div class="tutorial-card-title">Run simulation</div>
-        <div class="tutorial-card-desc">See the safest routes.</div>
-      </div>
-    </div>
-    <button class="tutorial-skip-btn" type="button" onclick="skipTutorial()">Skip tutorial</button>
-  </div>
 </div>
 
 <div class="about-modal-backdrop" id="aboutModal" hidden>
@@ -530,6 +400,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""></script>
+
+<!-- Used only by downloadSimulationReport() (script.js) to export the
+     results panel as a PDF -- loaded from CDN like Leaflet above, no
+     bundler in this project. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>

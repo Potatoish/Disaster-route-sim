@@ -9,22 +9,22 @@
     1: {
       fillColor: '#fde047',
       strokeColor: '#eab308',
-      fillOpacity: 0.22,
-      strokeOpacity: 0.44,
+      fillOpacity: 0.12,
+      strokeOpacity: 0.26,
       strokeWeight: 0.9,
     },
     2: {
       fillColor: '#fb923c',
       strokeColor: '#f97316',
-      fillOpacity: 0.26,
-      strokeOpacity: 0.54,
+      fillOpacity: 0.14,
+      strokeOpacity: 0.32,
       strokeWeight: 0.95,
     },
     3: {
       fillColor: '#f43f5e',
       strokeColor: '#e11d48',
-      fillOpacity: 0.32,
-      strokeOpacity: 0.62,
+      fillOpacity: 0.18,
+      strokeOpacity: 0.4,
       strokeWeight: 1,
     },
   };
@@ -99,10 +99,7 @@
           visibleVars.includes(Number(feature?.properties?.flood_var))
         )
       : (hazardLayers.features || []);
-
-    // Sort low -> high severity so higher-risk zones paint on top when they
-    // overlap or nest inside a broader lower-risk area (mirrors the old
-    // per-level zIndex 1/2/3).
+      
     const sortedFeatures = [...filteredFeatures].sort(
       (a, b) => Number(a?.properties?.flood_var) - Number(b?.properties?.flood_var)
     );

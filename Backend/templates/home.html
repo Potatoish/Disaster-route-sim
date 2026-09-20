@@ -1,66 +1,173 @@
 {% extends "site_base.html" %}
 
 {% block content %}
-<div class="hero">
-  <canvas id="antCanvas"></canvas>
-  <div class="wrap hero-inner">
-    <span class="eyebrow">Ant Guided Navigation And Safety System</span>
-    <h1>Evacuation routes,<br><span>ranked safety-first.</span></h1>
-    <p class="lede">AGNAS simulates flood and earthquake evacuation for Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City — using Ant Colony Optimization to find routes that avoid hazards before it shortens distance.</p>
+<section id="hero" class="hero">
+  <canvas id="antCanvas" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner hero-split">
 
-    <div class="hero-ctas">
-      <a class="cta big" href="{{ url_for('simulator_app') }}" onclick="return launchSimulator(event, this);">
-        <span class="spinner"></span><span class="cta-label-default">Launch simulator</span><span class="cta-label-loading">Launching&hellip;</span>
-      </a>
-      <a class="cta big ghost" href="{{ url_for('about_page') }}">Learn more</a>
+    <div class="hero-copy">
+      <span class="eyebrow">Ant Guided Navigation And Safety System</span>
+      <h1>Disaster Preparedness<br>for safer communities,</h1>
+      <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios filtering out hazard prone routes before evaluating path distance.</p>
     </div>
-  </div>
-</div>
 
-<div class="stats">
-  <div class="stat"><b>2</b><span>Barangays covered</span></div>
-  <div class="stat"><b>ACO</b><span>Ant Colony Optimization</span></div>
-  <div class="stat"><b>Safety&nbsp;&gt;&nbsp;Distance</b><span>Ranking rule</span></div>
-  <div class="stat"><b>2</b><span>Hazard models: flood &amp; quake</span></div>
-</div>
+    <div class="hero-quickstart" aria-label="Quick-start simulator setup">
+      <div class="qs-head">
+        <h2>Select your Barangay</h2>
+      </div>
+
+      <div class="qs-field" id="heroBarangaySelector">
+        <span class="qs-label">Barangay</span>
+        <div class="qs-barangay-grid">
+          <button type="button" class="qs-barangay-card" data-barangay="Pinagbuhatan" onclick="setQuickStartBarangay('Pinagbuhatan', this)" aria-pressed="false">
+            <span class="qs-barangay-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
+            <span class="qs-barangay-copy"><strong>Pinagbuhatan</strong><span>Pasig City</span></span>
+          </button>
+          <button type="button" class="qs-barangay-card" data-barangay="Sta. Lucia" onclick="setQuickStartBarangay('Sta. Lucia', this)" aria-pressed="false">
+            <span class="qs-barangay-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
+            <span class="qs-barangay-copy"><strong>Sta. Lucia</strong><span>Pasig City</span></span>
+          </button>
+        </div>
+      </div>
+
+      <p class="qs-error" id="qsBarangayError" role="alert" hidden>Select a barangay first to start the simulation.</p>
+
+      <a class="cta big full qs-cta" id="quickStartLaunch" href="#" data-base-href="{{ url_for('simulator_app') }}" onclick="handleQuickStartLaunch(event)">
+        See map <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <p class="qs-note">Opens the simulator pre-set to your choices above.</p>
+    </div>
+
+  </div>
+</section>
+
+<section class="stats-section">
+  <div class="wrap stats">
+    <div class="stat"><b>ACO</b><span>Ant Colony Optimization</span></div>
+    <div class="stat"><b>Safety over distance</b><span>Ranking rule</span></div>
+    <div class="stat"><b>2</b><span>Hazard models: Flood &amp; Earthquake</span></div>
+  </div>
+</section>
 
 <section class="block">
   <div class="wrap">
-    <div class="block-head">
-      <span class="eyebrow center">Why AGNAS</span>
-      <h2>Built around one rule</h2>
-      <p>A shorter route that crosses a flooded street or a liquefaction zone is not a good route. AGNAS eliminates unsafe paths before it ever compares distances.</p>
+    <div class="block-head center-head">
+      <span class="eyebrow center">How it works</span>
+      <h2>How our ants works for you</h2>
+      <p>Simulated ants map local streets — strengthening digital signals on safe roads while fading out paths with hazards.</p>
     </div>
-    <div class="cards3">
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 3 6v6c0 5 4 8.5 9 10 5-1.5 9-5 9-10V6l-9-4Z"/></svg></div>
-        <h3>Safety-first ranking</h3>
-        <p>Routes are compared on hazard exposure first, distance second — never averaged into a single score that could hide danger.</p>
+    <div class="algo-flow">
+      <div class="algo-step">
+        <span class="algo-step-no">01</span>
+        <h3>Ants explore the graph</h3>
+        <div class="algo-diagram" aria-hidden="true">
+          <svg viewBox="0 0 220 100" fill="none">
+            <path class="algo-line" d="M20 82 C 70 40, 130 28, 200 18"/>
+            <path class="algo-line" d="M20 82 C 60 72, 140 62, 200 18"/>
+            <path class="algo-line" d="M20 82 C 92 88, 158 52, 200 18"/>
+            <path class="algo-line" d="M20 82 C 50 26, 120 8, 200 18"/>
+            <circle class="algo-node" cx="20" cy="82" r="4"/>
+            <circle class="algo-node" cx="200" cy="18" r="4"/>
+            <circle class="algo-ant" cx="88" cy="56" r="2.2"/>
+            <circle class="algo-ant" cx="132" cy="34" r="2.2"/>
+            <circle class="algo-ant" cx="150" cy="66" r="2.2"/>
+          </svg>
+          <span class="algo-diagram-caption">Independent, parallel search</span>
+        </div>
+        <p>Simulated ants perform multiple exploratory runs across the road network. They evaluate various paths based on hazard severity (flood or earthquake) and digital pheromone levels rather than relying on a single static route.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></div>
-        <h3>Two live hazard models</h3>
-        <p>Flood zones from Project NOAH, and liquefaction &amp; ground-shaking severity from Hazard Hunter PH.</p>
+
+      <div class="algo-step">
+        <span class="algo-step-no">02</span>
+        <h3>Pheromone reinforces safe, short trails</h3>
+        <div class="algo-diagram" aria-hidden="true">
+          <svg viewBox="0 0 220 100" fill="none">
+            <path class="algo-line algo-line-faint" d="M20 82 C 60 72, 140 62, 200 18"/>
+            <path class="algo-line algo-line-faint" d="M20 82 C 92 88, 158 52, 200 18"/>
+            <path class="algo-line algo-line-faint" d="M20 82 C 50 26, 120 8, 200 18"/>
+            <path class="algo-line-strong" d="M20 82 C 70 40, 130 28, 200 18"/>
+            <circle class="algo-node" cx="20" cy="82" r="4"/>
+            <circle class="algo-node" cx="200" cy="18" r="4"/>
+            <circle class="algo-pheromone" cx="66" cy="56" r="2.4"/>
+            <circle class="algo-pheromone" cx="108" cy="38" r="2.4"/>
+            <circle class="algo-pheromone" cx="152" cy="26" r="2.4"/>
+          </svg>
+          <span class="algo-diagram-caption">Safer + shorter trails strengthen</span>
+        </div>
+        <p>With every simulation run, digital pheromones evaporate from hazard prone routes. Meanwhile, digital signals strengthen along paths verified to be safe and clear.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.5-9.5-9C.5 8 2 4 6 3.5 8.5 3.2 11 5 12 7c1-2 3.5-3.8 6-3.5 4 .5 5.5 4.5 3.5 8.5-2.5 4.5-9.5 9-9.5 9Z"/></svg></div>
-        <h3>Built for two barangays</h3>
-        <p>Pinagbuhatan and Sta. Lucia in Pasig City, on real road graphs — not a generic map, the streets residents actually walk.</p>
+
+      <div class="algo-step">
+        <span class="algo-step-no">03</span>
+        <h3>Routes are ranked safety-first</h3>
+        <div class="algo-diagram" aria-hidden="true">
+          <svg viewBox="0 0 220 100" fill="none">
+            <path class="algo-line-strong" d="M20 82 C 70 40, 130 28, 200 18"/>
+            <circle class="algo-node" cx="20" cy="82" r="4"/>
+            <circle class="algo-badge-dot" cx="200" cy="18" r="9"/>
+            <text class="algo-badge-label" x="200" y="18">1</text>
+          </svg>
+          <span class="algo-diagram-caption">Safety before distance, always</span>
+        </div>
+        <p>Routes are never measured by distance alone. The algorithm automatically eliminates paths crossing high-hazard zones before total distance is ever compared.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="block" style="padding-top:0;">
+<section class="block" id="tutorial" style="padding-top:0;">
   <div class="wrap">
     <div class="block-head">
-      <span class="eyebrow center">How it works</span>
-      <h2>Three steps to a route</h2>
+      <span class="eyebrow center">How to start simulation</span>
+      <h2>Five steps to a route</h2>
+      <p>The walkthrough to your first simulated route.</p>
     </div>
-    <div class="steps">
-      <div class="step"><span class="n">01</span><div><h3>Pick a barangay &amp; hazard</h3><p>Choose Pinagbuhatan or Sta. Lucia, then flood or earthquake.</p></div></div>
-      <div class="step"><span class="n">02</span><div><h3>Set start &amp; destination</h3><p>Drop points on the map, or pick a landmark and evacuation site.</p></div></div>
-      <div class="step"><span class="n">03</span><div><h3>Run the simulation</h3><p>Ants explore the graph; the safest, shortest routes are ranked and shown.</p></div></div>
+    <div class="tutorial-grid">
+      <div class="tutorial-tile">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-light.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
+          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-dark.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
+        </div>
+        <span class="tutorial-tile-step">01</span>
+        <h3>Pick barangay</h3>
+        <p>Choose your barangay/area.</p>
+      </div>
+      <div class="tutorial-tile">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-light.png') }}" alt="Flood and Earthquake hazard selection cards">
+          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-dark.png') }}" alt="Flood and Earthquake hazard selection cards">
+        </div>
+        <span class="tutorial-tile-step">02</span>
+        <h3>Pick disaster</h3>
+        <p>Sets the hazard you want to simulate.</p>
+      </div>
+      <div class="tutorial-tile">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/set-start-end-light.png') }}" alt="Start and destination fields for a route">
+          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/set-start-end-dark.png') }}" alt="Start and destination fields for a route">
+        </div>
+        <span class="tutorial-tile-step">03</span>
+        <h3>Set start / end</h3>
+        <p>For flood: choose your route nodes.</p>
+      </div>
+      <div class="tutorial-tile">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-light.png') }}" alt="Show Evacuation Sites button for earthquake mode">
+          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-dark.png') }}" alt="Show Evacuation Sites button for earthquake mode">
+        </div>
+        <span class="tutorial-tile-step">04</span>
+        <h3>Reveal evacuation sites</h3>
+        <p>For earthquake: pick a start, then click to reveal shelters.</p>
+      </div>
+      <div class="tutorial-tile">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/run-simulation-light.png') }}" alt="Run Simulation button, ready to launch">
+          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/run-simulation-dark.png') }}" alt="Run Simulation button, ready to launch">
+        </div>
+        <span class="tutorial-tile-step">05</span>
+        <h3>Run simulation</h3>
+        <p>See the safest routes, ranked.</p>
+      </div>
     </div>
   </div>
 </section>

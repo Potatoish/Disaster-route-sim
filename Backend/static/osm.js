@@ -1,5 +1,6 @@
 const ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS = 12;
 const ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS = 90;
+const ROUTE_OUTLINE_COLOR = '#ffffff';
 
 function formatDistanceKm(distanceMeters) {
   const numericDistance = Number(distanceMeters);
@@ -330,7 +331,7 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers, routeGroup) {
 // instead of the colored strokes blending straight into the map underneath.
 function addRouteOutline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
   return trackRouteLayer(L.polyline(pathCoords, {
-    color: '#ffffff',
+    color: ROUTE_OUTLINE_COLOR,
     // Mirrors the main line's own opacity so eliminated/available routes
     // stay visibly secondary to "best" instead of all halos popping equally.
     opacity: cfg.opacity,
@@ -439,9 +440,9 @@ async function renderRoutesOnRoads({
   mapLayers.routeGroups = [];
 
   const CFG = {
-    best: { color: '#22c55e', weight: 5, opacity: 0.95, zIndex: 8 },
-    available: { color: '#f59e0b', weight: 4, opacity: 0.85, zIndex: 5 },
-    eliminated: { color: '#ef4444', weight: 3, opacity: 0.65, zIndex: 4 },
+    best: { color: '#22c55e', weight: 5, opacity: 1, zIndex: 8 },
+    available: { color: '#f59e0b', weight: 4, opacity: 1, zIndex: 5 },
+    eliminated: { color: '#ef4444', weight: 3, opacity: 0.8, zIndex: 4 },
   };
   const DRAW_ORDER = { eliminated: 0, available: 1, best: 2 };
 
