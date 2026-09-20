@@ -8,15 +8,21 @@
     <div class="block-head center-head">
       <span class="eyebrow center">About &amp; contact</span>
       <h2>About AGNAS</h2>
-      <p>What the project is, where its data comes from, and how to reach the team or send feedback.</p>
+      <p>Ant Guided Navigation and Safety System</p>
     </div>
 
     <div class="about-grid">
       <div>
         <div class="panel">
           <h3>The project</h3>
-          <p><strong>Ant Guided Navigation And Safety System</strong> is a disaster-aware evacuation route simulator for Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City. It uses an Ant Colony Optimization approach with a safety-first rule, so routes are ranked by hazard exposure before distance.</p>
-          <p>Built as a thesis project — this page is where visitors who are not running a simulation right now can still find out what the system does and who to contact about it.</p>
+          <p>AGNAS is a disaster-aware evacuation route simulator for Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City. It applies ant colony optimization with a safety-first rule, so routes are ranked by hazard exposure before distance.</p>
+        </div>
+        <div class="panel">
+          <h3>Architecture</h3>
+          <p>A three-tier build separating the map interface from the routing computation.</p>
+          <div class="credit-row"><b>Client</b><span>Leaflet, OSM tiles</span></div>
+          <div class="credit-row"><b>Service</b><span>Flask, OSMnx, ACO engine</span></div>
+          <div class="credit-row"><b>Data</b><span>Offline multi-hazard datasets</span></div>
         </div>
         <div class="panel">
           <h3>Data credit</h3>
@@ -24,26 +30,45 @@
           <div class="credit-row"><b>Liquefaction &amp; ground shaking</b><span>Hazard Hunter PH</span></div>
           <div class="credit-row"><b>Road network</b><span>OpenStreetMap / OSMnx</span></div>
         </div>
-        <div class="panel">
-          <h3>Emergency contact numbers</h3>
-          <div class="emergency-list">
-            <div class="emergency-item"><span>General Emergency</span><a href="tel:911">911</a></div>
-            <div class="emergency-item"><span>Pasig City DRRMO</span><a href="tel:87066700">8706-6700</a></div>
-            <div class="emergency-item"><span>Bureau of Fire Protection</span><a href="tel:16116">16116</a></div>
-          </div>
-        </div>
       </div>
 
       <div>
         <div class="panel">
           <h3>Contact the team</h3>
-          <p style="margin-bottom:16px;">Questions, partnership requests, or press — send a message.</p>
+          <p style="margin-bottom:16px;">Questions about the study, the data, or a request to use the system.</p>
           <div class="form-row"><label for="cName">Name</label><input id="cName" type="text" placeholder="Juan Dela Cruz"></div>
           <div class="form-row"><label for="cEmail">Email</label><input id="cEmail" type="email" placeholder="you@example.com"></div>
-          <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" rows="4" placeholder="How can we help?"></textarea></div>
+          <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" rows="4" placeholder="Data request, question, or feedback"></textarea></div>
           <button type="button" class="cta full" onclick="submitContactForm()">Send message</button>
+          <p class="contact-note">We typically reply within 2–3 business days. AGNAS isn't a live service wired directly to real-time hazard feeds, so the site doesn't need round-the-clock monitoring.</p>
         </div>
       </div>
+    </div>
+
+    <div class="panel research-panel">
+      <h3>Research team</h3>
+      <div class="research-grid">
+        <div>
+          <span class="research-label">Authors</span>
+          <div class="research-names">
+            <span>Ranielle Pearl C. Ambulario</span>
+            <span>Winrock D. Gaces</span>
+            <span>Jefferson T. Globiogo</span>
+            <span>Jessa S. Nuñez</span>
+          </div>
+        </div>
+        <div class="research-roles">
+          <div>
+            <span class="research-label">Adviser</span>
+            <strong class="research-name">Sherwin M. Ostria</strong>
+          </div>
+          <div>
+            <span class="research-label">Program head</span>
+            <strong class="research-name">Mark Frederick V. Salonga</strong>
+          </div>
+        </div>
+      </div>
+      <p class="thesis-note">Developed in partial fulfillment of the requirements for the degree of Bachelor of Science in Computer Science at STI College Global City.</p>
     </div>
   </div>
 </section>

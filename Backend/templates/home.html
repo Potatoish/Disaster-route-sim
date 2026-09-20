@@ -9,6 +9,12 @@
       <span class="eyebrow">Ant Guided Navigation And Safety System</span>
       <h1>Disaster Preparedness<br>for safer communities,</h1>
       <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios filtering out hazard prone routes before evaluating path distance.</p>
+      <div class="hero-actions">
+        <button type="button" class="hero-action" onclick="openScopeMap()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
+          Coverage map
+        </button>
+      </div>
     </div>
 
     <div class="hero-quickstart" aria-label="Quick-start simulator setup">
@@ -74,7 +80,7 @@
           </svg>
           <span class="algo-diagram-caption">Independent, parallel search</span>
         </div>
-        <p>Simulated ants perform multiple exploratory runs across the road network. They evaluate various paths based on hazard severity (flood or earthquake) and digital pheromone levels rather than relying on a single static route.</p>
+        <p>Digital "ants" try out many different routes across the streets, checking each one for flood or earthquake danger instead of just picking one path.</p>
       </div>
 
       <div class="algo-step">
@@ -88,13 +94,13 @@
             <path class="algo-line-strong" d="M20 82 C 70 40, 130 28, 200 18"/>
             <circle class="algo-node" cx="20" cy="82" r="4"/>
             <circle class="algo-node" cx="200" cy="18" r="4"/>
-            <circle class="algo-pheromone" cx="66" cy="56" r="2.4"/>
-            <circle class="algo-pheromone" cx="108" cy="38" r="2.4"/>
-            <circle class="algo-pheromone" cx="152" cy="26" r="2.4"/>
+            <circle class="algo-pheromone" cx="66" cy="56" r="2.4" style="animation-delay:0s"/>
+            <circle class="algo-pheromone" cx="108" cy="38" r="2.4" style="animation-delay:.3s"/>
+            <circle class="algo-pheromone" cx="152" cy="26" r="2.4" style="animation-delay:.6s"/>
           </svg>
           <span class="algo-diagram-caption">Safer + shorter trails strengthen</span>
         </div>
-        <p>With every simulation run, digital pheromones evaporate from hazard prone routes. Meanwhile, digital signals strengthen along paths verified to be safe and clear.</p>
+        <p>Every run, the ants leave a stronger trail on safe roads and a fading trail on risky ones — like a scent trail that only lasts on the good paths.</p>
       </div>
 
       <div class="algo-step">
@@ -109,66 +115,19 @@
           </svg>
           <span class="algo-diagram-caption">Safety before distance, always</span>
         </div>
-        <p>Routes are never measured by distance alone. The algorithm automatically eliminates paths crossing high-hazard zones before total distance is ever compared.</p>
+        <p>Dangerous roads are crossed out first. Only then does AGNAS pick the shortest route from what's left.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="block" id="tutorial" style="padding-top:0;">
-  <div class="wrap">
-    <div class="block-head">
-      <span class="eyebrow center">How to start simulation</span>
-      <h2>Five steps to a route</h2>
-      <p>The walkthrough to your first simulated route.</p>
-    </div>
-    <div class="tutorial-grid">
-      <div class="tutorial-tile">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-light.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-dark.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
-        </div>
-        <span class="tutorial-tile-step">01</span>
-        <h3>Pick barangay</h3>
-        <p>Choose your barangay/area.</p>
-      </div>
-      <div class="tutorial-tile">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-light.png') }}" alt="Flood and Earthquake hazard selection cards">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-dark.png') }}" alt="Flood and Earthquake hazard selection cards">
-        </div>
-        <span class="tutorial-tile-step">02</span>
-        <h3>Pick disaster</h3>
-        <p>Sets the hazard you want to simulate.</p>
-      </div>
-      <div class="tutorial-tile">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/set-start-end-light.png') }}" alt="Start and destination fields for a route">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/set-start-end-dark.png') }}" alt="Start and destination fields for a route">
-        </div>
-        <span class="tutorial-tile-step">03</span>
-        <h3>Set start / end</h3>
-        <p>For flood: choose your route nodes.</p>
-      </div>
-      <div class="tutorial-tile">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-light.png') }}" alt="Show Evacuation Sites button for earthquake mode">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-dark.png') }}" alt="Show Evacuation Sites button for earthquake mode">
-        </div>
-        <span class="tutorial-tile-step">04</span>
-        <h3>Reveal evacuation sites</h3>
-        <p>For earthquake: pick a start, then click to reveal shelters.</p>
-      </div>
-      <div class="tutorial-tile">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/run-simulation-light.png') }}" alt="Run Simulation button, ready to launch">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/run-simulation-dark.png') }}" alt="Run Simulation button, ready to launch">
-        </div>
-        <span class="tutorial-tile-step">05</span>
-        <h3>Run simulation</h3>
-        <p>See the safest routes, ranked.</p>
-      </div>
+<footer class="site-footer">
+  <div class="wrap foot-row">
+    <span class="foot-copy">&copy; 2026 AGNAS Project. All rights reserved.</span>
+    <div class="foot-links">
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
     </div>
   </div>
-</section>
+</footer>
 {% endblock %}

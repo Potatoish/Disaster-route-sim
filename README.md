@@ -33,7 +33,7 @@ AGNAS helps users explore evacuation routes under two hazard scenarios:
 - **Frontend:** HTML, CSS, JavaScript, Leaflet + OpenStreetMap tiles, served by Flask
 - **Backend:** Python, Flask, Flask-CORS
 - **Routing/Data:** OSMnx, NetworkX, Shapely, GeoPandas
-- **Location Data:** CSV files in `Backend/data/`
+- **Data:** Offline multi-hazard datasets in `Backend/data/`
 
 ## Project Structure
 
@@ -138,6 +138,6 @@ Main backend endpoints include:
 Ambulario, Ranielle Pearl C.
 Gaces, Winrock, D.
 Globiogo, Jefferson, T.
-Nunez, Jessa, S.
+Nuñez, Jessa, S.
 
 Built as a disaster route simulation project focused on safer evacuation path analysis for selected barangays in Pasig City.

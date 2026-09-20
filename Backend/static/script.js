@@ -450,10 +450,9 @@ function getStoredTheme() {
 
 function applyTheme(theme) {
   document.body.classList.toggle('dark', theme === 'dark');
-  const logo = document.getElementById('topbarLogo');
-  if (logo) {
+  document.querySelectorAll('.theme-logo').forEach((logo) => {
     logo.src = theme === 'dark' ? logo.dataset.logoDark : logo.dataset.logoLight;
-  }
+  });
   applyHazardTheme();
   syncSiteThemeButton();
   syncMapTheme(true);
@@ -534,6 +533,64 @@ function closeEmergencyContactModal() {
 document.getElementById('emergencyContactModal')?.addEventListener('mousedown', event => {
   if (event.target === event.currentTarget) closeEmergencyContactModal();
 });
+
+// ---- nav's "How to use" step-by-step tutorial (mirrors home.js) ----
+const TUTORIAL_STEPS = 5;
+let tutorialStep = 1;
+
+function renderTutorialStep() {
+  document.querySelectorAll('.tutorial-slide').forEach((el) => {
+    el.classList.toggle('is-active', Number(el.dataset.step) === tutorialStep);
+  });
+  document.querySelectorAll('.tutorial-dot').forEach((dot, i) => {
+    dot.classList.toggle('is-active', i + 1 === tutorialStep);
+  });
+  const stepNum = document.getElementById('tutorialStepNum');
+  if (stepNum) stepNum.textContent = String(tutorialStep);
+
+  const back = document.getElementById('tutorialBack');
+  if (back) back.disabled = tutorialStep === 1;
+
+  const next = document.getElementById('tutorialNext');
+  if (next) next.textContent = tutorialStep === TUTORIAL_STEPS ? 'Done' : 'Next';
+}
+
+function goToTutorialStep(step) {
+  tutorialStep = Math.min(TUTORIAL_STEPS, Math.max(1, step));
+  renderTutorialStep();
+}
+
+function tutorialNext() {
+  if (tutorialStep === TUTORIAL_STEPS) {
+    closeTutorial();
+    return;
+  }
+  goToTutorialStep(tutorialStep + 1);
+}
+
+function tutorialPrev() {
+  goToTutorialStep(tutorialStep - 1);
+}
+
+function openTutorial() {
+  const modal = document.getElementById('tutorialModal');
+  if (!modal) return;
+  goToTutorialStep(1);
+  modal.hidden = false;
+  document.body.classList.add('tutorial-modal-open');
+}
+
+function closeTutorial() {
+  const modal = document.getElementById('tutorialModal');
+  if (modal) modal.hidden = true;
+  document.body.classList.remove('tutorial-modal-open');
+}
+
+function handleNavHowToUse(event) {
+  event.preventDefault();
+  openTutorial();
+  return false;
+}
 
 function syncMapOverlayLayout() {
   const legend = document.getElementById('mapLegend');
@@ -863,15 +920,6 @@ function setLoaderTitle(message) {
   }
 }
 
-function updateLoaderStepDetail(detail = '') {
-  const stepsContainer = document.getElementById('loaderSteps');
-  if (!stepsContainer) return;
-
-  const message = String(detail || '').trim();
-  stepsContainer.textContent = message;
-  stepsContainer.hidden = !message;
-}
-
 function getLoaderModeLabel() {
   const hazardLabel = String(selectedHazard || '').trim();
   if (!hazardLabel) {
@@ -930,64 +978,35 @@ function initLoaderGraphPulses() {
 }
 
 function getLoaderStageCopy(stageId = '') {
-  const hazardKey = String(selectedHazard || '').trim().toLowerCase();
-
   switch (stageId) {
     case 'ready':
-      return {
-        title: 'Checking your choices',
-        detail: 'Making sure your selected area and route setup are complete.',
-      };
+      return { title: 'Checking your choices' };
     case 'load':
-      return {
-        title: 'Loading road and area details',
-        detail: hazardKey === 'earthquake'
-          ? 'Getting the road, site, and earthquake details needed for your request.'
-          : 'Getting the road and flood details needed for your request.',
-      };
+      return { title: 'Loading road and area details' };
     case 'route':
-      return {
-        title: 'Looking for route options',
-        detail: hazardKey === 'earthquake'
-          ? 'Checking possible road paths from your start point to reachable evacuation sites.'
-          : 'Checking possible road paths between your selected points.',
-      };
+      return { title: 'Looking for route options' };
     case 'review':
-      return {
-        title: 'Preparing the results',
-        detail: 'Organizing the safest route options and summary details.',
-      };
+      return { title: 'Preparing the results' };
     case 'draw':
-      return {
-        title: 'Showing the results',
-        detail: 'Opening the result panel and drawing the route on the map.',
-      };
+      return { title: 'Showing the results' };
     case 'complete':
-      return {
-        title: 'Results are ready',
-        detail: 'You can now review the map and route details.',
-      };
+      return { title: 'Results are ready' };
     case 'stopped':
-      return {
-        title: "We couldn't finish this request",
-        detail: 'Something went wrong while finding your route. Please try again in a moment.',
-      };
+      return { title: "We couldn't finish this request" };
     default:
       return null;
   }
 }
 
 function setLoaderStep(stageIdOrTitle, progress, options = {}) {
-  const { stageId = '', title: overrideTitle = '', detail: overrideDetail = '' } = options;
+  const { stageId = '', title: overrideTitle = '' } = options;
   const resolvedStageId = stageId || stageIdOrTitle;
   const stageCopy = getLoaderStageCopy(resolvedStageId);
   const title = overrideTitle || stageCopy?.title || stageIdOrTitle;
-  const detail = overrideDetail || stageCopy?.detail || '';
 
   loaderState.stage = stageCopy ? resolvedStageId : '';
   setLoaderTitle(title);
   updateLoaderProgress(progress, options);
-  updateLoaderStepDetail(detail);
 }
 
 function resetLoaderState() {
@@ -1002,15 +1021,6 @@ function resetLoaderState() {
   syncLoaderContext();
   setLoaderTitle('Loading routes');
   updateLoaderProgress(0, { immediate: true });
-  hideLoaderSteps();
-}
-
-function hideLoaderSteps() {
-  const stepsContainer = document.getElementById('loaderSteps');
-  if (stepsContainer) {
-    stepsContainer.hidden = true;
-    stepsContainer.textContent = '';
-  }
 }
 
 function initMap() {
@@ -4896,6 +4906,12 @@ window.closeRouteListModal = closeRouteListModal;
 window.focusRouteFromModal = focusRouteFromModal;
 window.openEmergencyContactModal = openEmergencyContactModal;
 window.closeEmergencyContactModal = closeEmergencyContactModal;
+window.openTutorial = openTutorial;
+window.closeTutorial = closeTutorial;
+window.goToTutorialStep = goToTutorialStep;
+window.tutorialNext = tutorialNext;
+window.tutorialPrev = tutorialPrev;
+window.handleNavHowToUse = handleNavHowToUse;
 
 // Clicking the dimmed backdrop closes the route list.
 document.getElementById('routeListModal')?.addEventListener('mousedown', event => {

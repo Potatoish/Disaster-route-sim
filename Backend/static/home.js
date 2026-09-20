@@ -73,9 +73,12 @@ function showHomeToast(message) {
 
 function sendFeedback() {
   const msg = document.getElementById('fabMsg');
+  const role = document.getElementById('fabRole');
   toggleFab();
   showHomeToast('Thanks for the feedback!');
   if (msg) msg.value = '';
+  if (role) role.value = '';
+  if (rateRow) rateRow.querySelectorAll('button.sel').forEach((btn) => btn.classList.remove('sel'));
 }
 
 const rateRow = document.getElementById('rateRow');
@@ -263,6 +266,67 @@ function setScopeMapError(message) {
   if (!el) return;
   el.hidden = !message;
   el.textContent = message || '';
+}
+
+// ---- hero's "How to use" step-by-step tutorial ----
+const TUTORIAL_STEPS = 5;
+let tutorialStep = 1;
+
+function renderTutorialStep() {
+  document.querySelectorAll('.tutorial-slide').forEach((el) => {
+    el.classList.toggle('is-active', Number(el.dataset.step) === tutorialStep);
+  });
+  document.querySelectorAll('.tutorial-dot').forEach((dot, i) => {
+    dot.classList.toggle('is-active', i + 1 === tutorialStep);
+  });
+  const stepNum = document.getElementById('tutorialStepNum');
+  if (stepNum) stepNum.textContent = String(tutorialStep);
+
+  const back = document.getElementById('tutorialBack');
+  if (back) back.disabled = tutorialStep === 1;
+
+  const next = document.getElementById('tutorialNext');
+  if (next) next.textContent = tutorialStep === TUTORIAL_STEPS ? 'Done' : 'Next';
+}
+
+function goToTutorialStep(step) {
+  tutorialStep = Math.min(TUTORIAL_STEPS, Math.max(1, step));
+  renderTutorialStep();
+}
+
+function tutorialNext() {
+  if (tutorialStep === TUTORIAL_STEPS) {
+    closeTutorial();
+    return;
+  }
+  goToTutorialStep(tutorialStep + 1);
+}
+
+function tutorialPrev() {
+  goToTutorialStep(tutorialStep - 1);
+}
+
+function openTutorial() {
+  const modal = document.getElementById('tutorialModal');
+  if (!modal) return;
+  goToTutorialStep(1);
+  modal.hidden = false;
+  document.body.classList.add('tutorial-modal-open');
+}
+
+// The modal markup lives in site_base.html, so it's present on every page
+// that shares this nav (Home, About) -- always open it in place instead of
+// navigating anywhere.
+function handleNavHowToUse(event) {
+  event.preventDefault();
+  openTutorial();
+  return false;
+}
+
+function closeTutorial() {
+  const modal = document.getElementById('tutorialModal');
+  if (modal) modal.hidden = true;
+  document.body.classList.remove('tutorial-modal-open');
 }
 
 // ---- ant colony ambient hero background ----
@@ -518,3 +582,9 @@ window.setQuickStartBarangay = setQuickStartBarangay;
 window.handleQuickStartLaunch = handleQuickStartLaunch;
 window.openScopeMap = openScopeMap;
 window.closeScopeMap = closeScopeMap;
+window.openTutorial = openTutorial;
+window.handleNavHowToUse = handleNavHowToUse;
+window.closeTutorial = closeTutorial;
+window.tutorialNext = tutorialNext;
+window.tutorialPrev = tutorialPrev;
+window.goToTutorialStep = goToTutorialStep;
