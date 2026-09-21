@@ -17,7 +17,6 @@ let mapLayers = { boundaries: [], edges: [], nodes: [], routes: [], routeGroups:
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
 let workflowFocusSection = null;
-let simulationConfigLocked = false;
 let simulationInProgress = false;
 let backendSimulationBusy = false;
 let backendSimulationStatus = null;
@@ -733,19 +732,27 @@ function acknowledgeFallbackWarning() {
   hideFallbackWarningModal();
 }
 
+// Fields are only ever locked while the ACO is actually crunching a run --
+// once results come back, everything above (hazard/start/end) stays live so
+// the visitor can tweak the setup and rerun without leaving the page.
 function isSimulationInteractionLocked() {
-  return simulationConfigLocked || simulationInProgress;
+  return simulationInProgress;
 }
 
 function syncSimulationConfigLock() {
   const interactionLocked = isSimulationInteractionLocked();
-  const configLocked = simulationConfigLocked;
 
   document.querySelectorAll('.hazard-card').forEach(card => {
     card.classList.toggle('interaction-locked', interactionLocked);
   });
 
-  ['startSel', 'endSel', 'showEvacBtn', 'runBtn', 'changeBarangayBtn', 'changeHazardBtn', 'changeRouteBtn']
+  // changeBarangayBtn/changeHazardBtn/changeRouteBtn are deliberately left
+  // out of this list: syncWorkflowSummaries() (called via advanceStep()
+  // right before this on every lock-state change) already recomputes their
+  // disabled state fresh from isSimulationInteractionLocked() on every call,
+  // so running them through the save/restore dance below too just races
+  // with that and can leave them stuck disabled after the lock clears.
+  ['startSel', 'endSel', 'showEvacBtn', 'runBtn']
     .forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -763,11 +770,6 @@ function syncSimulationConfigLock() {
         delete el.dataset.lockPrevDisabled;
       }
 
-      if (configLocked) {
-        el.disabled = true;
-        return;
-      }
-
       if (id === 'runBtn') {
         el.disabled = backendSimulationBusy || !canRunCurrentSimulation();
       }
@@ -775,15 +777,8 @@ function syncSimulationConfigLock() {
 
   ['changeRunBtn', 'resetBtn', 'resultsNewSimulationBtn'].forEach(id => {
     const el = document.getElementById(id);
-    if (!el) return;
-    el.disabled = simulationInProgress || (id === 'resetBtn' && !configLocked);
+    if (el) el.disabled = simulationInProgress;
   });
-}
-
-function setSimulationConfigLocked(locked) {
-  simulationConfigLocked = !!locked;
-  advanceStep(getMaxReachableStep());
-  syncSimulationConfigLock();
 }
 
 function setSimulationInProgress(running) {
@@ -2140,6 +2135,25 @@ function clearEarthquakeSimulationOutput() {
   syncEarthquakeViewSelector();
 }
 
+// Mirrors clearEarthquakeSimulationOutput() for flood mode: once the setup
+// stays editable after a run, picking a different start/end needs to drop
+// the previous run's routes so the map/results panel don't show a route
+// that no longer matches the selected pins.
+function clearFloodSimulationOutput() {
+  if (!simData || isEarthquakeSimulationResult(simData)) {
+    return;
+  }
+
+  clearRenderedRoutesOnly();
+  simData = null;
+  activeResultsTab = 'routes';
+
+  document.getElementById('resultsSummaryTxt').textContent = '';
+  setResultsSidebarActionsVisible(false);
+  document.getElementById('statusTxt').textContent = 'Ready';
+  syncResultsVisibility(false);
+}
+
 function clearHazardSelectionState() {
   document.querySelectorAll('.hazard-card:not(.disabled)').forEach(card => {
     card.classList.remove('selected', ...HAZARD_SELECTION_CLASSES);
@@ -3060,6 +3074,10 @@ function onNodeChange() {
     else if (!earthquakeEvacSitesVisible) advanceStep(4);
     else advanceStep(5);
   } else {
+    if (simData && !isEarthquakeSimulationResult(simData) && (simData.start !== start || simData.end !== end)) {
+      clearFloodSimulationOutput();
+    }
+
     if (canRun) advanceStep(5);
     else if (!selectedHazard) advanceStep(2);
     else if (start || end) advanceStep(4);
@@ -3345,8 +3363,8 @@ function syncWorkflowSummaries() {
     // While running or locked, the workflow-run-body box below already
     // spells this out in full -- repeating a shorter version here is just
     // noise, so this line is hidden instead of duplicating it.
-    summaryRun.hidden = simulationInProgress || simulationConfigLocked;
-    summaryRun.textContent = simulationInProgress || simulationConfigLocked
+    summaryRun.hidden = simulationInProgress;
+    summaryRun.textContent = simulationInProgress
       ? ''
       : backendSimulationBusy
       ? 'The backend is still finishing a previous simulation. Wait until it clears before starting another run.'
@@ -3811,8 +3829,7 @@ async function runSimulation() {
     applySetupSidebarState(true);
     setResultsSidebarActionsVisible(true);
     document.getElementById('infoBox').innerHTML =
-      `This setup is now <strong>locked</strong> to keep the result stable. Click <strong>New Simulation</strong> if you want to change the barangay, starting and end point, and disaster type`;
-    setSimulationConfigLocked(true);
+      `Simulation complete. Tweak the <strong>hazard</strong> or <strong>start/end</strong> above to try another route, or click <strong>Back to Home</strong> to pick a different barangay.`;
     updateMapContextBadge();
 
     setLoaderStep('complete', 100);
@@ -4787,11 +4804,14 @@ async function downloadSimulationReport() {
   }
 }
 
-// Sends the visitor back to the homepage's barangay picker so a new
-// simulation starts from scratch, since barangay can't be changed here.
+// Sends the visitor back to the homepage so a new simulation starts from
+// scratch, since barangay can't be changed here. Plain '/' rather than the
+// '#heroBarangaySelector' anchor -- with the homepage's scroll-behavior:smooth,
+// landing on that hash played a visible auto-scroll past the hero on every
+// "Back to Home" click, which read as a bug rather than a shortcut.
 function goToHomepageForNewScope() {
   if (simulationInProgress) return;
-  window.location.href = '/#heroBarangaySelector';
+  window.location.href = '/';
 }
 
 async function checkBackend() {

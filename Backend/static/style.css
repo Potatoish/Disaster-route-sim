@@ -1,9 +1,3 @@
-/* Cross-document view transition (Chromium): smooths navigation between
-   the homepage and this simulator instead of a hard cut. No-op elsewhere. */
-@view-transition {
-  navigation: auto;
-}
-
 :root {
   --font-body: 'Plus Jakarta Sans', 'Nunito', sans-serif;
   --font-heading: 'Rajdhani', sans-serif;
@@ -136,43 +130,6 @@ body {
   transition: background .38s ease, color .28s ease;
 }
 
-/* ---------- GLOBAL NAV (same floating bar as the homepage) --------------
-   Floats directly over the map itself, like the other map overlay controls
-   (earthquake/flood filters, legend) rather than reserving its own row --
-   icon-only here to stay small, with the label shown as a hover/focus
-   tooltip instead of sitting inline. */
-.sim-nav {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-  z-index: 900;
-}
-.sim-nav .nav-row {
-  width: fit-content; margin: 0 auto; display: flex; align-items: center; gap: 20px;
-  padding: 8px 10px 8px 18px; border-radius: 999px; border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px);
-  box-shadow: var(--map-ui-shadow);
-  view-transition-name: agnas-nav;
-}
-.sim-nav .brand { display: flex; align-items: center; gap: 0; text-decoration: none; }
-.sim-nav .brand img { width: 40px; height: 40px; flex: none; object-fit: contain; margin-right: -10px; }
-.sim-nav .brand-word { font-family: var(--font-heading); font-weight: 700; font-size: 18px; letter-spacing: .3px; color: var(--text); }
-.sim-nav .nav-links { display: flex; align-items: center; gap: 2px; }
-.sim-nav .nav-btn {
-  position: relative; border: none; background: transparent; color: var(--muted); padding: 8px;
-  border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  text-decoration: none; transition: color .16s ease, background .16s ease;
-}
-.sim-nav .nav-btn svg { width: 15px; height: 15px; }
-.sim-nav .nav-btn:hover { color: var(--text); background: var(--panel); }
-.sim-nav .nav-btn:active { color: var(--accent-ink); background: linear-gradient(180deg, var(--accent2), var(--accent)); }
-.sim-nav .nav-btn-label {
-  position: absolute; z-index: 40; top: calc(100% + 8px); left: 50%; transform: translate(-50%, -3px);
-  padding: 5px 9px; border: 1px solid var(--border2); border-radius: 7px; background: var(--panel);
-  box-shadow: var(--map-ui-shadow); color: var(--text); font: 600 .68rem var(--font-body);
-  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .14s ease, transform .14s ease;
-}
-.sim-nav .nav-btn:hover .nav-btn-label,
-.sim-nav .nav-btn:focus-visible .nav-btn-label { opacity: 1; transform: translate(-50%, 0); }
-
 .mode-badge {
   font-family: 'DM Mono', monospace;
   font-size: .77rem;
@@ -243,8 +200,6 @@ body.dark .left-panel {
   line-height: 1.45;
 }
 
-/* The floating nav overlay already carries the AGNAS brand mark, so this
-   panel only needs its own utility buttons -- no separate logo/wordmark. */
 .panel-head-brand-actions {
   display: flex;
   align-items: center;
@@ -261,6 +216,35 @@ body.dark .left-panel {
   flex-direction: column;
   gap: 12px;
 }
+
+/* Pinned below the scrollable card list, in the leftover space at the
+   bottom of the sidebar -- the page's one "go back" affordance now that
+   the floating map nav is gone. */
+.panel-foot {
+  flex-shrink: 0;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--border2);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .16s ease, border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.panel-back-btn svg { width: 16px; height: 16px; flex: none; }
+.panel-back-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); transform: translateY(-1px); }
+.panel-back-btn:disabled { opacity: .45; cursor: not-allowed; }
 
 .workflow-main {
   display: flex;
@@ -432,16 +416,6 @@ body.dark .workflow-card {
   font-size: .77rem;
   cursor: pointer;
   transition: all .2s ease;
-}
-
-.card-action-btn.subtle {
-  color: var(--muted);
-}
-
-.workflow-reset-all-row {
-  display: flex;
-  justify-content: center;
-  margin-top: 14px;
 }
 
 .card-action-btn:hover:not(:disabled) {

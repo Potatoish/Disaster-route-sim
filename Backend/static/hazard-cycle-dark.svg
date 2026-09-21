@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" aria-hidden="true">
+  <defs>
+    <linearGradient id="water" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <style>
+    /* Shared 11s cycle: flood holds 0-40%, crossfades to quake by 50%,
+       quake holds 50-90%, crossfades back to flood by 100%/0%. */
+    .flood { animation: floodPhase 11s ease-in-out infinite; }
+    .quake { animation: quakePhase 11s ease-in-out infinite; }
+    @keyframes floodPhase {
+      0%   { opacity: 1; }
+      40%  { opacity: 1; }
+      50%  { opacity: 0; }
+      90%  { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    @keyframes quakePhase {
+      0%   { opacity: 0; }
+      40%  { opacity: 0; }
+      50%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    .water-line {
+      fill: none; stroke: url(#water); stroke-linecap: round;
+      stroke-dasharray: 12 14; animation: flow 8s linear infinite;
+    }
+    .water-line.w2 { animation-duration: 10.5s; animation-direction: reverse; }
+    .water-line.w3 { animation-duration: 6.5s; }
+    @keyframes flow { to { stroke-dashoffset: -160; } }
+    .ping {
+      fill: none; stroke: #a78bfa; stroke-width: 2.5;
+      animation: ping 3.3s cubic-bezier(.25,.7,.4,1) infinite;
+    }
+    @keyframes ping {
+      0%   { r: 3px;  opacity: .75; stroke-width: 3; }
+      100% { r: 58px; opacity: 0;   stroke-width: .5; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .flood { animation: none; opacity: 1; }
+      .quake { animation: none; opacity: 0; }
+      .water-line, .ping { animation: none; }
+    }
+  </style>
+  <g class="flood" opacity="0.5">
+    <path class="water-line w1" stroke-width="4.5" d="M0,90 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 "/>
+    <path class="water-line w2" stroke-width="4" d="M0,170 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 "/>
+    <path class="water-line w3" stroke-width="4.5" d="M0,250 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 c20,-12 60,-12 80,0 c20,12 60,12 80,0 "/>
+  </g>
+  <g class="quake" opacity="0.75">
+    <circle class="ping" cx="220" cy="110" r="4" style="animation-delay:0s"/>
+      <circle class="ping" cx="220" cy="110" r="4" style="animation-delay:1.3s"/>
+      <circle class="ping" cx="220" cy="110" r="4" style="animation-delay:2.6s"/>
+      <circle class="ping" cx="760" cy="230" r="4" style="animation-delay:0.6s"/>
+      <circle class="ping" cx="760" cy="230" r="4" style="animation-delay:1.9s"/>
+      <circle class="ping" cx="760" cy="230" r="4" style="animation-delay:3.2s"/>
+      <circle class="ping" cx="1230" cy="100" r="4" style="animation-delay:0.3s"/>
+      <circle class="ping" cx="1230" cy="100" r="4" style="animation-delay:1.6s"/>
+      <circle class="ping" cx="1230" cy="100" r="4" style="animation-delay:2.9s"/>
+  </g>
+</svg>
