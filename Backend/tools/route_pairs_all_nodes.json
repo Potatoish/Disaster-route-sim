@@ -1,0 +1,392 @@
+[
+  {
+    "label": "Pinagbuhatan: Novo Pinagbuhatan -> Kenneth Talipapa",
+    "start": {
+      "name": "Novo Pinagbuhatan",
+      "lat": 14.558085412,
+      "lng": 121.084921938
+    },
+    "end": {
+      "name": "Kenneth Talipapa",
+      "lat": 14.541715004,
+      "lng": 121.104679596
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Novo Pinagbuhatan -> Pinagbuhatan Barangay Hall",
+    "start": {
+      "name": "Novo Pinagbuhatan",
+      "lat": 14.558085412,
+      "lng": 121.084921938
+    },
+    "end": {
+      "name": "Pinagbuhatan Barangay Hall",
+      "lat": 14.557479018,
+      "lng": 121.090963482
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Novo Pinagbuhatan -> Pinagbuhatan High School",
+    "start": {
+      "name": "Novo Pinagbuhatan",
+      "lat": 14.558085412,
+      "lng": 121.084921938
+    },
+    "end": {
+      "name": "Pinagbuhatan High School",
+      "lat": 14.555160161,
+      "lng": 121.091227026
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Novo Pinagbuhatan -> Pinagbuhatan Ferry station",
+    "start": {
+      "name": "Novo Pinagbuhatan",
+      "lat": 14.558085412,
+      "lng": 121.084921938
+    },
+    "end": {
+      "name": "Pinagbuhatan Ferry station",
+      "lat": 14.536033824,
+      "lng": 121.102231378
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Novo Pinagbuhatan -> 2 Centennial Street, Pinagbuhatan",
+    "start": {
+      "name": "Novo Pinagbuhatan",
+      "lat": 14.558085412,
+      "lng": 121.084921938
+    },
+    "end": {
+      "name": "2 Centennial Street, Pinagbuhatan",
+      "lat": 14.545969109,
+      "lng": 121.101032111
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Kenneth Talipapa -> Pinagbuhatan Barangay Hall",
+    "start": {
+      "name": "Kenneth Talipapa",
+      "lat": 14.541715004,
+      "lng": 121.104679596
+    },
+    "end": {
+      "name": "Pinagbuhatan Barangay Hall",
+      "lat": 14.557479018,
+      "lng": 121.090963482
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Kenneth Talipapa -> Pinagbuhatan High School",
+    "start": {
+      "name": "Kenneth Talipapa",
+      "lat": 14.541715004,
+      "lng": 121.104679596
+    },
+    "end": {
+      "name": "Pinagbuhatan High School",
+      "lat": 14.555160161,
+      "lng": 121.091227026
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Kenneth Talipapa -> Pinagbuhatan Ferry station",
+    "start": {
+      "name": "Kenneth Talipapa",
+      "lat": 14.541715004,
+      "lng": 121.104679596
+    },
+    "end": {
+      "name": "Pinagbuhatan Ferry station",
+      "lat": 14.536033824,
+      "lng": 121.102231378
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Kenneth Talipapa -> 2 Centennial Street, Pinagbuhatan",
+    "start": {
+      "name": "Kenneth Talipapa",
+      "lat": 14.541715004,
+      "lng": 121.104679596
+    },
+    "end": {
+      "name": "2 Centennial Street, Pinagbuhatan",
+      "lat": 14.545969109,
+      "lng": 121.101032111
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Pinagbuhatan Barangay Hall -> Pinagbuhatan High School",
+    "start": {
+      "name": "Pinagbuhatan Barangay Hall",
+      "lat": 14.557479018,
+      "lng": 121.090963482
+    },
+    "end": {
+      "name": "Pinagbuhatan High School",
+      "lat": 14.555160161,
+      "lng": 121.091227026
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Pinagbuhatan Barangay Hall -> Pinagbuhatan Ferry station",
+    "start": {
+      "name": "Pinagbuhatan Barangay Hall",
+      "lat": 14.557479018,
+      "lng": 121.090963482
+    },
+    "end": {
+      "name": "Pinagbuhatan Ferry station",
+      "lat": 14.536033824,
+      "lng": 121.102231378
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Pinagbuhatan Barangay Hall -> 2 Centennial Street, Pinagbuhatan",
+    "start": {
+      "name": "Pinagbuhatan Barangay Hall",
+      "lat": 14.557479018,
+      "lng": 121.090963482
+    },
+    "end": {
+      "name": "2 Centennial Street, Pinagbuhatan",
+      "lat": 14.545969109,
+      "lng": 121.101032111
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Pinagbuhatan High School -> Pinagbuhatan Ferry station",
+    "start": {
+      "name": "Pinagbuhatan High School",
+      "lat": 14.555160161,
+      "lng": 121.091227026
+    },
+    "end": {
+      "name": "Pinagbuhatan Ferry station",
+      "lat": 14.536033824,
+      "lng": 121.102231378
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Pinagbuhatan High School -> 2 Centennial Street, Pinagbuhatan",
+    "start": {
+      "name": "Pinagbuhatan High School",
+      "lat": 14.555160161,
+      "lng": 121.091227026
+    },
+    "end": {
+      "name": "2 Centennial Street, Pinagbuhatan",
+      "lat": 14.545969109,
+      "lng": 121.101032111
+    }
+  },
+  {
+    "label": "Pinagbuhatan: Pinagbuhatan Ferry station -> 2 Centennial Street, Pinagbuhatan",
+    "start": {
+      "name": "Pinagbuhatan Ferry station",
+      "lat": 14.536033824,
+      "lng": 121.102231378
+    },
+    "end": {
+      "name": "2 Centennial Street, Pinagbuhatan",
+      "lat": 14.545969109,
+      "lng": 121.101032111
+    }
+  },
+  {
+    "label": "Sta. Lucia: SM City East Ortigas -> Pasig Skatepark",
+    "start": {
+      "name": "SM City East Ortigas",
+      "lat": 14.587528029,
+      "lng": 121.104157529
+    },
+    "end": {
+      "name": "Pasig Skatepark",
+      "lat": 14.575852237,
+      "lng": 121.101736924
+    }
+  },
+  {
+    "label": "Sta. Lucia: SM City East Ortigas -> St. Jude Thaddeus Parish",
+    "start": {
+      "name": "SM City East Ortigas",
+      "lat": 14.587528029,
+      "lng": 121.104157529
+    },
+    "end": {
+      "name": "St. Jude Thaddeus Parish",
+      "lat": 14.581430714,
+      "lng": 121.103032337
+    }
+  },
+  {
+    "label": "Sta. Lucia: SM City East Ortigas -> Santa Lucia High School (Tramo St.)",
+    "start": {
+      "name": "SM City East Ortigas",
+      "lat": 14.587528029,
+      "lng": 121.104157529
+    },
+    "end": {
+      "name": "Santa Lucia High School (Tramo St.)",
+      "lat": 14.583129599,
+      "lng": 121.103077499
+    }
+  },
+  {
+    "label": "Sta. Lucia: SM City East Ortigas -> Brgy. Sta. Lucia Health Center",
+    "start": {
+      "name": "SM City East Ortigas",
+      "lat": 14.587528029,
+      "lng": 121.104157529
+    },
+    "end": {
+      "name": "Brgy. Sta. Lucia Health Center",
+      "lat": 14.58488533,
+      "lng": 121.10110102
+    }
+  },
+  {
+    "label": "Sta. Lucia: SM City East Ortigas -> East Ortigas Mansions",
+    "start": {
+      "name": "SM City East Ortigas",
+      "lat": 14.587528029,
+      "lng": 121.104157529
+    },
+    "end": {
+      "name": "East Ortigas Mansions",
+      "lat": 14.586318658,
+      "lng": 121.102776615
+    }
+  },
+  {
+    "label": "Sta. Lucia: Pasig Skatepark -> St. Jude Thaddeus Parish",
+    "start": {
+      "name": "Pasig Skatepark",
+      "lat": 14.575852237,
+      "lng": 121.101736924
+    },
+    "end": {
+      "name": "St. Jude Thaddeus Parish",
+      "lat": 14.581430714,
+      "lng": 121.103032337
+    }
+  },
+  {
+    "label": "Sta. Lucia: Pasig Skatepark -> Santa Lucia High School (Tramo St.)",
+    "start": {
+      "name": "Pasig Skatepark",
+      "lat": 14.575852237,
+      "lng": 121.101736924
+    },
+    "end": {
+      "name": "Santa Lucia High School (Tramo St.)",
+      "lat": 14.583129599,
+      "lng": 121.103077499
+    }
+  },
+  {
+    "label": "Sta. Lucia: Pasig Skatepark -> Brgy. Sta. Lucia Health Center",
+    "start": {
+      "name": "Pasig Skatepark",
+      "lat": 14.575852237,
+      "lng": 121.101736924
+    },
+    "end": {
+      "name": "Brgy. Sta. Lucia Health Center",
+      "lat": 14.58488533,
+      "lng": 121.10110102
+    }
+  },
+  {
+    "label": "Sta. Lucia: Pasig Skatepark -> East Ortigas Mansions",
+    "start": {
+      "name": "Pasig Skatepark",
+      "lat": 14.575852237,
+      "lng": 121.101736924
+    },
+    "end": {
+      "name": "East Ortigas Mansions",
+      "lat": 14.586318658,
+      "lng": 121.102776615
+    }
+  },
+  {
+    "label": "Sta. Lucia: St. Jude Thaddeus Parish -> Santa Lucia High School (Tramo St.)",
+    "start": {
+      "name": "St. Jude Thaddeus Parish",
+      "lat": 14.581430714,
+      "lng": 121.103032337
+    },
+    "end": {
+      "name": "Santa Lucia High School (Tramo St.)",
+      "lat": 14.583129599,
+      "lng": 121.103077499
+    }
+  },
+  {
+    "label": "Sta. Lucia: St. Jude Thaddeus Parish -> Brgy. Sta. Lucia Health Center",
+    "start": {
+      "name": "St. Jude Thaddeus Parish",
+      "lat": 14.581430714,
+      "lng": 121.103032337
+    },
+    "end": {
+      "name": "Brgy. Sta. Lucia Health Center",
+      "lat": 14.58488533,
+      "lng": 121.10110102
+    }
+  },
+  {
+    "label": "Sta. Lucia: St. Jude Thaddeus Parish -> East Ortigas Mansions",
+    "start": {
+      "name": "St. Jude Thaddeus Parish",
+      "lat": 14.581430714,
+      "lng": 121.103032337
+    },
+    "end": {
+      "name": "East Ortigas Mansions",
+      "lat": 14.586318658,
+      "lng": 121.102776615
+    }
+  },
+  {
+    "label": "Sta. Lucia: Santa Lucia High School (Tramo St.) -> Brgy. Sta. Lucia Health Center",
+    "start": {
+      "name": "Santa Lucia High School (Tramo St.)",
+      "lat": 14.583129599,
+      "lng": 121.103077499
+    },
+    "end": {
+      "name": "Brgy. Sta. Lucia Health Center",
+      "lat": 14.58488533,
+      "lng": 121.10110102
+    }
+  },
+  {
+    "label": "Sta. Lucia: Santa Lucia High School (Tramo St.) -> East Ortigas Mansions",
+    "start": {
+      "name": "Santa Lucia High School (Tramo St.)",
+      "lat": 14.583129599,
+      "lng": 121.103077499
+    },
+    "end": {
+      "name": "East Ortigas Mansions",
+      "lat": 14.586318658,
+      "lng": 121.102776615
+    }
+  },
+  {
+    "label": "Sta. Lucia: Brgy. Sta. Lucia Health Center -> East Ortigas Mansions",
+    "start": {
+      "name": "Brgy. Sta. Lucia Health Center",
+      "lat": 14.58488533,
+      "lng": 121.10110102
+    },
+    "end": {
+      "name": "East Ortigas Mansions",
+      "lat": 14.586318658,
+      "lng": 121.102776615
+    }
+  }
+]

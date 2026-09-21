@@ -93,6 +93,11 @@ button{font-family:inherit; cursor:pointer;}
 
 .site-nav{
   position:sticky; top:0; z-index:40; padding:14px 24px 0;
+  /* Promotes the sticky bar to its own compositor layer so its
+     backdrop-filter blur is composited once instead of being
+     recalculated against the content scrolling underneath it on every
+     scroll frame. */
+  will-change:transform;
 }
 
 .nav-row{
@@ -464,10 +469,15 @@ body.tutorial-modal-open{ overflow:hidden; }
   }
   .brand img{ width:32px; height:32px; }
   .brand-word{ font-size:16px; }
-  .nav-links{ gap:2px; }
+  /* flex:1 1 0 (equal thirds) squeezed "About & Contact" and "How to use"
+     down to where the browser wrapped mid-phrase onto 2-3 lines inside the
+     pill. Sizing each link to its own content plus letting the row itself
+     wrap keeps every label on one line -- worst case the pills spill onto
+     a second row instead of breaking apart. */
+  .nav-links{ gap:6px; flex-wrap:wrap; justify-content:center; }
   .nav-btn{
-    flex:1 1 0; min-width:0; justify-content:center; text-align:center;
-    padding:8px 4px; font-size:11.5px; gap:4px;
+    flex:0 1 auto; min-width:0; justify-content:center; text-align:center;
+    padding:8px 12px; font-size:12px; gap:5px; white-space:nowrap;
   }
   .nav-btn svg{ width:14px; height:14px; }
 

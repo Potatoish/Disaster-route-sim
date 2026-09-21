@@ -539,6 +539,18 @@ function initAntCanvas() {
     });
   }
 
+  // The loop below used to run forever regardless of scroll position --
+  // once the hero (and this canvas) scrolls out of view, the rAF callback
+  // still fires and still does a full clear+drawImage+14-ant redraw every
+  // frame, competing with the browser's own scroll compositing for main-
+  // thread time on every section below the hero. `visible` gates
+  // rescheduling so the loop actually stops while the canvas is offscreen
+  // or the tab is backgrounded, and a single requestAnimationFrame from
+  // the observer/visibility callback restarts it -- there's never more
+  // than one loop alive at a time since step() only reschedules itself
+  // while still visible.
+  let visible = true;
+
   function step() {
     ctx.clearRect(0, 0, width, height);
     ctx.globalAlpha = 1;
@@ -547,7 +559,24 @@ function initAntCanvas() {
     ctx.globalAlpha = 1;
     drawAnts();
 
-    if (!reduced) requestAnimationFrame(step);
+    if (!reduced && visible) requestAnimationFrame(step);
+  }
+
+  if ('IntersectionObserver' in window) {
+    const inViewport = { current: true };
+    const observer = new IntersectionObserver((entries) => {
+      inViewport.current = entries[entries.length - 1].isIntersecting;
+      const wasVisible = visible;
+      visible = inViewport.current && !document.hidden;
+      if (visible && !wasVisible && !reduced) requestAnimationFrame(step);
+    }, { threshold: 0 });
+    observer.observe(canvas);
+
+    document.addEventListener('visibilitychange', () => {
+      const wasVisible = visible;
+      visible = inViewport.current && !document.hidden;
+      if (visible && !wasVisible && !reduced) requestAnimationFrame(step);
+    });
   }
 
   window.addEventListener('resize', () => {
