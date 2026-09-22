@@ -4582,15 +4582,109 @@ function switchTab(name, el) {
   setActiveTab(name);
 }
 
-// ---- downloadable PDF report: both the map and the summary are built from
-// simData directly with canvas drawing / jsPDF text, never a screenshot of
-// the live page. Two separate reasons ruled out DOM capture for each half:
-// the map's OSM/Esri tiles are cross-origin without permissive CORS headers,
-// which taints any canvas that composites them and makes toDataURL() throw;
-// and html2canvas (used for an earlier version of the summary half) chokes
-// on this app's stylesheet with "unsupported color function" errors because
-// it predates color-mix(), which is used throughout style.css. Drawing both
-// halves from data sidesteps both problems entirely. ----
+// ---- downloadable PDF report: the summary half is drawn straight from
+// simData with jsPDF text calls, never a screenshot of the live page --
+// html2canvas (used for an earlier version of this half) chokes on this
+// app's stylesheet with "unsupported color function" errors because it
+// predates color-mix(), which is used throughout style.css.
+//
+// The map half used to be redrawn from data too (a flat background with
+// just the route line), on the assumption that the OSM/Esri tile images
+// would taint the canvas as cross-origin content. That assumption doesn't
+// hold: both tile.openstreetmap.org and server.arcgisonline.com send
+// `Access-Control-Allow-Origin: *`, so fetching tiles as `Image` objects
+// with crossOrigin='anonymous' set *before* `src` keeps the canvas clean.
+// renderBestRouteMapCanvas() below fetches the OSM street tiles under the
+// route's bounding box and composites them with the same Web Mercator math
+// the tiles themselves are addressed by, so the route lines up exactly. If
+// tile loading fails for any reason (offline, blocked, slow network), it
+// falls back to the old flat schematic render rather than failing the
+// whole report. ----
+
+const REPORT_MAP_TILE_SIZE = 256;
+const REPORT_MAP_MIN_ZOOM = 10;
+const REPORT_MAP_MAX_ZOOM = 19; // matches the live street layer's maxZoom
+const REPORT_MAP_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const REPORT_MAP_TILE_TIMEOUT_MS = 8000;
+const REPORT_MAP_ATTRIBUTION = 'Map data © OpenStreetMap contributors';
+
+function reportMercatorX(lng, zoom) {
+  return (lng + 180) / 360 * REPORT_MAP_TILE_SIZE * Math.pow(2, zoom);
+}
+
+function reportMercatorY(lat, zoom) {
+  const clampedLat = Math.max(Math.min(lat, 85.0511), -85.0511);
+  const rad = clampedLat * Math.PI / 180;
+  const yFraction = 0.5 - Math.log(Math.tan(Math.PI / 4 + rad / 2)) / (2 * Math.PI);
+  return yFraction * REPORT_MAP_TILE_SIZE * Math.pow(2, zoom);
+}
+
+// Largest integer zoom (tiles only exist at integer zooms) at which the
+// lat/lng box still fits inside a boxWidth x boxHeight pixel area.
+function pickReportMapZoom(minLat, maxLat, minLng, maxLng, boxWidth, boxHeight) {
+  for (let z = REPORT_MAP_MAX_ZOOM; z >= REPORT_MAP_MIN_ZOOM; z--) {
+    const w = reportMercatorX(maxLng, z) - reportMercatorX(minLng, z);
+    const h = reportMercatorY(minLat, z) - reportMercatorY(maxLat, z);
+    if (w <= boxWidth && h <= boxHeight) return z;
+  }
+  return REPORT_MAP_MIN_ZOOM;
+}
+
+function loadReportMapTile(url, timeoutMs = REPORT_MAP_TILE_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // Must be set before `src` -- this is what keeps a same-permissive-CORS
+    // tile from tainting the canvas once it loads.
+    img.crossOrigin = 'anonymous';
+    const timer = setTimeout(() => reject(new Error('Tile timed out: ' + url)), timeoutMs);
+    img.onload = () => { clearTimeout(timer); resolve(img); };
+    img.onerror = () => { clearTimeout(timer); reject(new Error('Tile failed to load: ' + url)); };
+    img.src = url;
+  });
+}
+
+// Fetches and draws the OSM tiles under a lat/lng box, centered in a
+// width x height canvas with `pad` pixels reserved on every side. Returns
+// the projection info needed to place route geometry on top, or throws if
+// not a single tile could be loaded (caller falls back to a flat render).
+async function drawReportBasemap(ctx, { minLat, maxLat, minLng, maxLng, width, height, pad }) {
+  const zoom = pickReportMapZoom(minLat, maxLat, minLng, maxLng, width - pad * 2, height - pad * 2);
+  const originX = (reportMercatorX(minLng, zoom) + reportMercatorX(maxLng, zoom)) / 2 - width / 2;
+  const originY = (reportMercatorY(minLat, zoom) + reportMercatorY(maxLat, zoom)) / 2 - height / 2;
+
+  const tilesPerAxis = Math.pow(2, zoom);
+  const minTileX = Math.floor(originX / REPORT_MAP_TILE_SIZE);
+  const maxTileX = Math.floor((originX + width) / REPORT_MAP_TILE_SIZE);
+  const minTileY = Math.max(0, Math.floor(originY / REPORT_MAP_TILE_SIZE));
+  const maxTileY = Math.min(tilesPerAxis - 1, Math.floor((originY + height) / REPORT_MAP_TILE_SIZE));
+
+  const tileJobs = [];
+  for (let tx = minTileX; tx <= maxTileX; tx++) {
+    const wrappedX = ((tx % tilesPerAxis) + tilesPerAxis) % tilesPerAxis;
+    for (let ty = minTileY; ty <= maxTileY; ty++) {
+      const url = REPORT_MAP_TILE_URL_TEMPLATE
+        .replace('{z}', zoom).replace('{x}', wrappedX).replace('{y}', ty);
+      tileJobs.push(loadReportMapTile(url).then(img => ({ img, tx, ty })).catch(() => null));
+    }
+  }
+
+  const tiles = (await Promise.all(tileJobs)).filter(Boolean);
+  if (!tiles.length) {
+    throw new Error('No basemap tiles could be loaded for the report map.');
+  }
+
+  tiles.forEach(({ img, tx, ty }) => {
+    ctx.drawImage(
+      img,
+      tx * REPORT_MAP_TILE_SIZE - originX,
+      ty * REPORT_MAP_TILE_SIZE - originY,
+      REPORT_MAP_TILE_SIZE,
+      REPORT_MAP_TILE_SIZE
+    );
+  });
+
+  return { zoom, originX, originY };
+}
 
 function getCurrentDisplayRoutes() {
   if (isEarthquakeSimulationResult(simData)) {
@@ -4608,43 +4702,21 @@ function drawReportPin(ctx, x, y, color, label) {
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  ctx.fillStyle = '#0f172a';
+  // White halo keeps the label readable over busy map tiles, not just the
+  // old flat background.
   ctx.font = 'bold 15px sans-serif';
   ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeText(label, x, y - 16);
+  ctx.fillStyle = '#0f172a';
   ctx.fillText(label, x, y - 16);
 }
 
-function renderBestRouteCanvas(route, labels = {}) {
-  const width = 900;
-  const height = 540;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-
-  ctx.fillStyle = '#eef3fa';
-  ctx.fillRect(0, 0, width, height);
-
-  const points = Array.isArray(route?.render_path) && route.render_path.length
-    ? route.render_path
-    : Array.isArray(route?.path_coordinates) ? route.path_coordinates : [];
-
-  if (points.length < 2) {
-    ctx.fillStyle = '#516579';
-    ctx.font = '20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('No route geometry available for this simulation.', width / 2, height / 2);
-    return canvas;
-  }
-
-  const lats = points.map(p => p.lat);
-  const lngs = points.map(p => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-
-  const pad = 56;
+// Fallback projection used when real tiles can't be fetched: fits the
+// route's bounding box exactly to the canvas (the old, pre-basemap
+// behavior) rather than snapping to a real map's integer zoom levels.
+function buildFlatFitProjection(minLat, maxLat, minLng, maxLng, width, height, pad) {
   const spanLat = Math.max(maxLat - minLat, 1e-6);
   const spanLng = Math.max(maxLng - minLng, 1e-6);
   // Longitude degrees are narrower than latitude degrees away from the
@@ -4659,21 +4731,89 @@ function renderBestRouteCanvas(route, labels = {}) {
   const offsetX = pad + (usableW - drawnW) / 2;
   const offsetY = pad + (usableH - drawnH) / 2;
 
-  const project = (p) => [
+  return (p) => [
     offsetX + (p.lng - minLng) * latCorrection * scale,
     offsetY + (maxLat - p.lat) * scale,
   ];
+}
+
+// Renders the best route for the PDF report onto a canvas, with real OSM
+// street tiles composited underneath when they can be fetched (see the
+// header comment above for why that's safe from canvas tainting). Falls
+// back to a flat schematic background otherwise. Returns both the canvas
+// and whether a basemap was actually used, since the caller needs that to
+// decide whether an attribution line is required.
+async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = false } = {}) {
+  const width = 900;
+  const height = 540;
+  const pad = 56;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  const points = Array.isArray(route?.render_path) && route.render_path.length
+    ? route.render_path
+    : Array.isArray(route?.path_coordinates) ? route.path_coordinates : [];
+
+  if (points.length < 2) {
+    ctx.fillStyle = '#eef3fa';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#516579';
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No route geometry available for this simulation.', width / 2, height / 2);
+    return { canvas, usedBasemap: false };
+  }
+
+  const lats = points.map(p => p.lat);
+  const lngs = points.map(p => p.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  let project = null;
+  let usedBasemap = false;
+
+  if (!skipBasemap) {
+    try {
+      const { zoom, originX, originY } = await drawReportBasemap(ctx, { minLat, maxLat, minLng, maxLng, width, height, pad });
+      project = (p) => [reportMercatorX(p.lng, zoom) - originX, reportMercatorY(p.lat, zoom) - originY];
+      usedBasemap = true;
+    } catch (err) {
+      console.warn('Report map: falling back to schematic render —', err.message);
+    }
+  }
+
+  if (!project) {
+    ctx.fillStyle = '#eef3fa';
+    ctx.fillRect(0, 0, width, height);
+    project = buildFlatFitProjection(minLat, maxLat, minLng, maxLng, width, height, pad);
+  }
+
+  const tracePath = () => {
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      const [x, y] = project(p);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+  };
+
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // White casing under the route line keeps it visible over both light
+  // streets and darker map features, not just the flat fallback background.
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 9;
+  tracePath();
+  ctx.stroke();
 
   ctx.strokeStyle = route?.color || '#22c55e';
   ctx.lineWidth = 5;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  points.forEach((p, i) => {
-    const [x, y] = project(p);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  tracePath();
   ctx.stroke();
 
   const [sx, sy] = project(points[0]);
@@ -4681,7 +4821,7 @@ function renderBestRouteCanvas(route, labels = {}) {
   drawReportPin(ctx, sx, sy, '#06b6d4', labels.start || 'Start');
   drawReportPin(ctx, ex, ey, '#a855f7', labels.end || 'Destination');
 
-  return canvas;
+  return { canvas, usedBasemap };
 }
 
 async function downloadSimulationReport() {
@@ -4718,7 +4858,18 @@ async function downloadSimulationReport() {
       ? `${getRiskLevelLabelFromScore(best?.max_hazard)} road risk`
       : `${formatFloodPeakRisk(best)} (${getFloodPeakDepthRange(best)})`;
 
-    const mapCanvas = renderBestRouteCanvas(best, { start, end: endLabel });
+    let mapResult = await renderBestRouteMapCanvas(best, { start, end: endLabel });
+    let mapDataUrl;
+    try {
+      mapDataUrl = mapResult.canvas.toDataURL('image/png');
+    } catch (err) {
+      // Belt-and-suspenders: if a tile response somehow tainted the canvas
+      // despite the ACAO/crossOrigin handling, redo it without the basemap
+      // instead of failing the whole report.
+      console.warn('Report map canvas was tainted, redrawing without basemap —', err.message);
+      mapResult = await renderBestRouteMapCanvas(best, { start, end: endLabel }, { skipBasemap: true });
+      mapDataUrl = mapResult.canvas.toDataURL('image/png');
+    }
 
     // The summary is built from the same simData the on-screen "Summary" tab
     // reads, drawn directly with jsPDF -- not a screenshot of that tab. This
@@ -4744,9 +4895,20 @@ async function downloadSimulationReport() {
     y += 22;
 
     const mapWidth = pageWidth - margin * 2;
-    const mapHeight = mapWidth * (mapCanvas.height / mapCanvas.width);
-    doc.addImage(mapCanvas.toDataURL('image/png'), 'PNG', margin, y, mapWidth, mapHeight);
-    y += mapHeight + 24;
+    const mapHeight = mapWidth * (mapResult.canvas.height / mapResult.canvas.width);
+    doc.addImage(mapDataUrl, 'PNG', margin, y, mapWidth, mapHeight);
+    y += mapHeight + 12;
+
+    if (mapResult.usedBasemap) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(140);
+      doc.text(REPORT_MAP_ATTRIBUTION, margin, y);
+      doc.setTextColor(0);
+      y += 18;
+    } else {
+      y += 12;
+    }
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
