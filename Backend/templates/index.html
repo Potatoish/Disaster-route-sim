@@ -189,9 +189,26 @@
       </div>
 
       <div class="empty-map" id="emptyMap">
-        <div class="empty-map-icon">&#128506;</div>
-        <div class="empty-map-txt">Select a barangay to load the map</div>
+        <div class="empty-map-icon" id="emptyMapIcon">&#128506;</div>
+        <div class="empty-map-txt" id="emptyMapTxt">Select a barangay to load the map</div>
       </div>
+      <script>
+        // Runs synchronously at parse time, before initMap()/startApp() get a
+        // chance to run -- a barangay picked on the homepage's quick-start
+        // card is about to auto-load here (see bootstrapBarangayFromUrl() in
+        // script.js), so show a spinner instead of the "Select a barangay"
+        // copy. Without this, that copy paints first and then gets swapped
+        // out a beat later once the boundary fetch resolves, which reads as
+        // the map/polygon failing to show up right away.
+        (function () {
+          try {
+            if (new URLSearchParams(window.location.search).get('barangay')) {
+              document.getElementById('emptyMapIcon').innerHTML = '<span class="empty-map-spinner" aria-hidden="true"></span>';
+              document.getElementById('emptyMapTxt').textContent = 'Loading map…';
+            }
+          } catch (err) {}
+        })();
+      </script>
 
       <div class="map-badge map-legend" id="mapLegend" style="display:none;">
         <div class="legend-head">

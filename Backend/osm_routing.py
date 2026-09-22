@@ -41,6 +41,19 @@ UNSAFE_EDGE_HEURISTIC_FACTOR = 0.05
 EDGE_PHEROMONE_MIN = 0.01
 EDGE_PHEROMONE_MAX = 25.0
 SUPPLEMENTAL_ROUTE_LIMIT = 100
+# Ants discount (never forbid) edges already used by routes already sitting
+# in route_cache, scaled by how many routes already use that edge -- pushes
+# later ants toward untried corridors instead of all funneling down the one
+# corridor pheromone has reinforced, without overriding the hazard/distance
+# heuristic itself (an unsafe edge is still deprioritized far more heavily).
+ANT_ROUTE_DIVERSITY_PENALTY = 0.4
+# Iterative-penalization search (see generate_diverse_supplemental_routes):
+# after each shortest-path attempt, multiply that path's edges' cost so the
+# next attempt is pushed toward a genuinely different corridor. Yen's
+# k-shortest-paths alone tends to only return near-clones of the shortest
+# path (single-block detours) on a uniform street grid.
+DIVERSE_ROUTE_SEARCH_ATTEMPTS = 14
+DIVERSE_ROUTE_EDGE_PENALTY = 1.8
 
 NUM_ANTS = 40
 NUM_ITERATIONS = 30
@@ -1614,7 +1627,56 @@ def generate_supplemental_routes(G, start_node, end_node, seed_routes):
 
         unique_routes[path_key] = route
 
+    generate_diverse_supplemental_routes(G, start_node, end_node, unique_routes)
+
     return list(unique_routes.values())
+
+
+def generate_diverse_supplemental_routes(G, start_node, end_node, unique_routes):
+    """Repeatedly re-plans the shortest path, penalizing each attempt's
+    edges before the next one, so the search is pushed toward corridors it
+    hasn't already used -- mutates `unique_routes` in place with whatever
+    it finds.
+
+    Yen's k-shortest-paths above generates its alternatives by perturbing
+    a single edge of the shortest path at a time, so on a uniform street
+    grid (most streets the same length) almost all of its "alternatives"
+    are one-block detours around the same corridor with the same total
+    length -- exactly what shows up as several routes on the map that all
+    look identical. Penalizing whole paths instead of single edges forces
+    each attempt away from every corridor already found, not just the one
+    edge Yen's happened to swap out.
+    """
+    penalty_multipliers = {}
+
+    def penalized_weight(u, v, parallel_edges):
+        key, edge = min(parallel_edges.items(), key=lambda item: edge_traversal_cost(item[1]))
+        return edge_traversal_cost(edge) * penalty_multipliers.get((u, v, key), 1.0)
+
+    for _ in range(DIVERSE_ROUTE_SEARCH_ATTEMPTS):
+        try:
+            path = nx.shortest_path(G, start_node, end_node, weight=penalized_weight)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            break
+
+        path = simplify_route_path(path)
+        if len(path) < 2:
+            break
+
+        route = evaluate_route(G, path, 0, include_coordinates=False)
+        unique_routes.setdefault(route_path_signature(route), route)
+
+        # Penalize this attempt's edges regardless of whether the route was
+        # already known, so a repeated search keeps getting pushed further
+        # away rather than re-finding the same corridor every time.
+        for u, v in route_edges(path):
+            parallel_edges = G.get_edge_data(u, v)
+            if not parallel_edges:
+                continue
+            key, _ = min(parallel_edges.items(), key=lambda item: edge_traversal_cost(item[1]))
+            penalty_multipliers[(u, v, key)] = (
+                penalty_multipliers.get((u, v, key), 1.0) * DIVERSE_ROUTE_EDGE_PENALTY
+            )
 
 
 def select_display_routes(sorted_routes, limit):
@@ -1673,6 +1735,7 @@ def get_ant_choices(
     goal_distance_map,
     previous_node=None,
     allow_revisit=False,
+    edge_route_usage=None,
 ):
     choices = []
     weights = []
@@ -1709,13 +1772,26 @@ def get_ant_choices(
         if neighbor == end_node:
             eta *= 3.0
 
+        if edge_route_usage:
+            usage = edge_route_usage.get((current_node, neighbor), 0)
+            if usage:
+                eta /= (1.0 + ANT_ROUTE_DIVERSITY_PENALTY * usage)
+
         choices.append(neighbor)
         weights.append(max(tau * eta, 1e-12))
 
     return choices, weights
 
 
-def construct_ant_route(G, start_node, end_node, edge_pheromone, goal_distance_map, max_steps):
+def construct_ant_route(
+    G,
+    start_node,
+    end_node,
+    edge_pheromone,
+    goal_distance_map,
+    max_steps,
+    edge_route_usage=None,
+):
     if start_node == end_node:
         return [start_node]
 
@@ -1740,6 +1816,7 @@ def construct_ant_route(G, start_node, end_node, edge_pheromone, goal_distance_m
             goal_distance_map,
             previous_node=previous_node,
             allow_revisit=False,
+            edge_route_usage=edge_route_usage,
         )
 
         if not choices:
@@ -1752,6 +1829,7 @@ def construct_ant_route(G, start_node, end_node, edge_pheromone, goal_distance_m
                 goal_distance_map,
                 previous_node=previous_node,
                 allow_revisit=True,
+                edge_route_usage=edge_route_usage,
             )
 
         if not choices:
@@ -1784,6 +1862,21 @@ def run_aco(G, start_node, end_node):
     best_score = float("inf")
     stagnant_iterations = 0
 
+    # How many routes already sitting in route_cache use each edge --
+    # get_ant_choices() uses this to gently steer later ants away from
+    # corridors that already have several found routes running through
+    # them, so the pool that comes out of the loop actually scatters across
+    # the road network instead of every ant converging on one pheromone
+    # trail (see ANT_ROUTE_DIVERSITY_PENALTY).
+    edge_route_usage = {}
+
+    def register_route_usage(route):
+        for edge_key in route_edges(route["path"]):
+            edge_route_usage[edge_key] = edge_route_usage.get(edge_key, 0) + 1
+
+    for route in route_cache.values():
+        register_route_usage(route)
+
     debug_print(f"[ACO] Reachable nodes to destination: {len(goal_distance_map)}")
     debug_print(f"[ACO] Ant step limit: {step_limit}")
 
@@ -1798,6 +1891,7 @@ def run_aco(G, start_node, end_node):
                 edge_pheromone,
                 goal_distance_map,
                 step_limit,
+                edge_route_usage=edge_route_usage,
             )
 
             if not ant_route or ant_route[-1] != end_node:
@@ -1812,6 +1906,7 @@ def run_aco(G, start_node, end_node):
             if route is None:
                 route = evaluate_route(G, ant_route, 0, include_coordinates=False)
                 route_cache[route_key] = route
+                register_route_usage(route)
 
             completed_routes.append(route)
 

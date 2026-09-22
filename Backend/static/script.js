@@ -4,6 +4,14 @@ window.BACKEND_BASE = ['127.0.0.1', 'localhost'].includes(window.location.hostna
   : window.location.origin;
 
 let gMap = null;
+// Gated by an IntersectionObserver in initMap() -- the marching-ants route
+// preview (createRoutePreview) restyles a Leaflet layer every 100ms via
+// setInterval the whole time a route is focused. On mobile that interval
+// keeps firing (and repainting) even after the map has scrolled out of
+// view below the fold, which is exactly the kind of always-on redraw that
+// made the homepage's ant canvas feel janky during scroll -- this flag
+// lets that interval skip its work while the map isn't actually visible.
+let mapViewportVisible = true;
 let selectedBarangay = null;
 let selectedHazard = null;
 let simData = null;
@@ -1051,6 +1059,13 @@ function initMap() {
   // Leaflet's marker/layers image sprites, only its CSS/JS).
   L.control.layers({ 'Map': streetLayer, 'Satellite': satelliteLayer }, null, { position: 'topright', collapsed: false }).addTo(gMap);
 
+  if ('IntersectionObserver' in window) {
+    const mapViewportObserver = new IntersectionObserver((entries) => {
+      mapViewportVisible = entries[entries.length - 1].isIntersecting;
+    }, { threshold: 0 });
+    mapViewportObserver.observe(document.getElementById('map'));
+  }
+
   let mapResizeDebounceTimer = null;
   window.addEventListener('resize', () => {
     syncMapOverlayLayout();
@@ -1078,6 +1093,11 @@ async function startApp() {
 
   if (!isBackendLive) {
     document.getElementById('statusTxt').textContent = 'Backend Offline';
+    const emptyMapTxt = document.getElementById('emptyMapTxt');
+    if (emptyMapTxt) {
+      document.getElementById('emptyMapIcon').innerHTML = '&#128506;';
+      emptyMapTxt.textContent = 'Backend offline — reload once it is running.';
+    }
     alert('Backend is not connected. Run the Flask backend first.');
     return;
   }
@@ -4370,7 +4390,7 @@ function createRoutePreview(group) {
 
   let dashOffset = 0;
   group.previewTimer = window.setInterval(() => {
-    if (!group.previewDotsLayer) return;
+    if (!group.previewDotsLayer || !mapViewportVisible) return;
 
     dashOffset = (dashOffset - 1 + 24) % 24;
 

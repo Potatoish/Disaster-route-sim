@@ -1133,6 +1133,20 @@ body.dark .empty-map {
   letter-spacing: 1px;
 }
 
+.empty-map-spinner {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  animation: emptyMapSpin .8s linear infinite;
+}
+
+@keyframes emptyMapSpin {
+  to { transform: rotate(360deg); }
+}
+
 #loader {
   display: none;
   position: absolute;
@@ -2944,8 +2958,23 @@ body.dark .leaflet-popup-close-button {
     overflow: visible;
   }
 
+  /* Same fix as .panel-body above, for the same reason: .right-panel's
+     height:100% (base rule) and .route-safety-panel's overflow-y:auto
+     (base rule) both depend on .app stretching them to a fixed 100vh grid
+     row on desktop. Once .app switches to display:block/height:auto for
+     mobile, height:100% no longer resolves to anything -- but leaving
+     overflow:hidden/auto in place risks trapping a scroll region inside
+     these boxes instead of letting the page itself scroll, which is what
+     made it impossible to scroll down to the rest of the results/safety
+     panel content on a phone. */
   .right-panel {
+    height: auto;
+    overflow: visible;
     min-height: 68vh;
+  }
+
+  .route-safety-panel {
+    overflow-y: visible;
   }
 
   .map-wrap {
