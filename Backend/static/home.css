@@ -233,6 +233,14 @@ section.block{ padding-block:64px; scroll-margin-top:90px; }
 .block-head.center-head{ text-align:center; }
 .block-head h2{ font-size:30px; }
 .block-head p{ color:var(--muted); font-size:14.5px; margin:0; }
+/* Both theme variants are in the markup and swapped by CSS (same approach as
+   .tutorial-tile-shot) so the About page logo follows the theme without
+   home.js having to track a second <img> like it does #brandLogo. */
+.about-logo{ display:flex; justify-content:center; }
+.about-logo img{ width:72px; height:72px; object-fit:contain; }
+.about-logo .logo-dark{ display:none; }
+body.dark .about-logo .logo-light{ display:none; }
+body.dark .about-logo .logo-dark{ display:block; }
 
 /* ---------- ALGORITHM FLOW (how-it-works) ---------- */
 .algo-flow{ display:flex; align-items:stretch; gap:14px; }

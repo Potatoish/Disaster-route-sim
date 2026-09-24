@@ -16,8 +16,10 @@ from osm_routing import (
     HAZARD_THRESHOLD,
     MAX_ELIMINATED_ROUTES_TO_SHOW,
     NUM_ITERATIONS,
+    UNKNOWN_HAZARD_LEVEL,
+    build_elimination_reason,
+    build_hazard_coverage_area,
     build_route_point,
-    clip_graph_to_boundary,
     debug_print,
     edge_traversal_cost,
     estimate_boundary_graph_radius,
@@ -27,14 +29,17 @@ from osm_routing import (
     get_barangay_boundary,
     get_edge_geometry,
     hydrate_route_edge_records,
+    is_point_in_hazard_coverage,
     normalize_barangay_name,
     path_to_coords,
     resolve_route_edge_records,
+    restrict_graph_to_hazard_coverage,
     route_path_signature,
     route_pheromone_score,
     run_aco,
     select_display_routes,
     select_endpoint_node,
+    summarize_hazard_data_coverage,
     warm_static_caches,
 )
 from simulation_progress import reset_progress
@@ -89,20 +94,34 @@ def _format_hazard_signature(maxima):
 
 
 def _resolve_layer_hazard(edge_geom, layer_zones):
-    severity = 1
+    severities = [
+        int(zone["severity"])
+        for zone in layer_zones
+        if zone["prepared"].intersects(edge_geom)
+    ]
+    if not severities:
+        severities = [
+            int(zone["severity"])
+            for zone in layer_zones
+            if zone["tolerance_prepared"].intersects(edge_geom)
+        ]
 
-    for zone in layer_zones:
-        if zone["prepared"].intersects(edge_geom):
-            severity = max(severity, int(zone["severity"]))
-
-    return severity
+    # None, never a default level: a road no zone describes has no reading.
+    return max(severities) if severities else None
 
 
-def _get_earthquake_graph(barangay_name):
-    canonical_name = normalize_barangay_name(barangay_name)
+def _edge_layer_level(edge_data, layer_attr):
+    value = edge_data.get(layer_attr)
+    if value is None or not edge_data.get("hazard_coverage"):
+        return UNKNOWN_HAZARD_LEVEL
+    return int(value)
+
+
+def _get_earthquake_graph(dataset):
+    canonical_name = dataset["canonical_barangay"]
     boundary = get_barangay_boundary(canonical_name)
     if boundary is None:
-        raise ValueError(f"No barangay boundary found for '{barangay_name}'")
+        raise ValueError(f"No barangay boundary found for '{dataset['display_barangay']}'")
 
     cached_graph = _EARTHQUAKE_GRAPH_CACHE.get(canonical_name)
     if cached_graph is not None:
@@ -129,7 +148,15 @@ def _get_earthquake_graph(barangay_name):
                 network_type=GRAPH_NETWORK_TYPE,
                 simplify=True,
             )
-        graph = clip_graph_to_boundary(graph, boundary_geometry)
+        # Only roads inside the barangay AND inside both earthquake layers can
+        # be routed on. The traced layer polygons leave strips of the
+        # barangay (riverbanks, edges) undescribed; before this, roads there
+        # read as severity 1 and were the only "safe" roads in the network.
+        coverage_area = build_hazard_coverage_area(
+            boundary_geometry,
+            [dataset["layer_extents"][layer_key] for layer_key in ("liquefaction", "ground_shaking")],
+        )
+        graph = restrict_graph_to_hazard_coverage(graph, coverage_area)
         debug_print(f"[EQ] Graph loaded: {len(graph.nodes)} nodes, {len(graph.edges)} edges")
 
         _EARTHQUAKE_GRAPH_CACHE[canonical_name] = graph
@@ -162,7 +189,11 @@ def _annotate_graph_with_earthquake_hazards(graph, dataset):
 
             edge_data["eq_liquefaction"] = liquefaction
             edge_data["eq_ground_shaking"] = ground_shaking
-            edge_data["eq_overall"] = max(liquefaction, ground_shaking)
+            if liquefaction is None or ground_shaking is None:
+                edge_data["eq_overall"] = None
+                edge_data["hazard_coverage"] = False
+            else:
+                edge_data["eq_overall"] = max(liquefaction, ground_shaking)
 
         graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
         debug_print(f"[EQ] Hazard annotation complete in {time.perf_counter() - annotation_started:.2f}s")
@@ -174,7 +205,7 @@ def _clone_graph_for_view(base_graph, view_key):
     graph = base_graph.copy()
 
     for _, _, _, edge_data in graph.edges(keys=True, data=True):
-        edge_data["hazard"] = int(edge_data.get(hazard_attr, 1))
+        edge_data["hazard"] = edge_data.get(hazard_attr)
         edge_data["flood_var"] = None
         edge_data["hazard_source"] = "earthquake"
         edge_data["route_cost"] = edge_traversal_cost(edge_data)
@@ -189,8 +220,8 @@ def _build_route_maxima(resolved_edges):
     }
 
     for _, _, _, edge_data in resolved_edges:
-        maxima["liquefaction"] = max(maxima["liquefaction"], int(edge_data.get("eq_liquefaction", 1)))
-        maxima["ground_shaking"] = max(maxima["ground_shaking"], int(edge_data.get("eq_ground_shaking", 1)))
+        maxima["liquefaction"] = max(maxima["liquefaction"], _edge_layer_level(edge_data, "eq_liquefaction"))
+        maxima["ground_shaking"] = max(maxima["ground_shaking"], _edge_layer_level(edge_data, "eq_ground_shaking"))
 
     return maxima
 
@@ -207,6 +238,9 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
     eliminated = False
     threshold_exceedance_count = 0
     hazard_breakdown = {}
+    covered_distance = 0.0
+    uncovered_distance = 0.0
+    uncovered_count = 0
 
     lens_unsafe_distances = {
         "liquefaction": 0.0,
@@ -215,10 +249,15 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
 
     for _, _, _, edge_data in resolved_edges:
         length = max(float(edge_data.get("length", 0)), 1.0)
-        liquefaction = int(edge_data.get("eq_liquefaction", 1))
-        ground_shaking = int(edge_data.get("eq_ground_shaking", 1))
+        liquefaction = _edge_layer_level(edge_data, "eq_liquefaction")
+        ground_shaking = _edge_layer_level(edge_data, "eq_ground_shaking")
 
         total_distance += length
+        if edge_data.get("hazard_coverage"):
+            covered_distance += length
+        else:
+            uncovered_distance += length
+            uncovered_count += 1
 
         if liquefaction > HAZARD_THRESHOLD:
             lens_unsafe_distances["liquefaction"] += length
@@ -233,7 +272,7 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
             )
         else:
             hazard_attr = EARTHQUAKE_VIEW_CONFIG[view_key]["hazard_attr"]
-            hazard_value = int(edge_data.get(hazard_attr, 1))
+            hazard_value = _edge_layer_level(edge_data, hazard_attr)
             risk_distance += length * _lens_hazard_factor(hazard_value)
 
         max_hazard = max(max_hazard, hazard_value)
@@ -283,6 +322,7 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
         "simulation_mode": "earthquake",
         "hazard_signature": hazard_signature,
         "hazard_maxima": maxima,
+        "hazard_data_coverage": summarize_hazard_data_coverage(covered_distance, uncovered_distance),
         "lens_unsafe_distances": {
             key: round(value, 2)
             for key, value in lens_unsafe_distances.items()
@@ -304,10 +344,10 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
             f"Earthquake route to {evacuation_site['name']} ranked by "
             f"{EARTHQUAKE_VIEW_CONFIG[view_key]['description'].lower()}"
         ),
-        "elimination_reason": (
-            f"Contains {threshold_exceedance_count} segment(s) above earthquake threshold {HAZARD_THRESHOLD}"
-            if eliminated
-            else None
+        "elimination_reason": build_elimination_reason(
+            threshold_exceedance_count,
+            uncovered_count,
+            f"above earthquake threshold {HAZARD_THRESHOLD}",
         ),
     }
 
@@ -445,6 +485,10 @@ def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_
 
 
 def _collect_road_reachable_evacuation_sites(base_graph, start_location, evacuation_sites):
+    evacuation_sites = [
+        site for site in evacuation_sites
+        if is_point_in_hazard_coverage(base_graph, site["lat"], site["lng"])
+    ]
     if not evacuation_sites:
         return []
 
@@ -543,7 +587,16 @@ def simulate_earthquake(start, barangay_name):
                 ),
             }
 
-        base_graph = _get_earthquake_graph(barangay_name)
+        base_graph = _get_earthquake_graph(dataset)
+        if not is_point_in_hazard_coverage(base_graph, start_location["lat"], start_location["lng"]):
+            return {
+                "error": True,
+                "message": (
+                    f"{start_location['name']} is outside the {dataset['display_barangay']} "
+                    "earthquake hazard data coverage, so routes from it cannot be checked for safety."
+                ),
+            }
+
         evaluated_sites = _collect_road_reachable_evacuation_sites(
             base_graph,
             start_location,
@@ -552,7 +605,10 @@ def simulate_earthquake(start, barangay_name):
         if not evaluated_sites:
             return {
                 "error": True,
-                "message": "No road-reachable evacuation site is available for this start node.",
+                "message": (
+                    "No evacuation site can be reached from this start node without "
+                    "leaving the area covered by earthquake hazard data."
+                ),
             }
 
         debug_print("\n" + "=" * 60)

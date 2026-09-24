@@ -168,6 +168,8 @@ def print_route_summary(route):
         f"Var {var_value}" for var_value in threshold_vars
     ) or "None"
 
+    coverage = route.get("hazard_data_coverage") or {}
+
     print(
         "  "
         f"R{route.get('display_route_no', '?')}: "
@@ -176,7 +178,8 @@ def print_route_summary(route):
         f"max_hazard={route.get('max_hazard', 0)} "
         f"vars=[{vars_text}] "
         f"threshold_vars=[{threshold_text}] "
-        f"threshold_edges={route.get('threshold_exceedance_count', 0)}"
+        f"threshold_edges={route.get('threshold_exceedance_count', 0)} "
+        f"hazard_data={coverage.get('covered_percent', '?')}%"
     )
 
 

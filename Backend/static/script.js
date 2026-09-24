@@ -4,14 +4,6 @@ window.BACKEND_BASE = ['127.0.0.1', 'localhost'].includes(window.location.hostna
   : window.location.origin;
 
 let gMap = null;
-// Gated by an IntersectionObserver in initMap() -- the marching-ants route
-// preview (createRoutePreview) restyles a Leaflet layer every 100ms via
-// setInterval the whole time a route is focused. On mobile that interval
-// keeps firing (and repainting) even after the map has scrolled out of
-// view below the fold, which is exactly the kind of always-on redraw that
-// made the homepage's ant canvas feel janky during scroll -- this flag
-// lets that interval skip its work while the map isn't actually visible.
-let mapViewportVisible = true;
 let selectedBarangay = null;
 let selectedHazard = null;
 let simData = null;
@@ -1053,17 +1045,25 @@ function initMap() {
   });
 
   L.control.zoom({ position: 'topright' }).addTo(gMap);
+  // Route widths are zoom-scaled (getRouteZoomScale); re-apply them so a
+  // zoomed-in route doesn't shrink to a thin line lost in the hazard fills.
+  gMap.on('zoomend', syncVisibleRoutesForActiveTab);
   // collapsed:false keeps the Map/Satellite choice always visible instead of
   // hiding it behind Leaflet's default collapsed icon (a hover-to-reveal
   // layers glyph that doesn't render here since this page never loads
   // Leaflet's marker/layers image sprites, only its CSS/JS).
   L.control.layers({ 'Map': streetLayer, 'Satellite': satelliteLayer }, null, { position: 'topright', collapsed: false }).addTo(gMap);
 
+  // The focused route's marching dash (createRoutePreview) animates for as
+  // long as a route is selected. On mobile the map often scrolls out of view
+  // below the results, so pause it there instead of repainting an offscreen
+  // map every frame.
   if ('IntersectionObserver' in window) {
+    const mapEl = document.getElementById('map');
     const mapViewportObserver = new IntersectionObserver((entries) => {
-      mapViewportVisible = entries[entries.length - 1].isIntersecting;
+      mapEl.classList.toggle('route-flow-paused', !entries[entries.length - 1].isIntersecting);
     }, { threshold: 0 });
-    mapViewportObserver.observe(document.getElementById('map'));
+    mapViewportObserver.observe(mapEl);
   }
 
   let mapResizeDebounceTimer = null;
@@ -1125,11 +1125,6 @@ async function bootstrapBarangayFromUrl() {
 
 function clearRoutePreview(group) {
   if (!group) return;
-
-  if (group.previewTimer) {
-    window.clearInterval(group.previewTimer);
-    group.previewTimer = null;
-  }
 
   if (group.previewDotsLayer) {
     group.previewDotsLayer.remove();
@@ -3626,12 +3621,6 @@ async function renderActiveSimulationRoutes() {
       hazardOverlayMode: floodHazardOverlayMode,
     });
   }
-
-  // The hazard overlay is (re)drawn after the routes above, which would
-  // otherwise paint it over them in the shared Leaflet overlay pane -- pull
-  // the route lines back on top so they stay the clearest thing on the map
-  // no matter how the hazard layer's own opacity is tuned.
-  (mapLayers.routes || []).forEach(layer => layer.bringToFront());
 }
 
 async function showEvacuationSites() {
@@ -4283,7 +4272,7 @@ function getDefaultRouteVisual(group) {
     return {
       mainWeight: 5,
       mainOpacity: 1,
-      outlineWeight: 9,
+      outlineWeight: 5 + ROUTE_OUTLINE_EXTRA_WEIGHT,
       outlineOpacity: 1,
       glowOpacities: [0.06, 0.10],
       zIndex: 8,
@@ -4294,7 +4283,7 @@ function getDefaultRouteVisual(group) {
     return {
       mainWeight: 4,
       mainOpacity: 1,
-      outlineWeight: 8,
+      outlineWeight: 4 + ROUTE_OUTLINE_EXTRA_WEIGHT,
       outlineOpacity: 1,
       glowOpacities: [0.04],
       zIndex: 5,
@@ -4308,7 +4297,7 @@ function getDefaultRouteVisual(group) {
     ? {
         mainWeight: 4,
         mainOpacity: 0.9,
-        outlineWeight: 8,
+        outlineWeight: 4 + ROUTE_OUTLINE_EXTRA_WEIGHT,
         outlineOpacity: 0.95,
         glowOpacities: [0.04],
         zIndex: 4,
@@ -4316,7 +4305,7 @@ function getDefaultRouteVisual(group) {
     : {
         mainWeight: 3,
         mainOpacity: 0.8,
-        outlineWeight: 7,
+        outlineWeight: 3 + ROUTE_OUTLINE_EXTRA_WEIGHT,
         outlineOpacity: 0.9,
         glowOpacities: [],
         zIndex: 4,
@@ -4370,32 +4359,21 @@ function createRoutePreview(group) {
 
   clearRoutePreview(group);
 
-  // The focused route's own solid line (bold color + dark outline) already
-  // stays fully visible underneath -- see getFocusedRouteVisual -- so this is
-  // just a bright white dash marching on top of it toward the destination.
-  // Long, evenly-sized dashes (not the old sparse dots) so the flow reads
-  // clearly instead of looking like a faint, broken line.
-  const dashPattern = '13, 11';
-
+  // The focused route's own solid line stays fully visible underneath -- see
+  // getFocusedRouteVisual -- so this is just a white dash marching on top of
+  // it toward the destination. Animated by style.css (route-flow--focus), not
+  // a JS timer, so it moves smoothly. Dash + gap = the 24px CSS loop.
   group.previewDotsLayer = L.polyline(path, {
     color: '#ffffff',
-    weight: 5,
+    weight: 4 * getRouteZoomScale(gMap),
     opacity: 0.95,
-    dashArray: dashPattern,
+    dashArray: '13 11',
     lineCap: 'round',
     interactive: false,
+    className: 'route-line route-flow route-flow--focus',
   }).addTo(gMap);
 
   group.previewDotsLayer.bringToFront();
-
-  let dashOffset = 0;
-  group.previewTimer = window.setInterval(() => {
-    if (!group.previewDotsLayer || !mapViewportVisible) return;
-
-    dashOffset = (dashOffset - 1 + 24) % 24;
-
-    group.previewDotsLayer.setStyle({ dashOffset: String(dashOffset) });
-  }, 100);
 }
 
 function syncRoutePreview(group, enabled) {
@@ -4421,6 +4399,10 @@ function isRouteCategoryVisibleOnMap(category, tabName = activeResultsTab) {
 function hideRouteGroup(group) {
   if (!group) return;
 
+  if (group.casingLayer) {
+    group.casingLayer.setStyle({ opacity: 0 });
+  }
+
   if (group.outlineLayer) {
     group.outlineLayer.setStyle({ opacity: 0 });
   }
@@ -4439,17 +4421,27 @@ function hideRouteGroup(group) {
 function applyRouteGroupVisual(group, visual) {
   if (!group) return;
 
+  const zoomScale = getRouteZoomScale(gMap);
+  const outlineWeight = visual.outlineWeight * zoomScale;
+
+  if (group.casingLayer) {
+    group.casingLayer.setStyle({
+      opacity: visual.outlineOpacity * ROUTE_CASING_OPACITY,
+      weight: outlineWeight + ROUTE_CASING_EXTRA_WEIGHT,
+    });
+  }
+
   if (group.outlineLayer) {
     group.outlineLayer.setStyle({
       opacity: visual.outlineOpacity,
-      weight: visual.outlineWeight,
+      weight: outlineWeight,
     });
   }
 
   if (group.mainLayer) {
     group.mainLayer.setStyle({
       opacity: visual.mainOpacity,
-      weight: visual.mainWeight,
+      weight: visual.mainWeight * zoomScale,
     });
   }
 
@@ -4462,6 +4454,7 @@ function applyRouteGroupVisual(group, visual) {
 function bringRouteGroupToFront(group) {
   if (!group) return;
   (group.glowLayers || []).forEach(layer => layer.bringToFront());
+  if (group.casingLayer) group.casingLayer.bringToFront();
   if (group.outlineLayer) group.outlineLayer.bringToFront();
   if (group.mainLayer) group.mainLayer.bringToFront();
 }
