@@ -101,8 +101,8 @@ button{font-family:inherit; cursor:pointer;}
 }
 
 .nav-row{
-  width:fit-content; margin:0 auto; display:flex; align-items:center;
-  gap:20px; flex-wrap:wrap; padding:8px 10px 8px 18px; border-radius:999px;
+  width:fit-content; max-width:100%; margin:0 auto; display:flex; align-items:center;
+  gap:20px; flex-wrap:nowrap; padding:8px 10px 8px 18px; border-radius:999px;
   border:1px solid var(--border); background:color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter:blur(10px); box-shadow:0 12px 30px rgba(15,23,42,.10);
 }
@@ -115,7 +115,7 @@ body.dark .nav-row{ box-shadow:0 12px 30px rgba(0,0,0,.32); }
 .brand-word{font-family:var(--font-heading); font-weight:700; font-size:18px; letter-spacing:.3px; color:var(--text);}
 .nav-links{display:flex; align-items:center; gap:4px;}
 .nav-btn{
-  border:none; background:transparent; color:var(--muted); font-size:14px; font-weight:600;
+  border:none; background:transparent; color:var(--muted); font-size:14px; font-weight:600; white-space:nowrap;
   padding:8px 16px; border-radius:999px; text-decoration:none; display:inline-flex; align-items:center; gap:7px;
   transition:color .16s ease, background .16s ease;
 }
@@ -233,6 +233,14 @@ section.block{ padding-block:64px; scroll-margin-top:90px; }
 .block-head.center-head{ text-align:center; }
 .block-head h2{ font-size:30px; }
 .block-head p{ color:var(--muted); font-size:14.5px; margin:0; }
+/* Both theme variants are in the markup and swapped by CSS (same approach as
+   .tutorial-tile-shot) so the About page logo follows the theme without
+   home.js having to track a second <img> like it does #brandLogo. */
+.about-logo{ display:flex; justify-content:center; }
+.about-logo img{ width:72px; height:72px; object-fit:contain; }
+.about-logo .logo-dark{ display:none; }
+body.dark .about-logo .logo-light{ display:none; }
+body.dark .about-logo .logo-dark{ display:block; }
 
 /* ---------- ALGORITHM FLOW (how-it-works) ---------- */
 .algo-flow{ display:flex; align-items:stretch; gap:14px; }
@@ -447,39 +455,58 @@ body.tutorial-modal-open{ overflow:hidden; }
   .algo-flow{ flex-direction:column; }
   .gtk-grid{ grid-template-columns:1fr; }
   .about-grid, .research-grid{ grid-template-columns:1fr; }
-  .nav-links{ order:3; width:100%; justify-content:center; }
   .hero-split{ grid-template-columns:1fr; text-align:center; }
   .hero-copy{ align-items:center; }
   .hero-actions{ justify-content:center; }
   .qs-barangay-grid{ grid-template-columns:1fr; }
 }
+/* The pill nav stays a single row at every width, same as desktop -- wrapping
+   it (links pushed to their own row, labels breaking onto 2-3 lines) is what
+   made the phone header look like a broken layout. Instead it sheds detail in
+   steps as the viewport narrows: tighter spacing, then the link icons, then
+   the " & Contact" half of that label, then the wordmark text. Each step's
+   breakpoint is where the previous step stops fitting, with some slack.
+   If a phone's enlarged system font still overflows the last step, the
+   links scroll sideways inside the pill rather than breaking it. */
+@media (max-width:720px){
+  .site-nav{ padding:10px 10px 0; }
+  .site-nav .wrap{ padding-inline:0; }
+  .nav-row{ gap:8px; padding:5px 5px 5px 12px; }
+  .brand, .nav-actions{ flex:none; }
+  .nav-links{ min-width:0; overflow-x:auto; scrollbar-width:none; }
+  .nav-links::-webkit-scrollbar{ display:none; }
+  .brand img{ width:32px; height:32px; margin-right:-8px; }
+  .brand-word{ font-size:16px; }
+  .nav-links{ gap:2px; }
+  .nav-btn{ padding:7px 11px; font-size:12.5px; gap:5px; }
+  .nav-btn svg{ width:13px; height:13px; }
+  .theme-switch-btn{ width:26px; height:26px; }
+  .theme-switch-btn svg{ width:14px; height:14px; }
+}
+@media (max-width:520px){
+  .nav-row{ gap:6px; padding:4px 4px 4px 10px; }
+  .brand img{ width:28px; height:28px; margin-right:-7px; }
+  .brand-word{ font-size:15px; }
+  .nav-btn{ padding:7px 10px; font-size:12px; }
+  .nav-btn svg{ display:none; }
+  .theme-switch{ padding:2px; }
+  .theme-switch-btn{ width:24px; height:24px; }
+}
+@media (max-width:440px){
+  .nav-label-extra{ display:none; }
+}
+@media (max-width:360px){
+  .site-nav{ padding-inline:8px; }
+  .nav-row{ gap:4px; padding-left:8px; }
+  .nav-btn{ padding:7px 8px; font-size:11.5px; }
+}
+@media (max-width:340px){
+  .brand-word{ display:none; }
+  .brand img{ margin-right:0; }
+}
 @media (max-width:480px){
   .coverage-badge span{ display:none; }
   .coverage-badge{ padding:8px; }
-
-  /* Below ~480px the pill nav no longer has room for brand + theme switch
-     + 3 full-width text links on one line, even wrapped -- .nav-links'
-     items were overflowing .nav-row's fit-content box and getting clipped
-     by html,body's overflow-x:hidden instead of actually fitting. Give the
-     row real width and let each link shrink/wrap inside an equal 1/3
-     share instead of past it. */
-  .site-nav{ padding:10px 12px 0; }
-  .nav-row{
-    width:100%; max-width:460px; border-radius:20px; padding:10px 12px; gap:8px;
-  }
-  .brand img{ width:32px; height:32px; }
-  .brand-word{ font-size:16px; }
-  /* flex:1 1 0 (equal thirds) squeezed "About & Contact" and "How to use"
-     down to where the browser wrapped mid-phrase onto 2-3 lines inside the
-     pill. Sizing each link to its own content plus letting the row itself
-     wrap keeps every label on one line -- worst case the pills spill onto
-     a second row instead of breaking apart. */
-  .nav-links{ gap:6px; flex-wrap:wrap; justify-content:center; }
-  .nav-btn{
-    flex:0 1 auto; min-width:0; justify-content:center; text-align:center;
-    padding:8px 12px; font-size:12px; gap:5px; white-space:nowrap;
-  }
-  .nav-btn svg{ width:14px; height:14px; }
 
   /* The feedback FAB is fixed to the corner at every width; on a phone-width
      hero the quickstart card's full-width CTA sits right under it, so the

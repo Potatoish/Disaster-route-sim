@@ -2,9 +2,10 @@ import json
 from pathlib import Path
 
 from shapely.geometry import shape
+from shapely.ops import unary_union
 from shapely.prepared import prep
 
-from osm_routing import normalize_barangay_name
+from osm_routing import HAZARD_COVERAGE_TOLERANCE_METERS, debug_print, normalize_barangay_name
 
 EARTHQUAKE_DATA_ROOT = Path(__file__).parent / "data" / "earthquake"
 SUPPORTED_BARANGAYS = ("pinagbuhatan", "sta lucia")
@@ -115,7 +116,7 @@ def _extract_layer_severity(layer_key, properties):
         if severity is not None:
             return max(1, min(5, severity))
 
-    return 1
+    return None
 
 
 def _normalize_layer_features(layer_key, feature_collection, canonical_barangay):
@@ -137,6 +138,15 @@ def _normalize_layer_features(layer_key, feature_collection, canonical_barangay)
             continue
 
         severity = _extract_layer_severity(layer_key, properties)
+        if severity is None:
+            # A zone with no readable level is not hazard data; dropping it
+            # keeps its area out of the routing coverage instead of letting it
+            # count as the lowest (safest) level.
+            debug_print(
+                f"[EQ] Skipping {layer_key} feature {index} for {display_barangay}: no readable hazard level"
+            )
+            continue
+
         feature_id = str(
             properties.get("id")
             or feature.get("id")
@@ -167,6 +177,12 @@ def _normalize_layer_features(layer_key, feature_collection, canonical_barangay)
             "display_geometry": geometry_data,
             "evaluation_geometry": evaluation_geometry,
             "prepared": prep(evaluation_geometry),
+            # Roads kept by the coverage tolerance can sit just outside every
+            # traced zone; they take their reading from the zone they are
+            # within tolerance of instead of defaulting to a "safe" level.
+            "tolerance_prepared": prep(
+                evaluation_geometry.buffer(HAZARD_COVERAGE_TOLERANCE_METERS / METERS_PER_DEGREE)
+            ),
             "properties": properties,
         })
 
@@ -213,6 +229,7 @@ def get_earthquake_dataset(barangay_name):
 
     layer_payloads = {}
     layer_zones = {}
+    layer_extents = {}
     for layer_key, path in _LAYER_FILES.items():
         raw_layer = _load_feature_collection(path)
         normalized_features = _normalize_layer_features(layer_key, raw_layer, canonical_name)
@@ -221,6 +238,9 @@ def get_earthquake_dataset(barangay_name):
                 f"No {layer_key.replace('_', ' ')} features found for '{DISPLAY_BARANGAY_NAMES[canonical_name]}'"
             )
         layer_zones[layer_key] = normalized_features
+        layer_extents[layer_key] = unary_union([
+            feature["evaluation_geometry"] for feature in normalized_features
+        ])
         layer_payloads[layer_key] = {
             "type": "FeatureCollection",
             "features": [
@@ -239,6 +259,7 @@ def get_earthquake_dataset(barangay_name):
         "evacuation_sites": evacuation_sites,
         "layer_payloads": layer_payloads,
         "layer_zones": layer_zones,
+        "layer_extents": layer_extents,
     }
     _DATASET_CACHE[canonical_name] = dataset
     return dataset

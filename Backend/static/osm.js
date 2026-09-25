@@ -1,6 +1,37 @@
 const ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS = 12;
 const ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS = 90;
 const ROUTE_OUTLINE_COLOR = '#ffffff';
+// White band on each side of the colored line (2px per side). The amber/red
+// route colors share hues with the flood fills, so this band -- not the line
+// color -- is what separates a route from the hazard area it runs through.
+const ROUTE_OUTLINE_EXTRA_WEIGHT = 4;
+// Soft dark edge outside the white band, so the band itself doesn't wash out
+// against pale yellow fills, the light basemap, or satellite imagery. Kept
+// translucent so the line reads as light, not as a heavy black border.
+const ROUTE_CASING_COLOR = '#0f172a';
+const ROUTE_CASING_OPACITY = 0.45;
+const ROUTE_CASING_EXTRA_WEIGHT = 2;
+const HAZARD_PANE = 'hazardPane';
+
+// Leaflet line widths are fixed in screen pixels, so zooming in leaves a
+// route as a thin line inside wide hazard fills. Grow routes gently from
+// zoom ~15.5 (the default overview stays as is) up to 1.5x at street level.
+function getRouteZoomScale(map) {
+  const zoom = map ? map.getZoom() : 15;
+  return Math.min(1.5, Math.max(1, 1 + (zoom - 15.5) * 0.2));
+}
+
+// Hazard overlays get their own pane under Leaflet's overlayPane (z-index
+// 400), so route lines always paint above them no matter how often either
+// is redrawn -- e.g. toggling a flood severity filter after a simulation.
+function ensureHazardPane(map) {
+  if (!map.getPane(HAZARD_PANE)) {
+    const pane = map.createPane(HAZARD_PANE);
+    pane.style.zIndex = 350;
+    pane.style.pointerEvents = 'none';
+  }
+  return HAZARD_PANE;
+}
 
 function formatDistanceKm(distanceMeters) {
   const numericDistance = Number(distanceMeters);
@@ -270,6 +301,7 @@ function createRouteGroup(route, cfg) {
     baseWeight: cfg.weight,
     baseOpacity: cfg.opacity,
     glowLayers: [],
+    casingLayer: null,
     outlineLayer: null,
     mainLayer: null,
   };
@@ -284,6 +316,8 @@ function trackRouteLayer(layer, routeGroup, mapLayers, kind) {
 
   if (kind === 'glow') {
     routeGroup.glowLayers.push(layer);
+  } else if (kind === 'casing') {
+    routeGroup.casingLayer = layer;
   } else if (kind === 'outline') {
     routeGroup.outlineLayer = layer;
   } else if (kind === 'main') {
@@ -330,15 +364,26 @@ function addRouteGlow(route, pathCoords, gMap, mapLayers, routeGroup) {
 // eliminated alike) crisp against the basemap and against each other,
 // instead of the colored strokes blending straight into the map underneath.
 function addRouteOutline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
+  trackRouteLayer(L.polyline(pathCoords, {
+    color: ROUTE_CASING_COLOR,
+    opacity: cfg.opacity * ROUTE_CASING_OPACITY,
+    weight: cfg.weight + ROUTE_OUTLINE_EXTRA_WEIGHT + ROUTE_CASING_EXTRA_WEIGHT,
+    lineCap: 'round',
+    lineJoin: 'round',
+    interactive: false,
+    className: 'route-line',
+  }).addTo(gMap), routeGroup, mapLayers, 'casing');
+
   return trackRouteLayer(L.polyline(pathCoords, {
     color: ROUTE_OUTLINE_COLOR,
     // Mirrors the main line's own opacity so eliminated/available routes
     // stay visibly secondary to "best" instead of all halos popping equally.
     opacity: cfg.opacity,
-    weight: cfg.weight + 4,
+    weight: cfg.weight + ROUTE_OUTLINE_EXTRA_WEIGHT,
     lineCap: 'round',
     lineJoin: 'round',
     interactive: false,
+    className: 'route-line',
   }).addTo(gMap), routeGroup, mapLayers, 'outline');
 }
 
@@ -349,6 +394,7 @@ function addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
     weight: cfg.weight,
     lineCap: 'round',
     lineJoin: 'round',
+    className: 'route-line',
   }).addTo(gMap), routeGroup, mapLayers, 'main');
 }
 

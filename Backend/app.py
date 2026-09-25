@@ -15,6 +15,23 @@ from simulation_progress import get_progress, reset_progress
 app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
 
+
+@app.url_defaults
+def _version_static_urls(endpoint, values):
+    # Production sends static files with no Cache-Control, so phones fall back
+    # to heuristic caching and can keep serving an old home.css/script.js for
+    # hours after a deploy. Stamping every url_for('static', ...) with the
+    # file's mtime changes the URL whenever the file does, forcing a refetch.
+    if endpoint != "static" or "v" in values:
+        return
+    filename = values.get("filename")
+    if not filename:
+        return
+    try:
+        values["v"] = int(os.stat(os.path.join(app.static_folder, filename)).st_mtime)
+    except OSError:
+        pass
+
 _SIMULATION_GATE = Lock()
 _SIMULATION_STATE_LOCK = RLock()
 _SIMULATION_STATE = {

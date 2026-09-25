@@ -15,15 +15,19 @@ from shapely.ops import unary_union
 from simulation_progress import bump_progress, reset_progress
 
 HAZARD_THRESHOLD = 3
+# Hazard level a road is scored at when it has no hazard reading. Deliberately
+# above HAZARD_THRESHOLD: missing hazard data must never read as "safe".
+UNKNOWN_HAZARD_LEVEL = 5
 FINAL_ROUTES_TO_SHOW = 5
 MAX_ELIMINATED_ROUTES_TO_SHOW = 3
 DISPLAY_ROUTE_OVERLAP_THRESHOLDS = (0.6, 0.75, 0.9, 1.01)
 
 DIST_METERS = 7000
-MIN_ROUTE_SEARCH_RADIUS_METERS = 1200.0
-MAX_ROUTE_SEARCH_RADIUS_METERS = 4500.0
-ROUTE_SEARCH_RADIUS_BUFFER_METERS = 500.0
-ROUTE_SEARCH_RADIUS_DISTANCE_FACTOR = 0.9
+# Routes may only use roads inside the hazard data coverage area (see
+# build_hazard_coverage_area). This slack keeps roads drawn along a boundary
+# line from being cut off by the few meters the traced polygons are off by;
+# below ~10 m Sta. Lucia's network splits apart along Ortigas Ave. Extension.
+HAZARD_COVERAGE_TOLERANCE_METERS = 20.0
 ROUTE_STITCH_SNAP_TOLERANCE_METERS = 12.0
 ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS = 90.0
 MAX_ENDPOINT_NODE_EXTRA_DISTANCE_METERS = 90.0
@@ -67,7 +71,7 @@ DISTANCE_WEIGHT = 0.20
 UNSAFE_PENALTY = 1_000_000.0
 TOP_ACO_REINFORCERS = 3
 DEBUG = True
-FLOOD_GRAPH_ANNOTATION_VERSION = 1
+FLOOD_GRAPH_ANNOTATION_VERSION = 2
 
 DISCOURAGED_ENDPOINT_HIGHWAYS = {"track"}
 DISCOURAGED_ENDPOINT_SERVICE_VALUES = {"driveway", "parking_aisle", "parking", "alley"}
@@ -141,7 +145,6 @@ FLOOD_VAR_RISK_LABELS = {
     3: "High",
 }
 METERS_PER_DEGREE = 111_320.0
-GRAPH_BOUNDARY_BUFFER_METERS = 50.0
 FLOOD_LAYER_BUFFER_METERS = 800.0
 FLOOD_LAYER_SIMPLIFY_TOLERANCE = 0.00003
 FLOOD_LAYER_SIMPLIFY_TOLERANCE_BUFFER = 0.00008
@@ -525,6 +528,9 @@ def get_edge_geometry(G, u, v, data):
 
 
 def resolve_edge_hazard(edge_geom, flood_zones):
+    # Falling through to hazard 1 means "the flood model shows no flooding
+    # here", which only holds inside the flood coverage area -- callers must
+    # only pass edges from a restrict_graph_to_hazard_coverage() graph.
     if edge_geom is None or edge_geom.is_empty:
         return 1, None
 
@@ -563,15 +569,6 @@ def resolve_point_hazard(lat, lng, flood_zones=None):
     }
 
 
-def make_graph_cache_key(start_lat, start_lng, end_lat, end_lng, dist_meters, scope_name=None):
-    if scope_name:
-        return ("scope", GRAPH_NETWORK_TYPE, normalize_barangay_name(scope_name), int(round(dist_meters)))
-
-    center_lat = round((start_lat + end_lat) / 2, 3)
-    center_lng = round((start_lng + end_lng) / 2, 3)
-    return (GRAPH_NETWORK_TYPE, center_lat, center_lng, dist_meters)
-
-
 def estimate_boundary_graph_radius(boundary_geometry):
     centroid = boundary_geometry.centroid
     max_distance = 0.0
@@ -589,23 +586,6 @@ def estimate_boundary_graph_radius(boundary_geometry):
             )
 
     return max(DIST_METERS * 0.35, max_distance + 180.0)
-
-
-def estimate_route_search_radius(start_lat, start_lng, end_lat, end_lng):
-    direct_distance = coordinate_distance_meters(
-        start_lat,
-        start_lng,
-        end_lat,
-        end_lng,
-    )
-    estimated_radius = (
-        direct_distance * ROUTE_SEARCH_RADIUS_DISTANCE_FACTOR
-        + ROUTE_SEARCH_RADIUS_BUFFER_METERS
-    )
-    return max(
-        MIN_ROUTE_SEARCH_RADIUS_METERS,
-        min(MAX_ROUTE_SEARCH_RADIUS_METERS, estimated_radius),
-    )
 
 
 def get_barangay_base_graph_path(name):
@@ -664,46 +644,60 @@ def get_barangay_base_graph(name):
             raise
 
 
-def clip_graph_to_boundary(G, boundary_geometry):
-    # Small buffer so roads that graze the boundary line aren't severed from
-    # the rest of the network.
-    buffered_boundary = boundary_geometry.buffer(GRAPH_BOUNDARY_BUFFER_METERS / METERS_PER_DEGREE)
-    prepared_boundary = prep(buffered_boundary)
-    keep_nodes = set()
+def find_barangay_for_point(lat, lng):
+    point = Point(float(lng), float(lat))
+    for canonical_name, boundary in load_barangay_boundaries().items():
+        if boundary["prepared"].covers(point):
+            return canonical_name
+    return None
 
-    for node_id, node_data in G.nodes(data=True):
-        point = Point(float(node_data["x"]), float(node_data["y"]))
-        if prepared_boundary.intersects(point):
-            keep_nodes.add(node_id)
 
-    if not keep_nodes:
-        raise ValueError("No graph nodes found inside the selected barangay boundary")
+def build_hazard_coverage_area(boundary_geometry, hazard_extents=()):
+    """The area where a route can actually be checked for safety: inside the
+    barangay polygon and inside every given hazard layer's extent, each
+    widened by HAZARD_COVERAGE_TOLERANCE_METERS."""
+    tolerance = HAZARD_COVERAGE_TOLERANCE_METERS / METERS_PER_DEGREE
+    coverage_area = boundary_geometry.buffer(tolerance)
+    for extent in hazard_extents:
+        coverage_area = coverage_area.intersection(extent.buffer(tolerance))
+    return coverage_area
 
-    clipped_graph = G.subgraph(keep_nodes).copy()
+
+def restrict_graph_to_hazard_coverage(G, coverage_area):
+    """Keep only roads lying entirely inside coverage_area, so no route can
+    cross ground the hazard data says nothing about. Kept edges are stamped
+    hazard_coverage=True; edge_hazard_level() scores any other edge as unsafe."""
+    prepared_area = prep(coverage_area)
+    keep_edges = [
+        (u, v, key)
+        for u, v, key, data in G.edges(keys=True, data=True)
+        if prepared_area.covers(get_edge_geometry(G, u, v, data))
+    ]
+    if not keep_edges:
+        raise ValueError("No roads found inside the hazard data coverage area")
+
+    restricted_graph = G.edge_subgraph(keep_edges).copy()
+    for _, _, data in restricted_graph.edges(data=True):
+        data["hazard_coverage"] = True
+    restricted_graph.graph["hazard_coverage_area"] = coverage_area
+
     debug_print(
-        f"[BOUNDARY] Scoped graph: kept {len(clipped_graph.nodes)} nodes / {len(clipped_graph.edges)} edges"
+        f"[COVERAGE] Kept {len(restricted_graph.edges)} of {len(G.edges)} edges "
+        f"({len(restricted_graph.nodes)} nodes) inside hazard data coverage"
     )
-    return clipped_graph
+    return restricted_graph
 
 
-def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS, scope_name=None):
-    center_lat = (start_lat + end_lat) / 2
-    center_lng = (start_lng + end_lng) / 2
-    dist_meters = estimate_route_search_radius(
-        start_lat,
-        start_lng,
-        end_lat,
-        end_lng,
-    )
+def is_point_in_hazard_coverage(G, lat, lng):
+    coverage_area = G.graph.get("hazard_coverage_area")
+    if coverage_area is None:
+        return False
+    return coverage_area.covers(Point(float(lng), float(lat)))
 
-    cache_key = make_graph_cache_key(
-        start_lat,
-        start_lng,
-        end_lat,
-        end_lng,
-        dist_meters,
-        scope_name=scope_name,
-    )
+
+def build_graph(scope_name):
+    canonical_name = normalize_barangay_name(scope_name)
+    cache_key = ("flood_coverage", GRAPH_NETWORK_TYPE, canonical_name)
 
     cached_graph = _GRAPH_CACHE.get(cache_key)
     if cached_graph is not None:
@@ -716,46 +710,30 @@ def build_graph(start_lat, start_lng, end_lat, end_lng, dist_meters=DIST_METERS,
             debug_print(f"[OSM] Using cached graph for key={cache_key}")
             return cached_graph
 
-        G = None
-        if scope_name:
-            base_graph = get_barangay_base_graph(scope_name)
-            if base_graph is not None:
-                debug_print(f"[OSM] Building scoped graph from local base graph for {normalize_barangay_name(scope_name)}")
-                bbox = ox.utils_geo.bbox_from_point((center_lat, center_lng), dist_meters)
-                try:
-                    G = ox.truncate.truncate_graph_bbox(
-                        base_graph,
-                        bbox,
-                        truncate_by_edge=False,
-                    )
-                except ValueError:
-                    G = None
+        boundary = get_barangay_boundary(canonical_name)
+        base_graph = get_barangay_base_graph(canonical_name) if boundary is not None else None
+        if base_graph is None:
+            raise ValueError(f"No hazard data coverage is configured for '{scope_name}'")
 
-        if G is None:
-            debug_print(f"[OSM] Building graph with radius {dist_meters} meters")
-            debug_print(f"[OSM] Center: ({center_lat}, {center_lng})")
-            G = ox.graph_from_point(
-                (center_lat, center_lng),
-                dist=dist_meters,
-                network_type=GRAPH_NETWORK_TYPE,
-                simplify=True
-            )
-
+        # The flood layers span all of Pasig City and stop at the city limits,
+        # so inside the barangay polygon a road with no Var 1/2/3 polygon is
+        # one the flood model shows as not flooding -- real data. Past the
+        # polygon (e.g. into Cainta/Taytay) there is no flood data at all, so
+        # those roads are dropped rather than silently scored as hazard 1.
+        debug_print(f"[OSM] Building flood coverage graph for {boundary['display_name']}")
+        G = restrict_graph_to_hazard_coverage(
+            base_graph,
+            build_hazard_coverage_area(boundary["geometry"]),
+        )
         G.graph["graph_cache_key"] = cache_key
         _GRAPH_CACHE[cache_key] = G
         debug_print(f"[OSM] Graph loaded: {len(G.nodes)} nodes, {len(G.edges)} edges")
         return G
 
 
-def prepare_routing_graph(start_lat, start_lng, end_lat, end_lng, barangay_name=None):
+def prepare_routing_graph(barangay_name):
     warm_static_caches()
-    G = build_graph(
-        start_lat,
-        start_lng,
-        end_lat,
-        end_lng,
-        scope_name=barangay_name,
-    )
+    G = build_graph(barangay_name)
     assign_flood_hazards(G)
     return G
 
@@ -803,7 +781,7 @@ def build_endpoint_node_profile(G, node_id, label):
     edge_profiles = []
 
     for u, v, key, data in get_endpoint_directional_edges(G, node_id, label):
-        hazard = int(data.get("hazard", 1))
+        hazard = edge_hazard_level(data)
         blocked = is_blocked_endpoint_edge(data)
         preferred = is_preferred_endpoint_edge(data)
         edge_profiles.append({
@@ -1029,9 +1007,19 @@ def assign_flood_hazards(G):
         G.graph["flood_hazard_annotation_version"] = FLOOD_GRAPH_ANNOTATION_VERSION
 
 
+def edge_has_hazard_data(edge):
+    return bool(edge.get("hazard_coverage")) and edge.get("hazard") is not None
+
+
+def edge_hazard_level(edge):
+    if not edge_has_hazard_data(edge):
+        return UNKNOWN_HAZARD_LEVEL
+    return int(edge["hazard"])
+
+
 def edge_metrics(edge):
     length = max(float(edge.get("length", 0)), 1.0)
-    hazard = int(edge.get("hazard", 1))
+    hazard = edge_hazard_level(edge)
     hazard_factor = max(0.0, (hazard - 1) / 4.0)
     return length, hazard, hazard_factor
 
@@ -1413,6 +1401,9 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
     threshold_exceedance_vars = set()
     risk_distance = 0.0
     unsafe_distance = 0.0
+    covered_distance = 0.0
+    uncovered_distance = 0.0
+    uncovered_count = 0
 
     resolved_edges = resolve_route_edge_records(G, route)
 
@@ -1424,6 +1415,11 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
         flood_var = edge.get("flood_var")
 
         total_distance += length
+        if edge_has_hazard_data(edge):
+            covered_distance += length
+        else:
+            uncovered_distance += length
+            uncovered_count += 1
         total_hazard += hazard
         max_hazard = max(max_hazard, hazard)
         hazard_breakdown[str(hazard)] = hazard_breakdown.get(str(hazard), 0) + 1
@@ -1455,12 +1451,36 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
         "flood_vars_encountered": sorted(flood_vars_encountered),
         "threshold_exceedance_count": threshold_exceedance_count,
         "threshold_exceedance_vars": sorted(threshold_exceedance_vars),
-        "elimination_reason": (
-            f"Contains {threshold_exceedance_count} edge(s) above safe threshold {HAZARD_THRESHOLD}"
-            if eliminated
-            else None
+        "hazard_data_coverage": summarize_hazard_data_coverage(covered_distance, uncovered_distance),
+        "elimination_reason": build_elimination_reason(
+            threshold_exceedance_count,
+            uncovered_count,
+            f"above safe threshold {HAZARD_THRESHOLD}",
         ),
     }
+
+
+def summarize_hazard_data_coverage(covered_distance, uncovered_distance):
+    total_distance = covered_distance + uncovered_distance
+    return {
+        "covered_distance": round(covered_distance, 2),
+        "uncovered_distance": round(uncovered_distance, 2),
+        "covered_percent": (
+            round(100.0 * covered_distance / total_distance, 1)
+            if total_distance > 0
+            else 100.0
+        ),
+    }
+
+
+def build_elimination_reason(threshold_exceedance_count, uncovered_count, threshold_label):
+    if not threshold_exceedance_count:
+        return None
+
+    reason = f"Contains {threshold_exceedance_count} edge(s) {threshold_label}"
+    if uncovered_count:
+        reason += f", {uncovered_count} of them with no hazard data"
+    return reason
 
 
 def safety_sort_key(route):
@@ -1760,7 +1780,7 @@ def get_ant_choices(
             1.0 / (edge_traversal_cost(edge) + DESTINATION_WEIGHT * goal_distance + 1e-9)
         ) ** BETA
 
-        if int(edge.get("hazard", 1)) > HAZARD_THRESHOLD:
+        if edge_hazard_level(edge) > HAZARD_THRESHOLD:
             eta *= UNSAFE_EDGE_HEURISTIC_FACTOR
 
         if visits > 0:
@@ -2073,13 +2093,28 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     phase_started = simulation_started
     debug_print("[OSM] Phase 1/4: preparing routing graph")
 
-    G = prepare_routing_graph(
-        start_lat,
-        start_lng,
-        end_lat,
-        end_lng,
-        barangay_name=barangay_name,
-    )
+    scope_name = barangay_name or find_barangay_for_point(start_lat, start_lng)
+    if not scope_name:
+        return {
+            "error": True,
+            "message": f"{start_name} is outside the barangays this system has hazard data for.",
+        }
+
+    G = prepare_routing_graph(scope_name)
+    scope_display_name = get_barangay_boundary(scope_name)["display_name"]
+
+    for location_name, lat, lng in (
+        (start_name, start_lat, start_lng),
+        (end_name, end_lat, end_lng),
+    ):
+        if not is_point_in_hazard_coverage(G, lat, lng):
+            return {
+                "error": True,
+                "message": (
+                    f"{location_name} is outside the {scope_display_name} hazard data "
+                    "coverage, so a route to it cannot be checked for safety."
+                ),
+            }
 
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 1/4 complete in {now - phase_started:.2f}s")
@@ -2099,7 +2134,10 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     if not candidate_routes:
         return {
             "error": True,
-            "message": "No candidate routes found for the selected locations."
+            "message": (
+                "No route was found between the selected locations that stays "
+                "inside the area covered by hazard data."
+            ),
         }
 
     phase_started = now

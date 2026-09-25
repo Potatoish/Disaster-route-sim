@@ -5,26 +5,28 @@
     highlightVar: null,
   };
 
+  // Strong enough to read against the OSM basemap's own beige/tan fills;
+  // route lines stay on top anyway (hazard pane + dark route casing in osm.js).
   const FLOOD_LAYER_STYLES = {
     1: {
-      fillColor: '#fde047',
-      strokeColor: '#eab308',
-      fillOpacity: 0.12,
-      strokeOpacity: 0.26,
-      strokeWeight: 0.9,
+      fillColor: '#facc15',
+      strokeColor: '#ca8a04',
+      fillOpacity: 0.32,
+      strokeOpacity: 0.5,
+      strokeWeight: 0.8,
     },
     2: {
-      fillColor: '#fb923c',
-      strokeColor: '#f97316',
-      fillOpacity: 0.14,
-      strokeOpacity: 0.32,
-      strokeWeight: 0.95,
+      fillColor: '#f97316',
+      strokeColor: '#ea580c',
+      fillOpacity: 0.36,
+      strokeOpacity: 0.55,
+      strokeWeight: 0.9,
     },
     3: {
-      fillColor: '#f43f5e',
-      strokeColor: '#e11d48',
-      fillOpacity: 0.18,
-      strokeOpacity: 0.4,
+      fillColor: '#e11d48',
+      strokeColor: '#be123c',
+      fillOpacity: 0.42,
+      strokeOpacity: 0.65,
       strokeWeight: 1,
     },
   };
@@ -106,7 +108,7 @@
 
     state.dataLayer = L.geoJSON(
       { ...hazardLayers, features: sortedFeatures },
-      { style: styleForFeature }
+      { style: styleForFeature, pane: ensureHazardPane(map) }
     ).addTo(map);
   }
 

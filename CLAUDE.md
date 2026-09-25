@@ -70,11 +70,20 @@ Ranking is a tuple comparison, not a weighted score — `safety_sort_key()` in `
 ### Hazard scales
 
 - Flood: GeoJSON class `Var 1/2/3` → hazard `1/3/5` (`VAR_TO_HAZARD`). Only Var 3 exceeds the threshold.
-- Earthquake: severity 1–5 per layer, parsed from inconsistent GeoJSON property names and text labels by `earthquake_data._extract_layer_severity()` / `_LEVEL_TO_SEVERITY` (note it tolerates the truncated shapefile key `shaking_leve`). `eq_overall = max(liquefaction, ground_shaking)`.
+- Earthquake: severity 1–5 per layer, parsed from inconsistent GeoJSON property names and text labels by `earthquake_data._extract_layer_severity()` / `_LEVEL_TO_SEVERITY` (note it tolerates the truncated shapefile key `shaking_leve`). `eq_overall = max(liquefaction, ground_shaking)`. A feature with no readable level is dropped, not defaulted.
+
+### Missing hazard data is never "safe"
+
+Both modes route only on roads inside the **hazard data coverage area** (`build_hazard_coverage_area()` + `restrict_graph_to_hazard_coverage()`), widened by `HAZARD_COVERAGE_TOLERANCE_METERS` so boundary-line roads aren't severed:
+
+- Flood: the barangay polygon. The flood layers cover all of Pasig City and stop at the city limits, so inside the polygon an edge with no Var polygon is one the flood model shows as not flooding (hazard 1); outside it there is no flood data at all.
+- Earthquake: the barangay polygon ∩ the liquefaction extent ∩ the ground-shaking extent. The traced layer polygons don't fill the barangay; roads in the gaps used to default to severity 1 and were the only "safe" roads.
+
+Kept edges carry `hazard_coverage=True`. `edge_hazard_level()` scores any edge without it (or without a `hazard`) at `UNKNOWN_HAZARD_LEVEL = 5`, above the threshold, and routes report `hazard_data_coverage` (API/batch-tool only — deliberately not shown anywhere in the UI or PDF). Never add a `.get("hazard", 1)`-style default — that is exactly the hole this closes. Start/end points and evacuation sites outside the coverage area are rejected or skipped.
 
 ### Graph pipeline and caching
 
-Per-barangay walk graphs are committed as GraphML (`data/graphs/*.graphml`, ~7–8 MB each) and loaded via `get_barangay_base_graph()`. Only if a file is missing does OSMnx hit the network and then save the result, so normal runs are offline. Flood builds a bbox-truncated subgraph around the start/end pair (`build_graph`, radius from `estimate_route_search_radius`); earthquake clips the full base graph to the boundary polygon (`clip_graph_to_boundary`, 50 m buffer).
+Per-barangay walk graphs are committed as GraphML (`data/graphs/*.graphml`, ~7–8 MB each) and loaded via `get_barangay_base_graph()`. Only if a file is missing does OSMnx hit the network and then save the result, so normal runs are offline. Both modes restrict the base graph to the hazard data coverage area (see above) — flood once per barangay in `build_graph`, earthquake in `_get_earthquake_graph`.
 
 Hazard annotation is expensive and therefore idempotent and sticky: `assign_flood_hazards()` stamps `flood_hazard_annotation_version` on the graph and `_annotate_graph_with_earthquake_hazards()` stamps `earthquake_dataset`, and both skip re-annotating. **If you change how hazards are derived, bump `FLOOD_GRAPH_ANNOTATION_VERSION` or cached graphs will keep stale values for the life of the process.**
 
@@ -96,7 +105,7 @@ Plain scripts loaded in order from `templates/index.html` — `osm.js`, `flood.j
 
 - `script.js` (~4800 lines) is the orchestrator: all app state, the barangay → hazard → route → run workflow, map drawing, results panel, loader, theming. It assigns callbacks onto `window` at the bottom because `index.html` wires them through inline `onclick` attributes.
 - `flood.js` / `earthquake.js` are IIFEs exposing `window.floodHazardUI` and `window.earthquakeUI` (hazard overlays, evacuation-site markers, legend).
-- `osm.js` holds route-polyline rendering and endpoint-snapping geometry that mirrors the backend's (`ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS` etc. — keep the two in sync if you change either).
+- `osm.js` holds route-polyline rendering and endpoint-snapping geometry that mirrors the backend's (`ROUTE_ENDPOINT_SNAP_TOLERANCE_METERS` etc. — keep the two in sync if you change either). Each route is drawn as soft dark casing → white outline → colored line and is static by design (the user explicitly does not want moving route lines; only the selected route's marching dash, `route-flow--focus` in `style.css`, animates), widened with zoom by `getRouteZoomScale()` (re-applied on `zoomend`) so it doesn't thin out inside large hazard fills; hazard overlays go in the `hazardPane` (`ensureHazardPane(map)`, z-index 350) so routes in Leaflet's overlayPane (400) always paint above them — give any new hazard layer `pane: ensureHazardPane(map)`.
 - `window.BACKEND_BASE` points at `127.0.0.1:5000` on localhost and `window.location.origin` otherwise.
 
 The map renders with **Leaflet** (OpenStreetMap's standard tile server by default, Esri World Imagery as an optional satellite layer via a layer-switcher control) — no API key needed. Note: an earlier pass used CARTO Voyager tiles, which turned out to gate that basemap style behind an API key (a "API KEY REQUIRED" watermark instead of a map) — verify any third-party tile provider by actually fetching and viewing a tile, not just checking the HTTP status. `app.py` still passes an unused `google_maps_api_key` template variable from the environment; the template never reads it and nothing depends on it.

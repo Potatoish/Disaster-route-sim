@@ -160,16 +160,17 @@
 
   function getLayerEmphasis(layerKey, activeView, isLine = false) {
     if (activeView === 'overall') {
-      // Zones dim so overlapping fills don't muddy together; lines stay strong so they remain visible over the route lines.
+      // Both layers overlap here, so each fill stays lighter than a single
+      // active layer to keep the combined tint from going muddy.
       return isLine
-        ? { fillOpacity: 0, strokeOpacity: 0.5, strokeWeight: 2.2 }
-        : { fillOpacity: 0.1, strokeOpacity: 0.28, strokeWeight: 1.6 };
+        ? { fillOpacity: 0, strokeOpacity: 0.65, strokeWeight: 2.2 }
+        : { fillOpacity: 0.2, strokeOpacity: 0.55, strokeWeight: 1.6 };
     }
 
     const isActive = layerKey === activeView;
     return {
-      fillOpacity: isActive ? 0.14 : 0.05,
-      strokeOpacity: isActive ? 0.5 : 0.12,
+      fillOpacity: isActive ? 0.3 : 0.06,
+      strokeOpacity: isActive ? 0.75 : 0.15,
       strokeWeight: isActive ? 2 : 1.2,
     };
   }
@@ -182,6 +183,7 @@
       fillColor: style.fillColor,
       fillOpacity: emphasis.fillOpacity,
       interactive: false,
+      pane: ensureHazardPane(map),
     }).addTo(map);
   }
 
@@ -191,6 +193,7 @@
       opacity: emphasis.strokeOpacity,
       weight: emphasis.strokeWeight,
       interactive: false,
+      pane: ensureHazardPane(map),
     }).addTo(map);
     // Leaflet paths stack by insertion order, not zIndex; flag lines so
     // renderHazardLayers can lift them above any fills added after them.

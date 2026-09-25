@@ -2767,6 +2767,32 @@ body.dark .results-toggle-fab {
   color: var(--text);
 }
 
+/* Route lines (osm.js). Width/opacity changes -- focusing a route, zooming,
+   dimming the others -- ease instead of jumping. */
+.leaflet-overlay-pane path.route-line {
+  transition: stroke-width .3s ease, stroke-opacity .3s ease;
+}
+
+/* Marching dash on the selected route only (createRoutePreview in script.js);
+   route lines themselves are static. The 24px offset is one full dash + gap
+   cycle of that dash, so the loop is seamless; 2.4s keeps the original pace. */
+.leaflet-overlay-pane path.route-flow--focus {
+  animation: route-flow 2.4s linear infinite;
+}
+
+@keyframes route-flow {
+  to { stroke-dashoffset: -24; }
+}
+
+.route-flow-paused path.route-flow--focus {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-overlay-pane path.route-flow--focus { animation: none; }
+  .leaflet-overlay-pane path.route-line { transition: none; }
+}
+
 .leaflet-popup-content-wrapper {
   background: var(--map-ui-bg) !important;
   border: 1px solid var(--map-ui-border) !important;
