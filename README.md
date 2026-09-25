@@ -17,20 +17,36 @@ AGNAS helps users explore evacuation routes under two hazard scenarios:
   - Routes toward configured evacuation sites
   - Supports earthquake result views for different hazard lenses
 
-## Main Features
+## Key Features
 
-- ACO-based route search
-- Safety-first route ranking
-- Interactive Leaflet + OpenStreetMap route display
-- Flood hazard overlays
-- Earthquake evacuation site routing
-- Route list with risk summaries
-- Themed UI for flood and earthquake modes
-- Flask-served frontend and API routes
+- **ACO-guided route search** — Ant Colony Optimization explores many candidate paths per simulation and converges on routes that balance safety and distance, instead of just shortest-path.
+- **Safety-first ranking** — routes are ranked lexicographically: any route crossing a high-hazard road segment is placed below every safe route, no matter how much shorter it is.
+- **Diverse alternate routes** — the search penalizes corridors already used by other candidate routes, so the map shows genuinely different route options instead of several near-identical variations.
+- **Flood hazard routing** — classifies roads by flood severity class (`Var 1`/`2`/`3`) and highlights which segments are safe to cross versus which should be avoided.
+- **Earthquake hazard routing** — routes toward the nearest road-reachable evacuation sites using liquefaction and ground-shaking hazard layers, with separate result views per hazard lens.
+- **Interactive map** — built on Leaflet with OpenStreetMap tiles and an optional Esri World Imagery satellite layer, no API key required.
+- **Downloadable PDF report** — generates a shareable PDF of the best route, including a route map with a real OpenStreetMap basemap and a risk summary, rendered entirely client-side.
+- **Light/dark theme** — site-wide theme switch for comfortable viewing in any lighting.
+- **Guided "How to use" tutorial** — step-by-step walkthrough for picking a barangay, hazard type, and start/end points before running a simulation.
+- **Flask-served frontend and API** — homepage, About page, simulator, and all routing endpoints served from one Flask app.
+
+## Screenshots
+
+| Homepage | About & Contact |
+|---|---|
+| ![Homepage](Backend/static/assets/screenshots/homepage.png) | ![About & Contact page](Backend/static/assets/screenshots/about.png) |
+
+| Guided "How to use" tutorial | Simulation setup |
+|---|---|
+| ![Guided tutorial step](Backend/static/assets/screenshots/tutorial.png) | ![Simulation setup with barangay boundary](Backend/static/assets/screenshots/simulation-setup.png) |
+
+**Flood route safety results**
+
+![Flood route results with safe/available/eliminated routes](Backend/static/assets/screenshots/flood-route-results.png)
 
 ## Tech Stack
 
-- **Frontend:** HTML, CSS, JavaScript, Leaflet + OpenStreetMap tiles, served by Flask
+- **Frontend:** HTML, CSS, JavaScript, Leaflet + OpenStreetMap tiles, jsPDF (client-side PDF reports), served by Flask
 - **Backend:** Python, Flask, Flask-CORS
 - **Routing/Data:** OSMnx, NetworkX, Shapely, GeoPandas
 - **Data:** Offline multi-hazard datasets in `Backend/data/`
@@ -132,6 +148,7 @@ Main backend endpoints include:
   - `liquefaction.geojson`
   - `ground_shaking.geojson`
 - The UI is designed for simulation and route review, not full live turn-by-turn navigation
+- The PDF report fetches live OSM tiles for its map image; if tiles can't be loaded (offline, blocked), it falls back to a flat schematic route drawing instead of failing the report
 
 ## Authors
 
