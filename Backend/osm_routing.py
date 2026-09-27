@@ -7,10 +7,13 @@ from pathlib import Path
 from threading import RLock
 
 import networkx as nx
+import numpy as np
 import osmnx as ox
+import shapely
+from shapely import STRtree
 from shapely.geometry import LineString, Point, mapping, shape
 from shapely.prepared import prep
-from shapely.ops import unary_union
+from shapely.ops import substring, unary_union
 
 from simulation_progress import bump_progress, reset_progress
 
@@ -29,12 +32,19 @@ DIST_METERS = 7000
 # below ~10 m Sta. Lucia's network splits apart along Ortigas Ave. Extension.
 HAZARD_COVERAGE_TOLERANCE_METERS = 20.0
 ROUTE_STITCH_SNAP_TOLERANCE_METERS = 12.0
-ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS = 90.0
-MAX_ENDPOINT_NODE_EXTRA_DISTANCE_METERS = 90.0
-MAX_ENDPOINT_NODE_DISTANCE_RATIO = 6.0
-MAX_ENDPOINT_NODE_DISTANCE_CAP_METERS = 160.0
-ENDPOINT_NODE_CANDIDATE_LIMIT = 25
+# How far past the nearest road to look for a named street to label a pin
+# with -- the nearest edge is often an unnamed footway or alley.
+PIN_STREET_LABEL_RADIUS_METERS = 30.0
+# A pin's route starts/ends where the pin meets the road (see
+# add_road_access_nodes); a meeting point this close to an existing
+# intersection just uses that intersection.
+ROAD_ACCESS_NODE_SNAP_METERS = 1.0
 GRAPH_NETWORK_TYPE = "walk"
+# The walk network normally leaves out access=private roads -- the streets
+# of a gated subdivision, where plenty of residents live. They are downloaded
+# too, but keep_private_roads_near() lets only a route starting or ending
+# inside one use them. access=no roads stay out.
+GRAPH_ROAD_ACCESS_FILTER = '["access"!~"^no$"]'
 
 ACO_MAX_ROUTE_STEPS_MULTIPLIER = 2.5
 ACO_MIN_ROUTE_STEPS = 25
@@ -73,9 +83,7 @@ TOP_ACO_REINFORCERS = 3
 DEBUG = True
 FLOOD_GRAPH_ANNOTATION_VERSION = 2
 
-DISCOURAGED_ENDPOINT_HIGHWAYS = {"track"}
-DISCOURAGED_ENDPOINT_SERVICE_VALUES = {"driveway", "parking_aisle", "parking", "alley"}
-BLOCKED_ENDPOINT_ACCESS_VALUES = {"private", "no"}
+BLOCKED_ENDPOINT_ACCESS_VALUES = {"no"}
 
 _GRAPH_CACHE = {}
 _BARANGAY_BASE_GRAPH_CACHE = {}
@@ -86,6 +94,7 @@ _STATIC_CACHE_LOCK = RLock()
 _GRAPH_BUILD_LOCK = RLock()
 _GRAPH_ANNOTATION_LOCK = RLock()
 _BARANGAY_BASE_GRAPH_LOCK = RLock()
+_EDGE_INDEX_LOCK = RLock()
 
 
 def get_runtime_cache_dir():
@@ -541,6 +550,14 @@ def resolve_edge_hazard(edge_geom, flood_zones):
     return 1, None
 
 
+def stamp_flood_hazard(data, edge_geom, flood_zones):
+    hazard, flood_var = resolve_edge_hazard(edge_geom, flood_zones)
+    data["hazard"] = int(hazard)
+    data["flood_var"] = flood_var
+    data["hazard_source"] = "flood_json"
+    return int(hazard), flood_var
+
+
 def resolve_point_hazard(lat, lng, flood_zones=None):
     if lat is None or lng is None:
         return {
@@ -593,6 +610,22 @@ def get_barangay_base_graph_path(name):
     return BARANGAY_BASE_GRAPH_FILES.get(canonical_name)
 
 
+def download_walk_graph(center, radius_m):
+    """OSMnx's walk network around center, private roads included (see
+    GRAPH_ROAD_ACCESS_FILTER)."""
+    default_access = ox.settings.default_access
+    ox.settings.default_access = GRAPH_ROAD_ACCESS_FILTER
+    try:
+        return ox.graph_from_point(
+            (float(center.y), float(center.x)),
+            dist=radius_m,
+            network_type=GRAPH_NETWORK_TYPE,
+            simplify=True,
+        )
+    finally:
+        ox.settings.default_access = default_access
+
+
 def get_barangay_base_graph(name):
     canonical_name = normalize_barangay_name(name)
     graph_path = get_barangay_base_graph_path(canonical_name)
@@ -629,12 +662,7 @@ def get_barangay_base_graph(name):
             f"with radius {radius_m:.1f} meters"
         )
         try:
-            graph = ox.graph_from_point(
-                (float(centroid.y), float(centroid.x)),
-                dist=radius_m,
-                network_type=GRAPH_NETWORK_TYPE,
-                simplify=True,
-            )
+            graph = download_walk_graph(centroid, radius_m)
             graph.graph["graph_cache_key"] = f"base::{GRAPH_NETWORK_TYPE}::{canonical_name}"
             ox.save_graphml(graph, graph_path)
             _BARANGAY_BASE_GRAPH_CACHE[canonical_name] = graph
@@ -695,6 +723,165 @@ def is_point_in_hazard_coverage(G, lat, lng):
     return coverage_area.covers(Point(float(lng), float(lat)))
 
 
+def _edge_street_name(edge):
+    names = edge.get("name")
+    for name in names if isinstance(names, list) else [names]:
+        text = str(name).strip() if name is not None else ""
+        if text:
+            return text
+    return None
+
+
+def _get_edge_index(G):
+    """Spatial index over G's road geometries (plus the nodes of G's largest
+    connected piece), built once per graph and kept on G.graph beside
+    hazard_coverage_area."""
+    index = G.graph.get("_edge_index")
+    if index is not None:
+        return index
+
+    with _EDGE_INDEX_LOCK:
+        index = G.graph.get("_edge_index")
+        if index is None:
+            edges = list(G.edges(keys=True, data=True))
+            geometries = [get_edge_geometry(G, u, v, data) for u, v, _, data in edges]
+            index = {
+                "edges": edges,
+                "geometries": geometries,
+                "tree": STRtree(geometries),
+                "main_nodes": frozenset(max(nx.weakly_connected_components(G), key=len, default=())),
+            }
+            G.graph["_edge_index"] = index
+    return index
+
+
+def find_road_access_point(G, lat, lng):
+    """Where a pin at (lat, lng) meets the road network: the closest point on
+    the closest road open to walkers (access not "no") and connected to the
+    rest of the network -- a gated subdivision's private streets included, for
+    a pin inside one. A pin can sit anywhere -- in a building, a compound, a
+    field -- and its route still starts on a street. Returns the
+    edge (u, v, key), that point and its distance in meters, or None when G
+    has no such road."""
+    index = _get_edge_index(G)
+    if not index["geometries"]:
+        return None
+
+    point = Point(float(lng), float(lat))
+    # Distances here are in degrees, which understate east-west meters by
+    # cos(lat) -- so this times a road's degree distance is a lower bound on
+    # its distance in meters, and roads past the best one found can stop.
+    min_meters_per_degree = METERS_PER_DEGREE * max(math.cos(math.radians(float(lat))), 0.1)
+    degree_distances = shapely.distance(index["geometries"], point)
+
+    best = None
+    for edge_id in np.argsort(degree_distances):
+        if best is not None and degree_distances[edge_id] * min_meters_per_degree > best["distance"]:
+            break
+
+        u, v, key, data = index["edges"][edge_id]
+        if u == v or u not in index["main_nodes"] or is_blocked_endpoint_edge(data):
+            continue
+
+        geometry = index["geometries"][edge_id]
+        snapped = geometry.interpolate(geometry.project(point))
+        distance = coordinate_distance_meters(lat, lng, snapped.y, snapped.x)
+        if best is None or distance < best["distance"]:
+            best = {
+                "edge": (u, v, key),
+                "edge_id": int(edge_id),
+                "distance": distance,
+                "lat": float(snapped.y),
+                "lng": float(snapped.x),
+            }
+    return best
+
+
+def find_nearest_road(G, lat, lng):
+    """Where a pin at (lat, lng) meets the road (find_road_access_point), its
+    distance in meters, and the nearest street name within
+    PIN_STREET_LABEL_RADIUS_METERS past it (None when every road that close
+    is unnamed)."""
+    access = find_road_access_point(G, lat, lng)
+    if access is None:
+        return None
+
+    index = _get_edge_index(G)
+    point = Point(float(lng), float(lat))
+    label_reach = access["distance"] + PIN_STREET_LABEL_RADIUS_METERS
+    # Widened by 1/cos(lat) so the degree-based query misses no road that is
+    # within label_reach meters east or west.
+    label_radius = label_reach / METERS_PER_DEGREE / max(math.cos(math.radians(float(lat))), 0.1)
+
+    measured = [(access["distance"], access["edge_id"])]
+    for edge_id in index["tree"].query(point.buffer(label_radius)).tolist():
+        geometry = index["geometries"][edge_id]
+        snapped = geometry.interpolate(geometry.project(point))
+        measured.append((coordinate_distance_meters(lat, lng, snapped.y, snapped.x), edge_id))
+    measured.sort(key=lambda item: item[0])
+
+    street = next(
+        (
+            name
+            for distance, edge_id in measured
+            if distance <= label_reach
+            and (name := _edge_street_name(index["edges"][edge_id][3]))
+        ),
+        None,
+    )
+    return {
+        "distance": access["distance"],
+        "lat": access["lat"],
+        "lng": access["lng"],
+        "street": street,
+    }
+
+
+def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):
+    """Whether a map-pinned start/destination can be routed: inside G's hazard
+    data coverage area. How far it is from a road does not matter -- its route
+    starts or ends on the street nearest it (add_road_access_nodes)."""
+    if not is_point_in_hazard_coverage(G, lat, lng):
+        return {
+            "valid": False,
+            "reason": "outside_coverage",
+            "message": (
+                f"{subject} is outside the area covered by {coverage_label}, "
+                "so a route there cannot be checked for safety."
+            ),
+        }
+
+    road = find_nearest_road(G, lat, lng)
+    if road is None:
+        return {
+            "valid": False,
+            "reason": "no_road",
+            "message": f"No walkable road was found in the area covered by {coverage_label}.",
+        }
+
+    return {
+        "valid": True,
+        "street": road["street"],
+        "road_distance": round(road["distance"], 1),
+        "road_lat": road["lat"],
+        "road_lng": road["lng"],
+    }
+
+
+def check_flood_pin(barangay_name, lat, lng):
+    boundary = get_barangay_boundary(barangay_name)
+    if boundary is None:
+        raise ValueError(f"No hazard data coverage is configured for '{barangay_name}'")
+
+    G = build_graph(barangay_name)
+    return check_route_pin(
+        G,
+        lat,
+        lng,
+        f"{boundary['display_name']}'s flood hazard data",
+    )
+
+
 def build_graph(scope_name):
     canonical_name = normalize_barangay_name(scope_name)
     cache_key = ("flood_coverage", GRAPH_NETWORK_TYPE, canonical_name)
@@ -743,221 +930,174 @@ def is_blocked_endpoint_edge(edge):
     return bool(access_values & BLOCKED_ENDPOINT_ACCESS_VALUES)
 
 
-def is_preferred_endpoint_edge(edge):
-    highways = set(normalize_tag_values(edge.get("highway")))
-    services = set(normalize_tag_values(edge.get("service")))
-
-    if is_blocked_endpoint_edge(edge):
-        return False
-    if highways & DISCOURAGED_ENDPOINT_HIGHWAYS:
-        return False
-    if services & DISCOURAGED_ENDPOINT_SERVICE_VALUES:
-        return False
-
-    return True
-
-
-def get_endpoint_directional_edges(G, node_id, label):
-    if label == "start":
-        edges = list(G.out_edges(node_id, keys=True, data=True))
-    elif label == "end":
-        edges = list(G.in_edges(node_id, keys=True, data=True))
-    else:
-        edges = []
-
-    if edges:
-        return edges
-
-    fallback_edges = {}
-    for u, v, key, data in G.out_edges(node_id, keys=True, data=True):
-        fallback_edges[(u, v, key)] = (u, v, key, data)
-    for u, v, key, data in G.in_edges(node_id, keys=True, data=True):
-        fallback_edges[(u, v, key)] = (u, v, key, data)
-
-    return list(fallback_edges.values())
-
-
-def build_endpoint_node_profile(G, node_id, label):
-    edge_profiles = []
-
-    for u, v, key, data in get_endpoint_directional_edges(G, node_id, label):
-        hazard = edge_hazard_level(data)
-        blocked = is_blocked_endpoint_edge(data)
-        preferred = is_preferred_endpoint_edge(data)
-        edge_profiles.append({
-            "hazard": hazard,
-            "blocked": blocked,
-            "preferred": preferred,
-            "cost": edge_traversal_cost(data),
-        })
-
-    if not edge_profiles:
-        return None
-
-    best_edge = min(
-        edge_profiles,
-        key=lambda edge: (
-            edge["blocked"],
-            not edge["preferred"],
-            edge["hazard"] > HAZARD_THRESHOLD,
-            edge["hazard"],
-            edge["cost"],
-        )
-    )
-
-    return {
-        "edge_count": len(edge_profiles),
-        "accessible_edge_count": sum(
-            1 for edge in edge_profiles if not edge["blocked"]
-        ),
-        "safe_edge_count": sum(
-            1 for edge in edge_profiles
-            if not edge["blocked"] and edge["hazard"] <= HAZARD_THRESHOLD
-        ),
-        "preferred_edge_count": sum(
-            1 for edge in edge_profiles if edge["preferred"]
-        ),
-        "best_blocked": best_edge["blocked"],
-        "best_hazard": best_edge["hazard"],
-        "best_cost": best_edge["cost"],
-        "best_preferred": best_edge["preferred"],
-    }
-
-
-def build_endpoint_candidate_rank(candidate):
-    profile = candidate["profile"]
+def is_private_edge(edge):
     return (
-        profile["best_blocked"],
-        round(candidate["distance"], 3),
-        not profile["best_preferred"],
-        profile["best_hazard"] > HAZARD_THRESHOLD,
-        profile["best_hazard"],
-        round(profile["best_cost"], 3),
+        "private" in normalize_tag_values(edge.get("access"))
+        or "private" in normalize_tag_values(edge.get("service"))
     )
 
 
-def collect_endpoint_candidates(G, lat, lng, label, fallback_node, fallback_distance):
-    raw_distance_cap = max(
-        fallback_distance + MAX_ENDPOINT_NODE_EXTRA_DISTANCE_METERS,
-        max(fallback_distance, 1.0) * MAX_ENDPOINT_NODE_DISTANCE_RATIO,
+def keep_private_roads_near(graph, nodes):
+    """Drops the private roads of every enclave but the ones nodes sit in.
+    An enclave is whatever lies off the main public road network: a gated
+    subdivision's or compound's private roads, plus any public road reachable
+    only through them. A pin (or evacuation site) inside one routes out
+    through its streets, or in; no route cuts through anyone else's."""
+    public = nx.Graph()
+    public.add_edges_from((u, v) for u, v, data in graph.edges(data=True) if not is_private_edge(data))
+    main = max(nx.connected_components(public), key=len, default=set())
+
+    # Enclaves join only through their own nodes, not through the public
+    # roads they open onto -- two subdivisions gated onto one street stay apart.
+    inner_links = nx.Graph()
+    enclave_edges = []
+    for u, v, key, data in graph.edges(keys=True, data=True):
+        if u in main and v in main and not is_private_edge(data):
+            continue
+        inner = [node for node in (u, v) if node not in main]
+        enclave_edges.append((u, v, key, inner[0] if inner else None))
+        inner_links.add_nodes_from(inner)
+        if len(inner) == 2:
+            inner_links.add_edge(*inner)
+
+    enclave_of = {
+        node: index
+        for index, component in enumerate(nx.connected_components(inner_links))
+        for node in component
+    }
+    kept = {enclave_of[node] for node in nodes if node in enclave_of}
+    graph.remove_edges_from(
+        (u, v, key)
+        for u, v, key, inner in enclave_edges
+        if inner is None or enclave_of[inner] not in kept
     )
-    distance_cap = max(
-        fallback_distance,
-        min(MAX_ENDPOINT_NODE_DISTANCE_CAP_METERS, raw_distance_cap),
+    graph.remove_nodes_from([node for node in list(nx.isolates(graph)) if node not in nodes])
+
+
+def _oriented_edge_geometry(G, u, v, data):
+    """The edge's geometry, running from u to v."""
+    geometry = get_edge_geometry(G, u, v, data)
+    u_x = float(G.nodes[u]["x"])
+    u_y = float(G.nodes[u]["y"])
+    (first_x, first_y), (last_x, last_y) = geometry.coords[0], geometry.coords[-1]
+    if math.hypot(last_x - u_x, last_y - u_y) < math.hypot(first_x - u_x, first_y - u_y):
+        return LineString(list(geometry.coords)[::-1])
+    return geometry
+
+
+def _find_reverse_edge_key(G, u, v, geometry):
+    """Key of the v -> u edge that is the same road as u -> v (a walk graph
+    carries each road in both directions), or None."""
+    for key, data in (G.get_edge_data(v, u) or {}).items():
+        if get_edge_geometry(G, v, u, data).equals(geometry):
+            return key
+    return None
+
+
+def _line_length_meters(line):
+    coords = list(line.coords)
+    return sum(
+        coordinate_distance_meters(lat1, lng1, lat2, lng2)
+        for (lng1, lat1), (lng2, lat2) in zip(coords[:-1], coords[1:])
     )
 
-    candidates = []
-    for node_id, node_data in G.nodes(data=True):
-        distance = coordinate_distance_meters(
-            lat,
-            lng,
-            float(node_data["y"]),
-            float(node_data["x"]),
-        )
-        if distance > distance_cap:
+
+def add_road_access_nodes(G, points, annotate_edge):
+    """A copy of G in which each (lat, lng) in points gets a node where it
+    meets the road (find_road_access_point). That road is split in two there,
+    so a route starts or ends on the street right beside a pin -- not at the
+    nearest intersection, which can be across a block from it, and with no
+    line drawn from the pin through buildings. Each road piece gets its own
+    length, and annotate_edge(data) re-derives its hazard from its own
+    geometry, as if the map had a node there. Private roads stay only where
+    one of the points sits among them (keep_private_roads_near). Returns
+    (graph, [node for each point, None where no road was found])."""
+    graph = G.copy()
+    # Indexes G's roads, not the split ones.
+    graph.graph.pop("_edge_index", None)
+
+    nodes = [None] * len(points)
+    splits = {}
+    for point_index, (lat, lng) in enumerate(points):
+        access = find_road_access_point(G, lat, lng)
+        if access is None:
             continue
 
-        profile = build_endpoint_node_profile(G, node_id, label)
-        if profile is None:
-            continue
+        u, v, key = access["edge"]
+        reverse_key = _find_reverse_edge_key(G, u, v, get_edge_geometry(G, u, v, G.edges[u, v, key]))
+        # Both directions of a road share one split, filed under one of them.
+        if reverse_key is not None and (v, u, reverse_key) < (u, v, key):
+            u, v, key, reverse_key = v, u, reverse_key, key
 
-        candidates.append({
-            "node": node_id,
-            "distance": distance,
-            "profile": profile,
-        })
+        access_point = build_route_point(access["lat"], access["lng"])
+        nodes[point_index] = next(
+            (
+                node for node in (u, v)
+                if point_distance_meters(
+                    access_point,
+                    build_route_point(G.nodes[node]["y"], G.nodes[node]["x"]),
+                ) <= ROAD_ACCESS_NODE_SNAP_METERS
+            ),
+            None,
+        )
+        if nodes[point_index] is None:
+            split = splits.setdefault((u, v, key), {"reverse_key": reverse_key, "stops": []})
+            split["stops"].append((point_index, access_point))
 
-    candidates.sort(key=lambda candidate: (candidate["distance"], candidate["node"]))
-    candidates = candidates[:ENDPOINT_NODE_CANDIDATE_LIMIT]
-
-    if not any(candidate["node"] == fallback_node for candidate in candidates):
-        fallback_profile = build_endpoint_node_profile(G, fallback_node, label)
-        if fallback_profile is not None:
-            candidates.append({
-                "node": fallback_node,
-                "distance": fallback_distance,
-                "profile": fallback_profile,
-            })
-
-    candidates.sort(key=lambda candidate: (build_endpoint_candidate_rank(candidate), candidate["node"]))
-    return candidates, distance_cap
-
-
-def debug_endpoint_candidates(label, fallback_node, fallback_distance, distance_cap, candidates, selected_node):
-    debug_print(
-        f"[OSM] Endpoint snap ({label}): fallback={fallback_node} ({fallback_distance:.1f}m), "
-        f"cap={distance_cap:.1f}m, candidates={len(candidates)}"
-    )
-
-    for candidate in candidates[:5]:
-        profile = candidate["profile"]
-        marker = "*" if candidate["node"] == selected_node else " "
         debug_print(
-            f"[OSM]   {marker}node={candidate['node']} dist={candidate['distance']:.1f}m "
-            f"haz={profile['best_hazard']} preferred={profile['best_preferred']} "
-            f"blocked={profile['best_blocked']} accessible_edges={profile['accessible_edge_count']}/{profile['edge_count']} "
-            f"safe_edges={profile['safe_edge_count']}/{profile['edge_count']}"
+            f"[OSM] Road access for point {point_index + 1}: {access['distance']:.1f}m from the pin, "
+            f"on edge {u}->{v}" + (f" at node {nodes[point_index]}" if nodes[point_index] is not None else "")
         )
 
-
-def select_endpoint_node(G, lat, lng, label):
-    debug_print(f"[OSM] Endpoint snap ({label}): locating nearest node")
-    fallback_node = ox.distance.nearest_nodes(G, X=lng, Y=lat)
-    fallback_data = G.nodes[fallback_node]
-    fallback_distance = coordinate_distance_meters(
-        lat,
-        lng,
-        float(fallback_data["y"]),
-        float(fallback_data["x"]),
-    )
-
-    fallback_profile = build_endpoint_node_profile(G, fallback_node, label)
-    if fallback_profile is None:
-        debug_print(
-            f"[OSM] Endpoint snap ({label}): selected raw node {fallback_node} "
-            f"at {fallback_distance:.1f}m (no directional candidate profile)"
+    next_node = -1
+    for (u, v, key), split in splits.items():
+        line = _oriented_edge_geometry(G, u, v, G.edges[u, v, key])
+        stops = sorted(
+            (
+                line.project(Point(access_point["lng"], access_point["lat"]), normalized=True),
+                point_index,
+                access_point,
+            )
+            for point_index, access_point in split["stops"]
         )
-        return fallback_node
 
-    debug_print(
-        f"[OSM] Endpoint snap ({label}): evaluating nearby candidates "
-        f"from {len(G.nodes)} graph nodes"
-    )
-    candidates, distance_cap = collect_endpoint_candidates(
-        G,
-        lat,
-        lng,
-        label,
-        fallback_node,
-        fallback_distance,
-    )
-    if not candidates:
-        debug_print(
-            f"[OSM] Endpoint snap ({label}): selected raw node {fallback_node} "
-            f"at {fallback_distance:.1f}m (no candidates within cap)"
-        )
-        return fallback_node
+        chain = [(u, 0.0)]
+        last_point = None
+        for fraction, point_index, access_point in stops:
+            if last_point is None or point_distance_meters(last_point, access_point) > ROAD_ACCESS_NODE_SNAP_METERS:
+                graph.add_node(next_node, x=access_point["lng"], y=access_point["lat"], street_count=2)
+                chain.append((next_node, fraction))
+                last_point = access_point
+                next_node -= 1
+            nodes[point_index] = chain[-1][0]
+        chain.append((v, 1.0))
 
-    selected_node = candidates[0]["node"]
-    debug_endpoint_candidates(
-        label,
-        fallback_node,
-        fallback_distance,
-        distance_cap,
-        candidates,
-        selected_node,
-    )
-    return selected_node
+        forward = G.edges[u, v, key]
+        reverse = G.edges[v, u, split["reverse_key"]] if split["reverse_key"] is not None else None
+        graph.remove_edge(u, v, key)
+        if reverse is not None:
+            graph.remove_edge(v, u, split["reverse_key"])
+
+        for (a, start), (b, end) in zip(chain[:-1], chain[1:]):
+            piece = substring(line, start, end, normalized=True)
+            length = _line_length_meters(piece)
+            for tail, head, parent, geometry in (
+                (a, b, forward, piece),
+                (b, a, reverse, LineString(list(piece.coords)[::-1])),
+            ):
+                if parent is None:
+                    continue
+                data = dict(parent, geometry=geometry, length=length)
+                annotate_edge(data)
+                data["route_cost"] = edge_traversal_cost(data)
+                graph.add_edge(tail, head, **data)
+
+    keep_private_roads_near(graph, [node for node in nodes if node is not None])
+    return graph, nodes
 
 
-def get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng):
-    start_node = select_endpoint_node(G, start_lat, start_lng, "start")
-    end_node = select_endpoint_node(G, end_lat, end_lng, "end")
-
-    debug_print(f"[OSM] Start node: {start_node}")
-    debug_print(f"[OSM] End node: {end_node}")
-
-    return start_node, end_node
+def annotate_flood_edge(data):
+    stamp_flood_hazard(data, data["geometry"], load_flood_zones())
 
 
 def assign_flood_hazards(G):
@@ -984,12 +1124,7 @@ def assign_flood_hazards(G):
                 hazard = int(data.get("hazard", 1))
                 flood_var = data.get("flood_var")
             else:
-                edge_geom = get_edge_geometry(G, u, v, data)
-                hazard, flood_var = resolve_edge_hazard(edge_geom, flood_zones)
-
-                data["hazard"] = int(hazard)
-                data["flood_var"] = flood_var
-                data["hazard_source"] = "flood_json"
+                hazard, flood_var = stamp_flood_hazard(data, get_edge_geometry(G, u, v, data), flood_zones)
 
             counts[hazard] = counts.get(hazard, 0) + 1
             var_counts[flood_var] = var_counts.get(flood_var, 0) + 1
@@ -1124,68 +1259,9 @@ def edge_geometry_to_coords(G, u, v, edge):
     return edge_coords
 
 
-def project_point_onto_coord_path(endpoint_point, coord_path):
-    if endpoint_point is None or len(coord_path) < 2:
-        return None
-
-    line = LineString(
-        (float(point["lng"]), float(point["lat"]))
-        for point in coord_path
-    )
-    if line.is_empty:
-        return None
-
-    projected = line.interpolate(
-        line.project(Point(float(endpoint_point["lng"]), float(endpoint_point["lat"])))
-    )
-    anchor_point = {
-        "lat": float(projected.y),
-        "lng": float(projected.x),
-    }
-
-    if point_distance_meters(endpoint_point, anchor_point) > ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS:
-        return None
-
-    return anchor_point
-
-
-def attach_endpoint_to_route_coords(coords, endpoint_point, mode):
-    if endpoint_point is None or not coords:
-        return coords
-
-    endpoint_point = build_route_point(endpoint_point["lat"], endpoint_point["lng"])
-    target_index = 0 if mode == "start" else -1
-    edge_point = coords[target_index]
-    gap_meters = point_distance_meters(edge_point, endpoint_point)
-    anchor_path = coords[:2] if mode == "start" else coords[-2:]
-    anchor_point = project_point_onto_coord_path(endpoint_point, anchor_path)
-
-    if anchor_point is None and gap_meters > ROUTE_ENDPOINT_ATTACH_MAX_DISTANCE_METERS:
-        return coords
-
-    if anchor_point is not None:
-        if point_distance_meters(coords[target_index], anchor_point) <= ROUTE_STITCH_SNAP_TOLERANCE_METERS:
-            coords[target_index] = anchor_point
-        elif mode == "start":
-            coords.insert(0, anchor_point)
-        else:
-            coords.append(anchor_point)
-    elif gap_meters <= ROUTE_STITCH_SNAP_TOLERANCE_METERS:
-        coords[target_index] = endpoint_point
-        return coords
-
-    target_index = 0 if mode == "start" else -1
-    if point_distance_meters(coords[target_index], endpoint_point) <= ROUTE_STITCH_SNAP_TOLERANCE_METERS:
-        coords[target_index] = endpoint_point
-    elif mode == "start":
-        coords.insert(0, endpoint_point)
-    else:
-        coords.append(endpoint_point)
-
-    return coords
-
-
-def path_to_coords(G, route, resolved_edges=None, start_point=None, end_point=None):
+# A route's line runs along its roads only: it starts and ends where each
+# pin meets the road (add_road_access_nodes), never drawn on to the pin.
+def path_to_coords(G, route, resolved_edges=None):
     if not route:
         return []
 
@@ -1216,8 +1292,6 @@ def path_to_coords(G, route, resolved_edges=None, start_point=None, end_point=No
             coords.extend(edge_coords)
 
     if coords:
-        attach_endpoint_to_route_coords(coords, start_point, "start")
-        attach_endpoint_to_route_coords(coords, end_point, "end")
         return coords
 
     fallback_coords = []
@@ -1227,8 +1301,6 @@ def path_to_coords(G, route, resolved_edges=None, start_point=None, end_point=No
             "lat": float(node_data["y"]),
             "lng": float(node_data["x"])
         })
-    attach_endpoint_to_route_coords(fallback_coords, start_point, "start")
-    attach_endpoint_to_route_coords(fallback_coords, end_point, "end")
     return fallback_coords
 
 
@@ -1314,14 +1386,7 @@ def extract_route_turn_steps(G, route, resolved_edges=None):
 
     steps = []
     for u, v, key, edge in resolved_edges:
-        edge_names = edge.get("name")
-        if edge_names is None:
-            name = ""
-        elif isinstance(edge_names, list):
-            name = next((str(n).strip() for n in edge_names if str(n).strip()), "")
-        else:
-            name = str(edge_names).strip()
-
+        name = _edge_street_name(edge) or ""
         coords = edge_geometry_to_coords(G, u, v, edge)
         if len(coords) < 2:
             u_node, v_node = G.nodes[u], G.nodes[v]
@@ -1746,6 +1811,56 @@ def select_display_routes(sorted_routes, limit):
     return selected[:limit]
 
 
+def display_sort_key(route):
+    """Final result order for both flood and earthquake routes: safety first,
+    then the ACO's pheromone preference, then distance."""
+    return (
+        route["unsafe_distance"] > 0,
+        route["unsafe_distance"],
+        route["risk_distance"],
+        -route.get("final_pheromone", 0.0),
+        route["distance"],
+    )
+
+
+def label_display_routes(sorted_routes):
+    """Picks the routes to show from candidates sorted by display_sort_key and
+    stamps each with its display number, category, status and color. Only
+    when no safe route exists is an eliminated route labeled "Best"."""
+    valid_routes = [route.copy() for route in sorted_routes if not route["eliminated"]]
+    eliminated_routes = [route.copy() for route in sorted_routes if route["eliminated"]]
+
+    if valid_routes:
+        eliminated_routes = select_display_routes(
+            eliminated_routes,
+            min(MAX_ELIMINATED_ROUTES_TO_SHOW, len(eliminated_routes)),
+        )
+        valid_routes = select_display_routes(
+            valid_routes,
+            FINAL_ROUTES_TO_SHOW - len(eliminated_routes),
+        )
+    else:
+        eliminated_routes = select_display_routes(eliminated_routes, FINAL_ROUTES_TO_SHOW)
+
+    final_routes = []
+
+    for idx, route in enumerate(valid_routes, start=1):
+        route["display_route_no"] = idx
+        route["category"] = "best" if idx == 1 else "available"
+        route["status"] = "Best" if idx == 1 else "Available"
+        route["color"] = "#22c55e" if idx == 1 else "#8b5cf6"
+        final_routes.append(route)
+
+    for idx, route in enumerate(eliminated_routes, start=len(final_routes) + 1):
+        route["display_route_no"] = idx
+        route["category"] = "eliminated"
+        route["status"] = "Best" if not valid_routes and idx == 1 else "Eliminated"
+        route["color"] = "#ef4444"
+        final_routes.append(route)
+
+    return final_routes
+
+
 def get_ant_choices(
     G,
     current_node,
@@ -1996,7 +2111,7 @@ def run_aco(G, start_node, end_node):
     return candidate_routes, edge_pheromone
 
 
-def finalize_routes(G, candidate_routes, edge_pheromone, start_point=None, end_point=None):
+def finalize_routes(G, candidate_routes, edge_pheromone):
     scored_routes = []
     for route in candidate_routes:
         route_copy = route.copy()
@@ -2009,8 +2124,6 @@ def finalize_routes(G, candidate_routes, edge_pheromone, start_point=None, end_p
             G,
             route_copy["path"],
             resolved_edges=resolved_edges,
-            start_point=start_point,
-            end_point=end_point,
         )
         route_copy["street_path"] = extract_route_street_path(
             G,
@@ -2029,52 +2142,7 @@ def finalize_routes(G, candidate_routes, edge_pheromone, start_point=None, end_p
         route_copy["aco_score"] = round(numeric_score(route_copy), 2)
         scored_routes.append(route_copy)
 
-    sorted_routes = sorted(
-        scored_routes,
-        key=lambda route: (
-            route["unsafe_distance"] > 0,
-            route["unsafe_distance"],
-            route["risk_distance"],
-            -route["final_pheromone"],
-            route["distance"],
-        )
-    )
-
-    valid_routes = [r.copy() for r in sorted_routes if not r["eliminated"]]
-    eliminated_routes = [r.copy() for r in sorted_routes if r["eliminated"]]
-
-    if valid_routes:
-        eliminated_limit = min(
-            MAX_ELIMINATED_ROUTES_TO_SHOW,
-            len(eliminated_routes),
-        )
-        eliminated_routes = select_display_routes(eliminated_routes, eliminated_limit)
-        valid_routes = select_display_routes(
-            valid_routes,
-            FINAL_ROUTES_TO_SHOW - len(eliminated_routes),
-        )
-    else:
-        eliminated_routes = select_display_routes(eliminated_routes, FINAL_ROUTES_TO_SHOW)
-
-    final_routes = []
-
-    for idx, route in enumerate(valid_routes, start=1):
-        route["display_route_no"] = idx
-        route["category"] = "best" if idx == 1 else "available"
-        route["status"] = "Best" if idx == 1 else "Available"
-        route["color"] = "#22c55e" if idx == 1 else "#f59e0b"
-        final_routes.append(route)
-
-    next_index = len(final_routes) + 1
-    for idx, route in enumerate(eliminated_routes, start=next_index):
-        route["display_route_no"] = idx
-        route["category"] = "eliminated"
-        route["status"] = (
-            "Best" if not valid_routes and idx == 1
-            else "Eliminated"
-        )
-        route["color"] = "#ef4444"
-        final_routes.append(route)
+    final_routes = label_display_routes(sorted(scored_routes, key=display_sort_key))
 
     debug_print(
         f"[OSM] Final route count: requested={FINAL_ROUTES_TO_SHOW}, returned={len(final_routes)}"
@@ -2103,25 +2171,44 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     G = prepare_routing_graph(scope_name)
     scope_display_name = get_barangay_boundary(scope_name)["display_name"]
 
-    for location_name, lat, lng in (
-        (start_name, start_lat, start_lng),
-        (end_name, end_lat, end_lng),
+    for subject, lat, lng in (
+        ("The start point", start_lat, start_lng),
+        ("The destination", end_lat, end_lng),
     ):
-        if not is_point_in_hazard_coverage(G, lat, lng):
+        pin_check = check_route_pin(G, lat, lng, f"{scope_display_name}'s flood hazard data", subject)
+        if not pin_check["valid"]:
             return {
                 "error": True,
-                "message": (
-                    f"{location_name} is outside the {scope_display_name} hazard data "
-                    "coverage, so a route to it cannot be checked for safety."
-                ),
+                "message": pin_check["message"],
             }
 
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 1/4 complete in {now - phase_started:.2f}s")
     phase_started = now
-    debug_print("[OSM] Phase 2/4: snapping start/end nodes")
+    debug_print("[OSM] Phase 2/4: joining start/end to the road")
 
-    start_node, end_node = get_nearest_osm_nodes(G, start_lat, start_lng, end_lat, end_lng)
+    # Routes run on this copy of the cached graph, where each pin has a node
+    # on the street beside it.
+    G, (start_node, end_node) = add_road_access_nodes(
+        G,
+        [(start_lat, start_lng), (end_lat, end_lng)],
+        annotate_flood_edge,
+    )
+    if start_node is None or end_node is None:
+        return {
+            "error": True,
+            "message": "No walkable road was found to start or end the route on.",
+        }
+    debug_print(f"[OSM] Start node: {start_node}")
+    debug_print(f"[OSM] End node: {end_node}")
+    if start_node == end_node:
+        return {
+            "error": True,
+            "message": (
+                "The start point and destination meet the road at the same spot. "
+                "Move one of the pins farther away."
+            ),
+        }
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 2/4 complete in {now - phase_started:.2f}s")
     phase_started = now
@@ -2142,13 +2229,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
 
     phase_started = now
     debug_print("[OSM] Phase 4/4: finalizing route results")
-    final_routes = finalize_routes(
-        G,
-        candidate_routes,
-        edge_pheromone,
-        start_point=build_route_point(start_lat, start_lng),
-        end_point=build_route_point(end_lat, end_lng),
-    )
+    final_routes = finalize_routes(G, candidate_routes, edge_pheromone)
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 4/4 complete in {now - phase_started:.2f}s")
 

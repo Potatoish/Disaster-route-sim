@@ -2,14 +2,10 @@
 // background, and the feedback widget. Loaded on every page that extends
 // site_base.html.
 
-// Mirrors script.js's BACKEND_BASE (only ever loaded together with this file
-// on the simulator page, never here) so the scope-map modal below can hit
-// the same API from the homepage/about pages without the simulator's JS.
-window.BACKEND_BASE = window.BACKEND_BASE || (
-  ['127.0.0.1', 'localhost'].includes(window.location.hostname)
-    ? `${window.location.protocol}//127.0.0.1:5000`
-    : window.location.origin
-);
+// Same as script.js (never loaded on these pages): Flask serves the pages
+// and the API together, so the coverage-map modal below calls the API on
+// the page's own origin.
+window.BACKEND_BASE = window.BACKEND_BASE || window.location.origin;
 
 const HOME_THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 
@@ -195,7 +191,7 @@ function initScopeMap() {
   if (scopeMapInstance) return scopeMapInstance;
 
   scopeMapInstance = L.map('scopeMapEl', { attributionControl: false });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors',
   }).addTo(scopeMapInstance);
@@ -268,66 +264,16 @@ function setScopeMapError(message) {
   el.textContent = message || '';
 }
 
-// ---- hero's "How to use" step-by-step tutorial ----
-const TUTORIAL_STEPS = 5;
-let tutorialStep = 1;
-
-function renderTutorialStep() {
-  document.querySelectorAll('.tutorial-slide').forEach((el) => {
-    el.classList.toggle('is-active', Number(el.dataset.step) === tutorialStep);
-  });
-  document.querySelectorAll('.tutorial-dot').forEach((dot, i) => {
-    dot.classList.toggle('is-active', i + 1 === tutorialStep);
-  });
-  const stepNum = document.getElementById('tutorialStepNum');
-  if (stepNum) stepNum.textContent = String(tutorialStep);
-
-  const back = document.getElementById('tutorialBack');
-  if (back) back.disabled = tutorialStep === 1;
-
-  const next = document.getElementById('tutorialNext');
-  if (next) next.textContent = tutorialStep === TUTORIAL_STEPS ? 'Done' : 'Next';
-}
-
-function goToTutorialStep(step) {
-  tutorialStep = Math.min(TUTORIAL_STEPS, Math.max(1, step));
-  renderTutorialStep();
-}
-
-function tutorialNext() {
-  if (tutorialStep === TUTORIAL_STEPS) {
-    closeTutorial();
-    return;
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented || event.key !== 'Escape') return;
+  if (document.getElementById('scopeModal')?.hidden === false) {
+    event.preventDefault();
+    closeScopeMap();
+  } else if (fabOpen) {
+    event.preventDefault();
+    toggleFab();
   }
-  goToTutorialStep(tutorialStep + 1);
-}
-
-function tutorialPrev() {
-  goToTutorialStep(tutorialStep - 1);
-}
-
-function openTutorial() {
-  const modal = document.getElementById('tutorialModal');
-  if (!modal) return;
-  goToTutorialStep(1);
-  modal.hidden = false;
-  document.body.classList.add('tutorial-modal-open');
-}
-
-// The modal markup lives in site_base.html, so it's present on every page
-// that shares this nav (Home, About) -- always open it in place instead of
-// navigating anywhere.
-function handleNavHowToUse(event) {
-  event.preventDefault();
-  openTutorial();
-  return false;
-}
-
-function closeTutorial() {
-  const modal = document.getElementById('tutorialModal');
-  if (modal) modal.hidden = true;
-  document.body.classList.remove('tutorial-modal-open');
-}
+});
 
 // ---- ant colony ambient hero background ----
 // Ants no longer wander freely -- they walk a small procedural "road
@@ -611,9 +557,3 @@ window.setQuickStartBarangay = setQuickStartBarangay;
 window.handleQuickStartLaunch = handleQuickStartLaunch;
 window.openScopeMap = openScopeMap;
 window.closeScopeMap = closeScopeMap;
-window.openTutorial = openTutorial;
-window.handleNavHowToUse = handleNavHowToUse;
-window.closeTutorial = closeTutorial;
-window.tutorialNext = tutorialNext;
-window.tutorialPrev = tutorialPrev;
-window.goToTutorialStep = goToTutorialStep;

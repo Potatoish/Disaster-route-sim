@@ -1,0 +1,72 @@
+<!-- "How to use" step-by-step tutorial, driven by static/tutorial.js.
+     Included by site_base.html (Home, About) and index.html (simulator). -->
+<div class="tutorial-modal" id="tutorialModal" role="dialog" aria-modal="true" aria-label="How to use AGNAS" hidden>
+  <div class="tutorial-modal-backdrop" onclick="closeTutorial()"></div>
+  <div class="tutorial-modal-panel">
+    <div class="tutorial-modal-head">
+      <span class="eyebrow">Step <span id="tutorialStepNum">1</span> of 5</span>
+      <button type="button" class="tutorial-modal-close" onclick="closeTutorial()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <!-- loading="lazy": the modal starts hidden, so its screenshots load when
+         it opens instead of holding up the page's load event. -->
+    <div id="tutorialSlides">
+      <div class="tutorial-slide is-active" data-step="1">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-light.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
+          <img class="shot-dark" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-dark.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
+        </div>
+        <h3>1. Pick barangay</h3>
+        <p>Choose your barangay/area.</p>
+      </div>
+      <div class="tutorial-slide" data-step="2">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-light.png') }}" alt="Flood and Earthquake hazard selection cards">
+          <img class="shot-dark" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-dark.png') }}" alt="Flood and Earthquake hazard selection cards">
+        </div>
+        <h3>2. Pick disaster</h3>
+        <p>Sets the hazard you want to simulate.</p>
+      </div>
+      <div class="tutorial-slide" data-step="3">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/set-start-end-light.png') }}" alt="Start and destination pins set on the map">
+          <img class="shot-dark" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/set-start-end-dark.png') }}" alt="Start and destination pins set on the map">
+        </div>
+        <h3>3. Pin start / end</h3>
+        <p>Tap the map where you are, then where you want to go.</p>
+      </div>
+      <div class="tutorial-slide" data-step="4">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-light.png') }}" alt="Show Evacuation Sites button for earthquake mode">
+          <img class="shot-dark" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-dark.png') }}" alt="Show Evacuation Sites button for earthquake mode">
+        </div>
+        <h3>4. Reveal evacuation sites</h3>
+        <p>For earthquake: pin where you are, then reveal shelters.</p>
+      </div>
+      <div class="tutorial-slide" data-step="5">
+        <div class="tutorial-tile-shot">
+          <img class="shot-light" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/run-simulation-light.png') }}" alt="Run Simulation button, ready to launch">
+          <img class="shot-dark" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/run-simulation-dark.png') }}" alt="Run Simulation button, ready to launch">
+        </div>
+        <h3>5. Run simulation</h3>
+        <p>See the safest routes, ranked.</p>
+      </div>
+    </div>
+
+    <div class="tutorial-modal-foot">
+      <div class="tutorial-dots" id="tutorialDots">
+        <button type="button" class="tutorial-dot is-active" onclick="goToTutorialStep(1)" aria-label="Step 1"></button>
+        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(2)" aria-label="Step 2"></button>
+        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(3)" aria-label="Step 3"></button>
+        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(4)" aria-label="Step 4"></button>
+        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(5)" aria-label="Step 5"></button>
+      </div>
+      <div class="tutorial-modal-actions">
+        <button type="button" class="tutorial-btn" id="tutorialBack" onclick="tutorialPrev()">Back</button>
+        <button type="button" class="tutorial-btn primary" id="tutorialNext" onclick="tutorialNext()">Next</button>
+      </div>
+    </div>
+  </div>
+</div>

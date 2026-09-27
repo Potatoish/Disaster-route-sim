@@ -32,7 +32,7 @@
   };
 
   function getBackendBase() {
-    return window.BACKEND_BASE || 'http://127.0.0.1:5000';
+    return window.BACKEND_BASE || window.location.origin;
   }
 
   function styleForFeature(feature) {
@@ -112,13 +112,8 @@
     ).addTo(map);
   }
 
-  function reset(options = {}) {
-    const { clearCache = false } = options;
+  function reset() {
     clearLayer();
-
-    if (clearCache) {
-      state.hazardCache.clear();
-    }
   }
 
   window.floodHazardUI = {

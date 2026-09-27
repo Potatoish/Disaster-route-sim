@@ -23,7 +23,7 @@
   };
 
   function getBackendBase() {
-    return window.BACKEND_BASE || 'http://127.0.0.1:5000';
+    return window.BACKEND_BASE || window.location.origin;
   }
 
   function escapeHtml(value) {
@@ -47,16 +47,10 @@
     objects.length = 0;
   }
 
-  function reset(options = {}) {
-    const { clearCache = false } = options;
-
+  function reset() {
     clearInfoWindow();
     clearMapObjects(state.evacuationMarkers);
     Object.values(state.hazardOverlays).forEach(overlays => clearMapObjects(overlays));
-
-    if (clearCache) {
-      state.evacuationSitesCache.clear();
-    }
   }
 
   function buildEvacMarkerIcon(isHighlighted) {
@@ -265,38 +259,34 @@
     });
   }
 
+  // showRouteKeys / showHazardLayers: whether a result's routes and hazard
+  // layers are on the map (before a run, only the pin and shelters are).
   function syncLegend(activeView = 'overall', options = {}) {
     const {
       showRouteKeys = true,
       showHazardLayers = true,
-      showHazardSection = true,
     } = options;
     const body = document.getElementById('mapLegendBody');
     if (!body) return;
 
-    const routeLegend = showRouteKeys
-      ? `
-        <div class="legend-row"><div class="legend-line" style="background:#22c55e;height:4px;"></div><span style="font-size:.78rem;">Best Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:#f59e0b;"></div><span style="font-size:.78rem;">Available Route</span></div>
-        <div class="legend-row"><div class="legend-line" style="background:#ef4444;opacity:.8;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
-      `
+    // script.js builds the route rows (they change when no route is safe).
+    const routeLegend = showRouteKeys && typeof window.buildRouteLegendRows === 'function'
+      ? window.buildRouteLegendRows()
       : '';
     const liquefactionRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.78rem;">Liquefaction Layer</span></div>`;
     const groundShakingRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(194,65,12,1);height:4px;"></div><span style="font-size:.78rem;">Ground Shaking Layer</span></div>`;
-    const hazardLegend = !showHazardSection
+    const hazardLegend = !showHazardLayers
       ? ''
-      : !showHazardLayers
-        ? `<div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted);line-height:1.5;">Select <strong>Liquefaction</strong> or <strong>Ground Shaking</strong> to view the hazard layer.</div>`
-        : activeView === 'liquefaction'
-          ? liquefactionRow
-          : activeView === 'ground_shaking'
-            ? groundShakingRow
-            : liquefactionRow + groundShakingRow;
+      : activeView === 'liquefaction'
+        ? liquefactionRow
+        : activeView === 'ground_shaking'
+          ? groundShakingRow
+          : liquefactionRow + groundShakingRow;
 
     body.innerHTML = `
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
-        <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Start Node</span></div>
+        <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Your Location</span></div>
         <div class="legend-row"><div class="legend-dot-sm" style="background:#f59e0b;"></div><span style="font-size:.78rem;">Evacuation Site</span></div>
         ${hazardLegend}
       </div>`;

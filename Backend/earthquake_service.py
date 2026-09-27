@@ -2,7 +2,6 @@ from threading import RLock
 import time
 
 import networkx as nx
-import osmnx as ox
 
 from data import database
 from earthquake_data import (
@@ -11,16 +10,16 @@ from earthquake_data import (
     is_supported_earthquake_barangay,
 )
 from osm_routing import (
-    FINAL_ROUTES_TO_SHOW,
-    GRAPH_NETWORK_TYPE,
     HAZARD_THRESHOLD,
-    MAX_ELIMINATED_ROUTES_TO_SHOW,
     NUM_ITERATIONS,
     UNKNOWN_HAZARD_LEVEL,
+    add_road_access_nodes,
     build_elimination_reason,
     build_hazard_coverage_area,
-    build_route_point,
+    check_route_pin,
     debug_print,
+    display_sort_key,
+    download_walk_graph,
     edge_traversal_cost,
     estimate_boundary_graph_radius,
     get_barangay_base_graph,
@@ -30,6 +29,7 @@ from osm_routing import (
     get_edge_geometry,
     hydrate_route_edge_records,
     is_point_in_hazard_coverage,
+    label_display_routes,
     normalize_barangay_name,
     path_to_coords,
     resolve_route_edge_records,
@@ -37,8 +37,6 @@ from osm_routing import (
     route_path_signature,
     route_pheromone_score,
     run_aco,
-    select_display_routes,
-    select_endpoint_node,
     summarize_hazard_data_coverage,
     warm_static_caches,
 )
@@ -142,12 +140,7 @@ def _get_earthquake_graph(dataset):
             radius_m = estimate_boundary_graph_radius(boundary_geometry)
             debug_print(f"[EQ] Building graph for {boundary['display_name']} with radius {radius_m:.1f} meters")
             debug_print(f"[EQ] Graph center: ({float(centroid.y)}, {float(centroid.x)})")
-            graph = ox.graph_from_point(
-                (float(centroid.y), float(centroid.x)),
-                dist=radius_m,
-                network_type=GRAPH_NETWORK_TYPE,
-                simplify=True,
-            )
+            graph = download_walk_graph(centroid, radius_m)
         # Only roads inside the barangay AND inside both earthquake layers can
         # be routed on. The traced layer polygons leave strips of the
         # barangay (riverbanks, edges) undescribed; before this, roads there
@@ -161,6 +154,25 @@ def _get_earthquake_graph(dataset):
 
         _EARTHQUAKE_GRAPH_CACHE[canonical_name] = graph
         return graph
+
+
+def _stamp_earthquake_hazards(edge_data, edge_geom, dataset):
+    liquefaction = _resolve_layer_hazard(
+        edge_geom,
+        dataset["layer_zones"]["liquefaction"],
+    )
+    ground_shaking = _resolve_layer_hazard(
+        edge_geom,
+        dataset["layer_zones"]["ground_shaking"],
+    )
+
+    edge_data["eq_liquefaction"] = liquefaction
+    edge_data["eq_ground_shaking"] = ground_shaking
+    if liquefaction is None or ground_shaking is None:
+        edge_data["eq_overall"] = None
+        edge_data["hazard_coverage"] = False
+    else:
+        edge_data["eq_overall"] = max(liquefaction, ground_shaking)
 
 
 def _annotate_graph_with_earthquake_hazards(graph, dataset):
@@ -177,27 +189,21 @@ def _annotate_graph_with_earthquake_hazards(graph, dataset):
         debug_print(f"[EQ] Annotating earthquake hazards on {len(graph.edges)} edges")
 
         for u, v, key, edge_data in graph.edges(keys=True, data=True):
-            edge_geom = get_edge_geometry(graph, u, v, edge_data)
-            liquefaction = _resolve_layer_hazard(
-                edge_geom,
-                dataset["layer_zones"]["liquefaction"],
-            )
-            ground_shaking = _resolve_layer_hazard(
-                edge_geom,
-                dataset["layer_zones"]["ground_shaking"],
-            )
-
-            edge_data["eq_liquefaction"] = liquefaction
-            edge_data["eq_ground_shaking"] = ground_shaking
-            if liquefaction is None or ground_shaking is None:
-                edge_data["eq_overall"] = None
-                edge_data["hazard_coverage"] = False
-            else:
-                edge_data["eq_overall"] = max(liquefaction, ground_shaking)
+            _stamp_earthquake_hazards(edge_data, get_edge_geometry(graph, u, v, edge_data), dataset)
 
         graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
         debug_print(f"[EQ] Hazard annotation complete in {time.perf_counter() - annotation_started:.2f}s")
     return graph
+
+
+def _add_earthquake_road_access_nodes(base_graph, points, dataset):
+    def annotate_edge(edge_data):
+        # A piece of a road kept inside the coverage area is inside it too;
+        # only a missing layer reading takes that back.
+        edge_data["hazard_coverage"] = True
+        _stamp_earthquake_hazards(edge_data, edge_data["geometry"], dataset)
+
+    return add_road_access_nodes(base_graph, points, annotate_edge)
 
 
 def _clone_graph_for_view(base_graph, view_key):
@@ -226,7 +232,7 @@ def _build_route_maxima(resolved_edges):
     return maxima
 
 
-def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_site, view_key):
+def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
     resolved_edges = hydrate_route_edge_records(base_graph, route.get("path_edges"))
     if not resolved_edges:
         resolved_edges = resolve_route_edge_records(base_graph, route.get("path", []))
@@ -293,8 +299,6 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
             base_graph,
             route.get("path", []),
             resolved_edges=resolved_edges,
-            start_point=build_route_point(start_location["lat"], start_location["lng"]),
-            end_point=build_route_point(evacuation_site["lat"], evacuation_site["lng"]),
         ),
         "street_path": extract_route_street_path(
             base_graph,
@@ -352,16 +356,6 @@ def _evaluate_earthquake_route(base_graph, route, start_location, evacuation_sit
     }
 
 
-def _view_sort_key(route):
-    return (
-        route["unsafe_distance"] > 0,
-        route["unsafe_distance"],
-        route["risk_distance"],
-        -route.get("final_pheromone", 0.0),
-        route["distance"],
-    )
-
-
 def _build_view_summary(view_key, routes, evacuation_sites):
     selected_route = next((route for route in routes if route["category"] != "eliminated"), None)
     if selected_route is None and routes:
@@ -392,48 +386,16 @@ def _restrict_to_best_site(candidates):
     if not candidates:
         return candidates
 
-    best = min(candidates, key=_view_sort_key)
+    best = min(candidates, key=display_sort_key)
     best_site_id = best["destination_id"]
     return [route for route in candidates if route["destination_id"] == best_site_id]
 
 
 def _finalize_earthquake_view_routes(start_name, routes, evacuation_sites, view_key):
-    sorted_routes = sorted(routes, key=_view_sort_key)
-    valid_routes = [route.copy() for route in sorted_routes if not route["eliminated"]]
-    eliminated_routes = [route.copy() for route in sorted_routes if route["eliminated"]]
-
-    if valid_routes:
-        eliminated_limit = min(MAX_ELIMINATED_ROUTES_TO_SHOW, len(eliminated_routes))
-        eliminated_routes = select_display_routes(eliminated_routes, eliminated_limit)
-        valid_routes = select_display_routes(
-            valid_routes,
-            FINAL_ROUTES_TO_SHOW - len(eliminated_routes),
-        )
-    else:
-        eliminated_routes = select_display_routes(eliminated_routes, FINAL_ROUTES_TO_SHOW)
-
-    final_routes = []
-    for index, route in enumerate(valid_routes, start=1):
-        route["display_route_no"] = index
-        route["category"] = "best" if index == 1 else "available"
-        route["status"] = "Best" if index == 1 else "Available"
-        route["color"] = "#22c55e" if index == 1 else "#f59e0b"
+    final_routes = label_display_routes(sorted(routes, key=display_sort_key))
+    for route in final_routes:
         route["path_label"] = f"{start_name} -> {route['destination_name']}"
         route["segments"] = max(1, len(route.get("path", [])) - 1)
-        final_routes.append(route)
-
-    next_index = len(final_routes) + 1
-    for index, route in enumerate(eliminated_routes, start=next_index):
-        route["display_route_no"] = index
-        route["category"] = "eliminated"
-        route["status"] = (
-            "Best" if not valid_routes and index == 1
-            else "Eliminated"
-        )
-        route["color"] = "#ef4444"
-        route["path_label"] = f"{start_name} -> {route['destination_name']}"
-        route["segments"] = max(1, len(route.get("path", [])) - 1)
-        final_routes.append(route)
 
     summary = _build_view_summary(view_key, final_routes, evacuation_sites)
     return {
@@ -444,23 +406,12 @@ def _finalize_earthquake_view_routes(start_name, routes, evacuation_sites, view_
     }
 
 
-def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_key):
+def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_nodes, view_key):
     view_graph = _clone_graph_for_view(base_graph, view_key)
-    start_node = select_endpoint_node(
-        view_graph,
-        start_location["lat"],
-        start_location["lng"],
-        "start",
-    )
 
     collected = {}
     for evacuation_site in evacuation_sites:
-        end_node = select_endpoint_node(
-            view_graph,
-            evacuation_site["lat"],
-            evacuation_site["lng"],
-            "end",
-        )
+        end_node = site_nodes[evacuation_site["id"]]
         candidate_routes, edge_pheromone = run_aco(view_graph, start_node, end_node)
 
         for route in candidate_routes:
@@ -476,7 +427,6 @@ def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_
             collected[route_key] = _evaluate_earthquake_route(
                 base_graph,
                 route_copy,
-                start_location,
                 evacuation_site,
                 view_key,
             )
@@ -484,21 +434,7 @@ def _collect_view_candidates(base_graph, start_location, evacuation_sites, view_
     return list(collected.values())
 
 
-def _collect_road_reachable_evacuation_sites(base_graph, start_location, evacuation_sites):
-    evacuation_sites = [
-        site for site in evacuation_sites
-        if is_point_in_hazard_coverage(base_graph, site["lat"], site["lng"])
-    ]
-    if not evacuation_sites:
-        return []
-
-    start_node = select_endpoint_node(
-        base_graph,
-        start_location["lat"],
-        start_location["lng"],
-        "start",
-    )
-
+def _collect_road_reachable_evacuation_sites(base_graph, start_node, evacuation_sites, site_nodes):
     try:
         distance_map = nx.single_source_dijkstra_path_length(
             base_graph,
@@ -510,14 +446,7 @@ def _collect_road_reachable_evacuation_sites(base_graph, start_location, evacuat
 
     ranked_sites = []
     for site in evacuation_sites:
-        end_node = select_endpoint_node(
-            base_graph,
-            site["lat"],
-            site["lng"],
-            "end",
-        )
-
-        road_distance = distance_map.get(end_node)
+        road_distance = distance_map.get(site_nodes.get(site["id"]))
         if road_distance is None:
             continue
 
@@ -556,6 +485,23 @@ def get_earthquake_evacuation_sites(barangay_name):
         }
 
 
+def _earthquake_coverage_label(dataset):
+    return f"{dataset['display_barangay']}'s earthquake hazard data"
+
+
+def check_earthquake_pin(barangay_name, lat, lng):
+    if not is_supported_earthquake_barangay(barangay_name):
+        raise ValueError(_unsupported_earthquake_scope_message())
+
+    dataset = get_earthquake_dataset(barangay_name)
+    return check_route_pin(
+        _get_earthquake_graph(dataset),
+        lat,
+        lng,
+        _earthquake_coverage_label(dataset),
+    )
+
+
 def simulate_earthquake(start, barangay_name):
     if not start:
         return {
@@ -569,16 +515,19 @@ def simulate_earthquake(start, barangay_name):
             "message": _unsupported_earthquake_scope_message(),
         }
 
-    start_location = database.get_location_by_name(start)
-    if not start_location:
+    start_location, start_error = database.resolve_route_location(start, "Start")
+    if start_error:
         return {
             "error": True,
-            "message": f"Start location '{start}' not found",
+            "message": start_error,
         }
 
     try:
         dataset = get_earthquake_dataset(barangay_name)
-        if normalize_barangay_name(start_location.get("barangay")) != dataset["canonical_barangay"]:
+        # Only CSV nodes carry a barangay; a map pin is checked against the
+        # coverage area below instead.
+        start_barangay = start_location.get("barangay")
+        if start_barangay and normalize_barangay_name(start_barangay) != dataset["canonical_barangay"]:
             return {
                 "error": True,
                 "message": (
@@ -588,33 +537,61 @@ def simulate_earthquake(start, barangay_name):
             }
 
         base_graph = _get_earthquake_graph(dataset)
-        if not is_point_in_hazard_coverage(base_graph, start_location["lat"], start_location["lng"]):
-            return {
-                "error": True,
-                "message": (
-                    f"{start_location['name']} is outside the {dataset['display_barangay']} "
-                    "earthquake hazard data coverage, so routes from it cannot be checked for safety."
-                ),
-            }
-
-        evaluated_sites = _collect_road_reachable_evacuation_sites(
+        pin_check = check_route_pin(
             base_graph,
-            start_location,
-            dataset["evacuation_sites"],
+            start_location["lat"],
+            start_location["lng"],
+            _earthquake_coverage_label(dataset),
+            "The start point",
         )
-        if not evaluated_sites:
+        if not pin_check["valid"]:
             return {
                 "error": True,
-                "message": (
-                    "No evacuation site can be reached from this start node without "
-                    "leaving the area covered by earthquake hazard data."
-                ),
+                "message": pin_check["message"],
             }
 
         debug_print("\n" + "=" * 60)
         debug_print("[EQ] SIMULATION START")
         debug_print(f"[EQ] From: {start_location['name']} ({start_location['lat']}, {start_location['lng']})")
         debug_print(f"[EQ] Selection context: {barangay_name}")
+        simulation_started = time.perf_counter()
+        phase_started = simulation_started
+        debug_print("[EQ] Phase 1/3: preparing routing context")
+        # Hazards go on first, so the road pieces cut below at the pin and at
+        # each site are annotated the same way as every other road.
+        base_graph = _annotate_graph_with_earthquake_hazards(
+            base_graph,
+            dataset,
+        )
+        covered_sites = [
+            site for site in dataset["evacuation_sites"]
+            if is_point_in_hazard_coverage(base_graph, site["lat"], site["lng"])
+        ]
+        routing_graph, access_nodes = _add_earthquake_road_access_nodes(
+            base_graph,
+            [(start_location["lat"], start_location["lng"])]
+            + [(site["lat"], site["lng"]) for site in covered_sites],
+            dataset,
+        )
+        start_node = access_nodes[0]
+        site_nodes = {
+            site["id"]: node
+            for site, node in zip(covered_sites, access_nodes[1:])
+        }
+        evaluated_sites = (
+            _collect_road_reachable_evacuation_sites(routing_graph, start_node, covered_sites, site_nodes)
+            if start_node is not None
+            else []
+        )
+        if not evaluated_sites:
+            return {
+                "error": True,
+                "message": (
+                    "No evacuation site can be reached from this start point without "
+                    "leaving the area covered by earthquake hazard data."
+                ),
+            }
+
         debug_print(f"[EQ] Road-reachable evacuation sites: {len(evaluated_sites)}")
         for site in evaluated_sites:
             debug_print(
@@ -622,13 +599,6 @@ def simulate_earthquake(start, barangay_name):
                 f"({site['lat']}, {site['lng']}) | "
                 f"road distance={site['road_distance']:.1f}m"
             )
-        simulation_started = time.perf_counter()
-        phase_started = simulation_started
-        debug_print("[EQ] Phase 1/3: preparing routing context")
-        base_graph = _annotate_graph_with_earthquake_hazards(
-            base_graph,
-            dataset,
-        )
         now = time.perf_counter()
         debug_print(f"[EQ] Phase 1/3 complete in {now - phase_started:.2f}s")
 
@@ -641,9 +611,10 @@ def simulate_earthquake(start, barangay_name):
             view_label = EARTHQUAKE_VIEW_CONFIG[view_key]["label"]
             debug_print(f"[EQ]   View start: {view_label}")
             candidates = _collect_view_candidates(
-                base_graph,
-                start_location,
+                routing_graph,
+                start_node,
                 evaluated_sites,
+                site_nodes,
                 view_key,
             )
             candidates = _restrict_to_best_site(candidates)

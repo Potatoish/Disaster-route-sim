@@ -118,6 +118,7 @@ Main backend endpoints include:
 - `GET /about` — About & Contact page
 - `GET /app` — the route simulator (was served at `/`)
 - `GET /locations`
+- `GET /check-pin` — checks a start/destination tapped on the map before a run
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`
 - `POST /simulate`

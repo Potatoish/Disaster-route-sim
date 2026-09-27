@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -5,6 +6,7 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent
 NODE_COLUMNS = ["id", "name", "lat", "lng", "barangay", "node_type"]
+MAX_PIN_LABEL_LENGTH = 80
 
 
 def _repair_bad_line(row, expected_columns):
@@ -104,3 +106,31 @@ def get_location_by_name(name):
     except Exception as e:
         print("Location fetch error:", e)
         return None
+
+
+def resolve_route_location(value, role):
+    """A route start/end from a request: a point pinned on the map,
+    {"lat", "lng", "label"?}, or the name of a node in the CSV (still used by
+    tools/route_batch_test.py). role is "Start" or "End", for messages.
+    Returns (location, error_message)."""
+    if isinstance(value, dict):
+        try:
+            lat = float(value.get("lat"))
+            lng = float(value.get("lng"))
+        except (TypeError, ValueError):
+            lat = lng = math.nan
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            return None, f"{role} pin has invalid coordinates"
+
+        label = " ".join(str(value.get("label") or "").split())[:MAX_PIN_LABEL_LENGTH]
+        return {
+            "name": label or ("Your location" if role == "Start" else "Your destination"),
+            "lat": lat,
+            "lng": lng,
+            "barangay": None,
+        }, None
+
+    location = get_location_by_name(value)
+    if not location:
+        return None, f"{role} location '{value}' not found"
+    return location, None

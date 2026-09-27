@@ -12,4 +12,7 @@ RUN python -m pip install --upgrade pip \
 
 COPY . ./
 
-CMD ["sh", "-c", "exec gunicorn app:app --bind 0.0.0.0:${PORT:-5000} --timeout 300"]
+# One worker process, several threads: the simulation gate, progress counter
+# and graph caches are process-global, and a minutes-long simulation must not
+# block /simulation-status polls, /check-pin or static files while it runs.
+CMD ["sh", "-c", "exec gunicorn app:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 8 --timeout 300"]

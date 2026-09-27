@@ -47,7 +47,7 @@
   </div>
 </section>
 
-<section class="stats-section hazard-zone">
+<section class="stats-section">
   <div class="wrap stats">
     <div class="stat"><b>ACO</b><span>Ant Colony Optimization</span></div>
     <div class="stat"><b>Safety over distance</b><span>Ranking rule</span></div>
@@ -69,7 +69,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="2"/><path d="M12 8v5M8.5 10.5 12 9l3.5 1.5M9 21l2.2-7.5h1.6L15 21"/></svg>
         </span>
         <h3>Walking routes only</h3>
-        <p>Routes are built for pedestrians, this system don't follow one-way streets or other vehicle-only restrictions.</p>
+        <p>Routes are built for pedestrians, so they don't follow one-way streets or other vehicle-only restrictions.</p>
       </div>
       <div class="gtk-card">
         <span class="gtk-icon" aria-hidden="true">
@@ -89,11 +89,319 @@
   </div>
 </section>
 
+<section class="block hz-section" id="hazards">
+  <div class="wrap">
+    <div class="block-head center-head">
+      <span class="eyebrow center">Hazards</span>
+      <h2>See what each hazard does on the street</h2>
+      <p>Pick a flood level, or turn on an earthquake layer and press Simulate.</p>
+    </div>
+
+    <div class="hz-grid">
+      <article class="hz-module" id="hzFlood" aria-labelledby="hzFloodTitle">
+        <div class="hz-head">
+          <div class="hz-title">
+            <span class="hz-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s5.5 6 5.5 10a5.5 5.5 0 0 1-11 0c0-4 5.5-10 5.5-10Z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></svg>
+            </span>
+            <div>
+              <h3 id="hzFloodTitle">Flood depth</h3>
+              <p>How deep each flood level gets.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="hz-levels" role="group" aria-label="Flood level">
+          <button type="button" class="hz-level" data-level="low" aria-pressed="false">
+            <span class="hz-level-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6M8.5 10h7M12 13.5l-2.5 5M12 13.5l2.5 5"/><path d="M3 19.5c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/></svg>
+            </span>
+            <span class="hz-level-name">Low</span>
+            <span class="hz-level-range">0.1–0.5 m</span>
+            <span class="hz-level-note">Up to the knees</span>
+          </button>
+          <button type="button" class="hz-level" data-level="medium" aria-pressed="false">
+            <span class="hz-level-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6M8.5 10h7M12 13.5l-2.5 5M12 13.5l2.5 5"/><path d="M3 14c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/><path d="M3 18c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" opacity=".5"/></svg>
+            </span>
+            <span class="hz-level-name">Medium</span>
+            <span class="hz-level-range">0.5–1.0 m</span>
+            <span class="hz-level-note">Knees to waist</span>
+          </button>
+          <button type="button" class="hz-level" data-level="high" aria-pressed="false">
+            <span class="hz-level-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6M8.5 10h7"/><path d="M3 9.5c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/><path d="M3 14c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" opacity=".6"/><path d="M3 18.5c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" opacity=".35"/></svg>
+            </span>
+            <span class="hz-level-name">High</span>
+            <span class="hz-level-range">1.0 m and up</span>
+            <span class="hz-level-note">Waist and above</span>
+          </button>
+        </div>
+
+        <div class="hz-stack">
+          <div class="hz-scene">
+            <svg viewBox="0 0 520 230" role="img" aria-labelledby="hzFloodSceneLabel">
+              <title id="hzFloodSceneLabel">Street drawn to scale: a 162 cm adult and a 130 cm child standing in flood water in front of houses</title>
+              <defs>
+                <linearGradient id="hzFloodSky" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" style="stop-color: var(--sky-top)"/>
+                  <stop offset="1" style="stop-color: var(--sky-bottom)"/>
+                </linearGradient>
+                <g id="hzPerson">
+                  <circle cx="170" cy="52" r="12" style="fill: var(--figure)"/>
+                  <path d="M156 69 Q170 63 184 69 L186 113 Q170 118 154 113 Z" style="fill: var(--figure)"/>
+                  <path d="M157 72 L149 111 M183 72 L191 111" stroke-width="7" stroke-linecap="round" style="stroke: var(--figure)"/>
+                  <path d="M163 113 L162 198 M177 113 L178 198" stroke-width="9.5" stroke-linecap="round" style="stroke: var(--figure)"/>
+                </g>
+              </defs>
+              <rect width="520" height="230" fill="url(#hzFloodSky)"/>
+              <g aria-hidden="true">
+                <!-- One-storey house: 2.6 m walls, 0.8 x 2.1 m door, window sill at 1.2 m -->
+                <path d="M224 46 L292 6 L360 46 Z" style="fill: var(--house-roof)"/>
+                <rect x="232" y="44" width="120" height="156" style="fill: var(--house)"/>
+                <rect x="248" y="74" width="48" height="126" rx="2" style="fill: var(--house-roof)"/>
+                <circle cx="287" cy="140" r="2.2" style="fill: var(--house)"/>
+                <rect x="310" y="86" width="30" height="42" rx="2" style="fill: var(--window)"/>
+                <!-- Two-storey shophouse running out of frame: 2.5 m roll-up door, upper floor at 3 m -->
+                <rect x="372" y="-10" width="160" height="210" style="fill: var(--house)"/>
+                <rect x="368" y="14" width="164" height="7" style="fill: var(--house-roof)"/>
+                <rect x="386" y="-10" width="34" height="16" rx="2" style="fill: var(--window)"/>
+                <rect x="440" y="-10" width="34" height="16" rx="2" style="fill: var(--window)"/>
+                <rect x="386" y="50" width="90" height="150" style="fill: var(--house-roof)"/>
+                <path d="M386 62 H476 M386 74 H476 M386 86 H476 M386 98 H476 M386 110 H476 M386 122 H476 M386 134 H476 M386 146 H476 M386 158 H476 M386 170 H476 M386 182 H476" stroke-width="1" opacity=".35" style="stroke: var(--house)"/>
+                <rect x="490" y="86" width="24" height="42" rx="2" style="fill: var(--window)"/>
+              </g>
+              <!-- 162 cm adult and 130 cm child at 60 units per metre -->
+              <use href="#hzPerson" transform="translate(41.725 78.5) scale(.6075)"/>
+              <use href="#hzPerson" transform="translate(112.125 102.5) scale(.4875)"/>
+              <g class="hz-water" id="hzWater" style="transform: translateY(200px)" aria-hidden="true">
+                <g class="hz-wave">
+                  <path id="hzWaterBody" style="fill: var(--water)"/>
+                  <path id="hzWaterLine" fill="none" stroke-width="2" style="stroke: var(--water-line)"/>
+                </g>
+              </g>
+              <rect y="200" width="520" height="30" style="fill: var(--street)"/>
+              <g class="hz-svg-street" font-family="DM Mono, monospace" font-size="9" text-anchor="middle" style="fill: var(--street-text)">
+                <text x="145" y="213">Adult</text><text x="145" y="226">162 cm</text>
+                <text x="197" y="213">Child</text><text x="197" y="226">130 cm</text>
+              </g>
+              <g aria-hidden="true">
+                <rect x="52" y="170" width="6" height="24" style="fill: var(--low)"/>
+                <rect x="52" y="140" width="6" height="30" style="fill: var(--med)"/>
+                <rect x="52" y="110" width="6" height="30" style="fill: var(--high)"/>
+                <path d="M46 200 H60 M48 170 H60 M48 140 H60 M48 110 H60" stroke-width="1.2" style="stroke: var(--muted)"/>
+                <g class="hz-svg-ruler" font-family="DM Mono, monospace" font-size="10" text-anchor="end" style="fill: var(--muted)">
+                  <text x="43" y="203">0</text>
+                  <text x="43" y="173">0.5</text>
+                  <text x="43" y="143">1.0</text>
+                  <text x="43" y="113">1.5 m</text>
+                </g>
+              </g>
+              <g class="hz-depth-marker" id="hzDepthMarker" style="transform: translateY(200px)" aria-hidden="true">
+                <path d="M61 0 L67 -5 V5 Z" style="fill: var(--lvl, var(--low))"/>
+                <rect x="67" y="-9" width="62" height="18" rx="9" style="fill: var(--lvl, var(--low))"/>
+                <text class="hz-svg-marker" id="hzDepthMarkerText" x="98" y="0" dominant-baseline="central" text-anchor="middle" font-family="DM Mono, monospace" font-size="10.5" font-weight="500" style="fill: var(--lvl-on, #1c1917)">0.75 m</text>
+              </g>
+            </svg>
+          </div>
+          <p class="hz-scene-note">Adult: 162 cm, standard Filipino height (DOST-FNRI). Child: 10 years old and below, 130 cm.</p>
+        </div>
+
+        <div class="hz-depth">
+          <div class="hz-depth-row">
+            <label for="hzDepth">Water depth</label>
+            <output class="hz-depth-value" id="hzDepthOut" for="hzDepth">0.75 m</output>
+          </div>
+          <input type="range" id="hzDepth" min="0.1" max="1.5" step="0.05" value="0.75">
+          <div class="hz-depth-bands" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="hz-depth-ticks" aria-hidden="true"><span>0.1</span><span>0.5</span><span><span>1.0</span><span>1.5 m</span></span></div>
+        </div>
+
+        <dl class="hz-readout" aria-live="polite">
+          <dt>Water reaches</dt>
+          <dd><span class="hz-reach" id="hzReach"></span></dd>
+          <dt>Level</dt>
+          <dd><span class="hz-level-pill" id="hzLevel"></span><span class="hz-note" id="hzLevelNote"></span></dd>
+          <dt>Road</dt>
+          <dd><span id="hzRoad"></span></dd>
+        </dl>
+      </article>
+
+      <article class="hz-module" id="hzQuake" aria-labelledby="hzQuakeTitle">
+        <div class="hz-head">
+          <div class="hz-title">
+            <span class="hz-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/></svg>
+            </span>
+            <div>
+              <h3 id="hzQuakeTitle">Earthquake hazards</h3>
+              <p>Turn on a layer, then press Simulate.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="hz-tiles" role="group" aria-label="Earthquake layers">
+          <button type="button" class="hz-tile" id="hzTileGs" data-layer="gs" aria-pressed="false">
+            <span class="hz-tile-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V11h5v10M13 21V6h5v15"/><path d="M15 9.5h1M15 13h1M8 14h1"/><path d="M3 8.5 1.8 10 3 11.5M21 8.5l1.2 1.5-1.2 1.5M2 21h20"/></svg>
+            </span>
+            <span class="hz-tile-name">Ground shaking</span>
+            <span class="hz-switch" aria-hidden="true"></span>
+            <span class="hz-tile-desc">How strongly the ground shakes.</span>
+            <span class="hz-tile-level">Level: High</span>
+          </button>
+          <button type="button" class="hz-tile" id="hzTileLiq" data-layer="liq" aria-pressed="false">
+            <span class="hz-tile-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 17.5 7 7.3l6-1 1.8 10.3"/><path d="M9.5 10l2-.3M10 13l2-.3"/><path d="M2 19.5h5l1.5-1.5 2 2.5 2-2 1.5 1h8"/></svg>
+            </span>
+            <span class="hz-tile-name">Liquefaction</span>
+            <span class="hz-switch" aria-hidden="true"></span>
+            <span class="hz-tile-desc">Wet ground that turns soft like mud.</span>
+            <span class="hz-tile-level">Level: Moderate to High</span>
+          </button>
+        </div>
+
+        <div class="hz-lens-row">
+          <span class="hz-lens-name" aria-live="polite">Showing: <b id="hzLensName">Ground shaking</b></span>
+          <button type="button" class="hz-sim-btn" id="hzSimBtn" data-mode="gs">
+            <svg id="hzSimIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/></svg>
+            <span id="hzSimLabel">Simulate ground shaking</span>
+          </button>
+        </div>
+
+        <div class="hz-stack">
+          <div class="hz-scene">
+            <svg class="hz-cross gs-on" id="hzCross" viewBox="0 0 520 240" role="img" aria-labelledby="hzCrossLabel">
+              <title id="hzCrossLabel">Street built on loose, wet sand beside a river, shown with the ground cut away</title>
+              <defs>
+                <linearGradient id="hzCrossSky" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" style="stop-color: var(--sky-top)"/>
+                  <stop offset="1" style="stop-color: var(--sky-bottom)"/>
+                </linearGradient>
+                <clipPath id="hzSandClip"><rect x="0" y="164" width="520" height="51"/></clipPath>
+                <clipPath id="hzAboveGroundA"><rect x="0" y="0" width="200" height="151"/></clipPath>
+                <clipPath id="hzAboveGroundB"><rect x="300" y="0" width="175" height="151"/></clipPath>
+                <pattern id="hzGrains" width="14" height="12" patternUnits="userSpaceOnUse">
+                  <circle cx="3" cy="3" r="1.1" style="fill: var(--sand-grain)"/>
+                  <circle cx="10" cy="8" r="1.3" style="fill: var(--sand-grain)"/>
+                  <circle cx="6" cy="10.5" r=".8" style="fill: var(--sand-grain)"/>
+                </pattern>
+              </defs>
+              <rect width="520" height="240" fill="url(#hzCrossSky)"/>
+              <rect class="gs-wash" width="520" height="150" style="fill: var(--gs)"/>
+              <g class="cross-shake">
+                <rect y="150" width="520" height="14" style="fill: var(--soil-top)"/>
+                <rect y="164" width="520" height="51" style="fill: var(--sand)"/>
+                <rect y="164" width="520" height="51" fill="url(#hzGrains)"/>
+                <g clip-path="url(#hzSandClip)">
+                  <g class="wt wt-mod">
+                    <rect x="0" y="185" width="200" height="80" style="fill: var(--groundwater)"/>
+                    <path d="M0 185 H200" stroke-width="1.5" stroke-dasharray="5 4" style="stroke: var(--water-line)"/>
+                  </g>
+                  <g class="wt wt-high">
+                    <rect x="200" y="185" width="290" height="80" style="fill: var(--groundwater)"/>
+                    <path d="M200 185 H490" stroke-width="1.5" stroke-dasharray="5 4" style="stroke: var(--water-line)"/>
+                    <text class="xl xl-soil rest-labels" x="300" y="181">Groundwater</text>
+                    <text class="xl xl-water after-liq" x="380" y="196">Water rises</text>
+                  </g>
+                </g>
+                <rect y="215" width="520" height="25" style="fill: var(--firm)"/>
+                <g class="xl xl-soil rest-labels">
+                  <text x="10" y="177">Loose, wet sand</text>
+                  <text x="10" y="232">Firm soil</text>
+                </g>
+                <rect class="liq-only" x="0" y="150" width="200" height="3" fill-opacity=".5" style="fill: var(--liq)"/>
+                <rect class="liq-only" x="200" y="150" width="276" height="3" style="fill: var(--liq)"/>
+                <path d="M470 149 L482 161 H521 V149 Z" style="fill: var(--sky-bottom)"/>
+                <path d="M482 161 H521 V214 H507 Q493 194 482 161 Z" style="fill: var(--river)"/>
+                <g class="quake-waves" fill="none" stroke-width="2" stroke-linecap="round" style="stroke: var(--gs)">
+                  <path d="M190 240 Q260 222 330 240"/>
+                  <path d="M140 240 Q260 204 380 240"/>
+                  <path d="M90 240 Q260 186 430 240"/>
+                </g>
+                <rect x="205" y="145" width="115" height="5" style="fill: var(--street)"/>
+                <path d="M212 147.5 H314" stroke="#fff" stroke-width="1" stroke-dasharray="6 6" opacity=".7"/>
+                <path class="crack" pathLength="1" d="M262 145 L266 151 L259 157 L265 164"/>
+                <g class="debris">
+                  <rect x="296" y="141" width="7" height="4" rx="1" transform="rotate(-12 299 143)" style="fill: var(--house-roof)"/>
+                  <rect x="306" y="142" width="5" height="3" rx="1" style="fill: var(--house)"/>
+                  <rect x="287" y="143" width="4" height="2.5" rx=".8" style="fill: var(--house-roof)"/>
+                </g>
+                <g clip-path="url(#hzAboveGroundA)">
+                  <g class="sway">
+                    <g class="sink sink-a">
+                      <path d="M34 97 L85 62 L136 97 Z" style="fill: var(--house-roof)"/>
+                      <rect x="40" y="95" width="90" height="56" style="fill: var(--house)"/>
+                      <rect x="52" y="108" width="16" height="14" rx="2" style="fill: var(--window)"/>
+                      <rect x="102" y="108" width="16" height="14" rx="2" style="fill: var(--window)"/>
+                      <rect x="77" y="121" width="16" height="30" rx="2" style="fill: var(--house-roof)"/>
+                      <path class="crack" pathLength="1" d="M97 96 L93 103 L99 109 L95 117"/>
+                    </g>
+                  </g>
+                </g>
+                <g clip-path="url(#hzAboveGroundB)">
+                  <g class="sway">
+                    <g class="sink sink-b">
+                      <rect x="345" y="70" width="90" height="81" style="fill: var(--house)"/>
+                      <rect x="341" y="65" width="98" height="7" rx="2" style="fill: var(--house-roof)"/>
+                      <rect x="357" y="82" width="16" height="14" rx="2" style="fill: var(--window)"/>
+                      <rect x="407" y="82" width="16" height="14" rx="2" style="fill: var(--window)"/>
+                      <rect x="357" y="110" width="16" height="14" rx="2" style="fill: var(--window)"/>
+                      <rect x="407" y="110" width="16" height="14" rx="2" style="fill: var(--window)"/>
+                      <rect x="382" y="122" width="16" height="29" rx="2" style="fill: var(--house-roof)"/>
+                      <path class="crack" pathLength="1" d="M390 72 L386 81 L392 88 L388 97"/>
+                    </g>
+                  </g>
+                </g>
+                <g>
+                  <g class="boil" transform="translate(284 150)"><g class="boil-in">
+                    <path d="M-10 0 Q0 -9 10 0 Z" style="fill: var(--sand); stroke: var(--sand-grain)"/>
+                    <circle cy="-11" r="1.7" style="fill: var(--water-line)"/><circle cx="-4" cy="-8.5" r="1.2" style="fill: var(--water-line)"/><circle cx="4" cy="-9" r="1.2" style="fill: var(--water-line)"/>
+                  </g></g>
+                  <g class="boil" transform="translate(333 150)"><g class="boil-in">
+                    <path d="M-8 0 Q0 -8 8 0 Z" style="fill: var(--sand); stroke: var(--sand-grain)"/>
+                    <circle cy="-10" r="1.5" style="fill: var(--water-line)"/><circle cx="3.5" cy="-8" r="1.1" style="fill: var(--water-line)"/>
+                  </g></g>
+                  <g class="boil" transform="translate(456 150)"><g class="boil-in">
+                    <path d="M-9 0 Q0 -8 9 0 Z" style="fill: var(--sand); stroke: var(--sand-grain)"/>
+                    <circle cy="-10.5" r="1.6" style="fill: var(--water-line)"/><circle cx="-3.5" cy="-8" r="1.1" style="fill: var(--water-line)"/>
+                  </g></g>
+                  <g class="boil" transform="translate(225 150)"><g class="boil-in">
+                    <path d="M-7 0 Q0 -7 7 0 Z" style="fill: var(--sand); stroke: var(--sand-grain)"/>
+                    <circle cy="-9" r="1.3" style="fill: var(--water-line)"/>
+                  </g></g>
+                </g>
+              </g>
+              <g class="liq-only">
+                <path d="M200 10 V150" stroke-width="1" stroke-dasharray="3 4" style="stroke: var(--liq-ink)"/>
+                <rect x="58" y="7" width="84" height="20" rx="10" style="fill: color-mix(in srgb, var(--liq) 28%, var(--sky-top))"/>
+                <text class="xl" x="100" y="17" dominant-baseline="central" text-anchor="middle" style="fill: var(--liq-ink)">Moderate</text>
+                <rect x="310" y="7" width="50" height="20" rx="10" style="fill: var(--liq)"/>
+                <text class="xl" x="335" y="17" dominant-baseline="central" text-anchor="middle" fill="#1c1917">High</text>
+              </g>
+              <g class="xl xl-note after-liq" text-anchor="middle">
+                <text x="100" y="48">Ground settles</text>
+                <text x="232" y="108">Road cracks</text>
+                <text x="300" y="132">Mud bubbles up</text>
+                <text x="410" y="50">Building tilts and sinks</text>
+              </g>
+              <g class="xl xl-note after-gs" text-anchor="middle">
+                <text x="260" y="44">Walls crack, debris falls onto the road</text>
+              </g>
+            </svg>
+          </div>
+          <p class="hz-caption" id="hzCrossCaption" aria-live="polite"><b>Ground shaking:</b> strong shaking cracks walls and drops debris on roads.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
 <section class="block">
   <div class="wrap">
     <div class="block-head center-head">
       <span class="eyebrow center">How it works</span>
-      <h2>How our ants works for you</h2>
+      <h2>How our ants work for you</h2>
       <p>Simulated ants map local streets — strengthening digital signals on safe roads while fading out paths with hazards.</p>
     </div>
     <div class="algo-flow">
@@ -165,4 +473,8 @@
   </div>
 </footer>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='hazard-showcase.js') }}"></script>
 {% endblock %}

@@ -73,19 +73,18 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
             "message": "Start and end locations must be different"
         }
 
-    start_location = database.get_location_by_name(start)
-    end_location = database.get_location_by_name(end)
-
-    if not start_location:
+    start_location, start_error = database.resolve_route_location(start, "Start")
+    if start_error:
         return {
             "error": True,
-            "message": f"Start location '{start}' not found"
+            "message": start_error
         }
 
-    if not end_location:
+    end_location, end_error = database.resolve_route_location(end, "End")
+    if end_error:
         return {
             "error": True,
-            "message": f"End location '{end}' not found"
+            "message": end_error
         }
 
     try:

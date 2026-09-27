@@ -5,11 +5,16 @@ from threading import Lock, RLock
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from earthquake_service import (
+    check_earthquake_pin,
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
 from main import simulate, get_locations
-from osm_routing import build_flood_hazard_layer_payload, get_barangay_boundary_payload
+from osm_routing import (
+    build_flood_hazard_layer_payload,
+    check_flood_pin,
+    get_barangay_boundary_payload,
+)
 from simulation_progress import get_progress, reset_progress
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -230,6 +235,52 @@ def flood_hazard_layers():
             "message": str(e)
         }), 500
 
+@app.route("/check-pin", methods=["GET"])
+def check_pin():
+    """Instant check of a start/destination tapped on the map, run before the
+    (much slower) simulation: can a route be checked for safety from there?"""
+    barangay = (request.args.get("barangay") or "").strip()
+    hazard = (request.args.get("hazard") or "Flood").strip()
+    try:
+        lat = float(request.args.get("lat", ""))
+        lng = float(request.args.get("lng", ""))
+    except ValueError:
+        lat = lng = float("nan")
+
+    if not barangay:
+        return jsonify({
+            "error": True,
+            "message": "Barangay name is required"
+        }), 400
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return jsonify({
+            "error": True,
+            "message": "Valid lat and lng are required"
+        }), 400
+
+    try:
+        if hazard.lower() == "earthquake":
+            result = check_earthquake_pin(barangay, lat, lng)
+        else:
+            result = check_flood_pin(barangay, lat, lng)
+    except ValueError as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+    return jsonify({
+        "error": False,
+        "lat": lat,
+        "lng": lng,
+        **result,
+    })
+
 @app.route("/simulate", methods=["POST"])
 def run_simulation():
     try:
@@ -246,10 +297,15 @@ def run_simulation():
             "end": end,
         }
 
+        def work():
+            result = simulate(start, end, hazard, barangay=barangay)
+            status_code = 200 if not result.get("error") else 400
+            return jsonify(result), status_code
+
         return _run_with_simulation_gate(
             "flood",
             request_summary,
-            lambda: jsonify(simulate(start, end, hazard, barangay=barangay)),
+            work,
         )
     except Exception as e:
         return jsonify({

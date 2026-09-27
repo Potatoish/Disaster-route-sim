@@ -96,29 +96,45 @@
         </div>
         <div class="workflow-card-body">
           <div class="workflow-route-flow">
-            <div class="field route-field route-field-start" id="startField">
-              <span class="location-icon location-icon-start" aria-hidden="true"></span>
-              <label id="startNodeLabel" class="sr-only" for="startSelTrigger">Pin location</label>
-              <div class="location-combo">
-                <button type="button" class="location-combo-trigger" id="startSelTrigger" disabled aria-haspopup="listbox" aria-expanded="false" aria-labelledby="startNodeLabel">
-                  <span class="location-combo-value" id="startSelValue">Pin location</span>
-                </button>
-                <ul class="location-combo-list" id="startSelList" role="listbox" hidden></ul>
+            <div class="pin-inputs" id="pinInputs">
+              <div class="pin-input-row pin-input-row-start" id="startField">
+                <span class="pin-input-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                </span>
+                <div class="pin-input-combo">
+                  <button type="button" class="pin-input" id="startPinBtn" onclick="togglePinMenu('start')" disabled aria-haspopup="menu" aria-expanded="false" aria-controls="startPinMenu">
+                    <span class="pin-field-value" id="startPinValue">Your location</span>
+                    <span class="pin-field-meta" id="startPinMeta" hidden></span>
+                  </button>
+                  <div class="pin-input-menu" id="startPinMenu" role="menu" hidden>
+                    <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('start')">
+                      <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
+                      Choose on Map
+                    </button>
+                  </div>
+                </div>
               </div>
-              <select id="startSel" disabled hidden></select>
+
+              <div class="pin-input-row pin-input-row-end" id="endField">
+                <span class="pin-input-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                </span>
+                <div class="pin-input-combo">
+                  <button type="button" class="pin-input" id="endPinBtn" onclick="togglePinMenu('end')" disabled aria-haspopup="menu" aria-expanded="false" aria-controls="endPinMenu">
+                    <span class="pin-field-value" id="endPinValue">Choose destination</span>
+                    <span class="pin-field-meta" id="endPinMeta" hidden></span>
+                  </button>
+                  <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
+                    <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('end')">
+                      <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
+                      Choose on Map
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div class="field route-field route-field-end" id="endField">
-              <span class="location-icon location-icon-end" aria-hidden="true"></span>
-              <label id="endNodeLabel" class="sr-only" for="endSelTrigger">Your destination</label>
-              <div class="location-combo">
-                <button type="button" class="location-combo-trigger" id="endSelTrigger" disabled aria-haspopup="listbox" aria-expanded="false" aria-labelledby="endNodeLabel">
-                  <span class="location-combo-value" id="endSelValue">Your destination</span>
-                </button>
-                <ul class="location-combo-list" id="endSelList" role="listbox" hidden></ul>
-              </div>
-              <select id="endSel" disabled hidden></select>
-            </div>
+            <div class="pin-field-help" id="pinFieldHelp">Choose on Map, then tap the spot. Drag a pin to adjust it.</div>
 
             <div class="earthquake-route-panel" id="earthquakeRoutePanel" hidden>
               <div class="earthquake-route-copy" id="earthquakeRouteCopy">
@@ -142,9 +158,7 @@
         </div>
         <div class="workflow-card-body workflow-run-body">
           <div class="info-box" id="infoBox">
-            Select a <strong>barangay</strong> to begin. The ACO algorithm shows
-            <strong>safer routes first</strong>. If routes have similar risk, it checks
-            which route it prefers, then looks at distance.
+            Loading the barangay map&hellip;
           </div>
 
           <button class="run-btn" id="runBtn" type="button" onclick="runSimulation()" disabled>
@@ -188,6 +202,12 @@
         <div class="flood-filter-hint" id="floodFilterHint">All levels shown. Click one to highlight it.</div>
       </div>
 
+      <div class="map-pin-hint" id="mapPinHint" role="status" aria-live="polite" hidden>
+        <span class="map-pin-hint-icon" aria-hidden="true"></span>
+        <span class="map-pin-hint-text" id="mapPinHintText"></span>
+        <button type="button" class="map-pin-hint-close" id="mapPinHintClose" onclick="cancelPinPlacement()" aria-label="Stop pinning">&times;</button>
+      </div>
+
       <div class="empty-map" id="emptyMap">
         <div class="empty-map-icon" id="emptyMapIcon">&#128506;</div>
         <div class="empty-map-txt" id="emptyMapTxt">Select a barangay to load the map</div>
@@ -215,19 +235,7 @@
           <div class="legend-title">Legend</div>
         </div>
 
-        <div class="legend-body" id="mapLegendBody">
-          <div class="legend-row"><div class="legend-line" style="background:var(--green);height:4px;"></div><span style="font-size:.78rem;">Best Route</span></div>
-          <div class="legend-row"><div class="legend-line" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Available Route</span></div>
-          <div class="legend-row"><div class="legend-line" style="background:var(--red);opacity:.5;"></div><span style="font-size:.78rem;">Eliminated Route</span></div>
-
-          <div style="margin-top:5px;">
-            <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Start Node</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">End Node</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--green);"></div><span style="font-size:.78rem;">Safe</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--yellow);"></div><span style="font-size:.78rem;">Moderate</span></div>
-            <div class="legend-row"><div class="legend-dot-sm" style="background:var(--red);"></div><span style="font-size:.78rem;">Danger</span></div>
-          </div>
-        </div>
+        <div class="legend-body" id="mapLegendBody"></div>
       </div>
 
     </div>
@@ -288,38 +296,6 @@
       </div>
     </div>
 
-    <div class="warning-modal-backdrop" id="fallbackWarningModal" hidden>
-      <div class="warning-modal" role="dialog" aria-modal="true" aria-labelledby="fallbackWarningTitle" aria-describedby="fallbackWarningCopy">
-        <div class="warning-modal-kicker" id="fallbackWarningKicker">Warning</div>
-        <div class="warning-modal-title" id="fallbackWarningTitle">Proceed with caution</div>
-        <div class="warning-modal-copy" id="fallbackWarningCopy">
-          The routes below are possible routes options only. Review them carefully.
-        </div>
-        <div class="warning-modal-actions">
-          <button class="warning-modal-btn primary" type="button" onclick="acknowledgeFallbackWarning()">Show Routes</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="results-panel" id="resultsPanel" hidden>
-      <div class="results-resize-handle" id="resultsResizeHandle" onpointerdown="startResultsResize(event)" title="Drag to resize results"></div>
-      <div class="results-inner">
-        <div class="results-tabs" role="tablist" aria-label="Route result sections">
-          <button class="rtab active" type="button" role="tab" aria-selected="true" aria-controls="tab-routes" onclick="switchTab('routes',this)">Route List</button>
-          <button class="rtab" type="button" role="tab" aria-selected="false" aria-controls="tab-summary" onclick="switchTab('summary',this)">Summary</button>
-        </div>
-        <div class="rtab-content active" id="tab-routes" role="tabpanel"></div>
-        <div class="rtab-content" id="tab-summary" role="tabpanel"></div>
-      </div>
-    </div>
-
-    <div class="results-actions" id="resultsActions" hidden>
-      <button class="dl-btn secondary" id="resultsNewSimulationBtn" onclick="goToHomepageForNewScope()">New Simulation</button>
-      <button class="dl-btn secondary" id="resultsCollapseBtn" onclick="hideResultsPanel()">Hide Results</button>
-      <div class="results-summary-txt" style="margin-left:auto;align-self:center;" id="resultsSummaryTxt" aria-live="polite"></div>
-    </div>
-
-    <button class="results-toggle-fab" id="resultsToggleFab" onclick="showResultsPanelDrawer()" hidden>Show Results</button>
   </div>
 
   <aside class="route-safety-panel" id="routeSafetyPanel" aria-live="polite">
@@ -339,7 +315,7 @@
 </div>
 
 <div class="route-modal-backdrop" id="routeListModal" hidden>
-  <section class="route-list-modal" role="dialog" aria-modal="true" aria-labelledby="routeListModalTitle">
+  <section class="route-list-modal" role="dialog" aria-modal="true" aria-label="Alternative routes">
     <header class="route-list-modal-head">
       <div>
         <div class="safety-eyebrow">AGNAS</div>
@@ -352,31 +328,6 @@
       <button class="route-modal-btn primary" type="button" onclick="closeRouteListModal()">Close</button>
     </footer>
   </section>
-</div>
-
-<div class="about-modal-backdrop" id="aboutModal" hidden>
-  <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
-    <button class="modal-close-btn about-modal-close" type="button" onclick="closeAboutModal()" aria-label="Close about">&times;</button>
-    <div class="safety-eyebrow">AGNAS</div>
-    <h2 class="about-modal-title" id="aboutModalTitle">About this project</h2>
-
-    <p class="about-modal-copy">
-      <strong>Ant Guided Navigation And Safety System</strong> is a disaster-aware evacuation
-      route simulator for Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City. It uses an
-      Ant Colony Optimization approach with a safety-first rule, so routes are ranked by hazard
-      exposure before distance.
-    </p>
-
-    <div class="about-modal-section-label">Data credit</div>
-    <p class="about-modal-copy">
-      Flood hazard levels are based on historical flood data from <strong>Project NOAH</strong>
-      (Nationwide Operational Assessment of Hazards).
-    </p>
-    <p class="about-modal-copy">
-      Earthquake hazard levels (liquefaction and ground shaking) are based on
-      <strong>Hazard Hunter PH</strong> data.
-    </p>
-  </div>
 </div>
 
 <div class="about-modal-backdrop" id="emergencyContactModal" hidden>
@@ -410,87 +361,21 @@
   </div>
 </div>
 
-<div class="tutorial-modal" id="tutorialModal" role="dialog" aria-modal="true" aria-label="How to use AGNAS" hidden>
-  <div class="tutorial-modal-backdrop" onclick="closeTutorial()"></div>
-  <div class="tutorial-modal-panel">
-    <div class="tutorial-modal-head">
-      <span class="eyebrow">Step <span id="tutorialStepNum">1</span> of 5</span>
-      <button type="button" class="tutorial-modal-close" onclick="closeTutorial()" aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
-    </div>
-
-    <div id="tutorialSlides">
-      <div class="tutorial-slide is-active" data-step="1">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-light.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-dark.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
-        </div>
-        <h3>1. Pick barangay</h3>
-        <p>Choose your barangay/area.</p>
-      </div>
-      <div class="tutorial-slide" data-step="2">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-light.png') }}" alt="Flood and Earthquake hazard selection cards">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/pick-disaster-dark.png') }}" alt="Flood and Earthquake hazard selection cards">
-        </div>
-        <h3>2. Pick disaster</h3>
-        <p>Sets the hazard you want to simulate.</p>
-      </div>
-      <div class="tutorial-slide" data-step="3">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/set-start-end-light.png') }}" alt="Start and destination fields for a route">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/set-start-end-dark.png') }}" alt="Start and destination fields for a route">
-        </div>
-        <h3>3. Set start / end</h3>
-        <p>For flood: choose your route nodes.</p>
-      </div>
-      <div class="tutorial-slide" data-step="4">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-light.png') }}" alt="Show Evacuation Sites button for earthquake mode">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/reveal-evac-dark.png') }}" alt="Show Evacuation Sites button for earthquake mode">
-        </div>
-        <h3>4. Reveal evacuation sites</h3>
-        <p>For earthquake: pick a start, then click to reveal shelters.</p>
-      </div>
-      <div class="tutorial-slide" data-step="5">
-        <div class="tutorial-tile-shot">
-          <img class="shot-light" src="{{ url_for('static', filename='assets/tutorial/run-simulation-light.png') }}" alt="Run Simulation button, ready to launch">
-          <img class="shot-dark" src="{{ url_for('static', filename='assets/tutorial/run-simulation-dark.png') }}" alt="Run Simulation button, ready to launch">
-        </div>
-        <h3>5. Run simulation</h3>
-        <p>See the safest routes, ranked.</p>
-      </div>
-    </div>
-
-    <div class="tutorial-modal-foot">
-      <div class="tutorial-dots" id="tutorialDots">
-        <button type="button" class="tutorial-dot is-active" onclick="goToTutorialStep(1)" aria-label="Step 1"></button>
-        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(2)" aria-label="Step 2"></button>
-        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(3)" aria-label="Step 3"></button>
-        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(4)" aria-label="Step 4"></button>
-        <button type="button" class="tutorial-dot" onclick="goToTutorialStep(5)" aria-label="Step 5"></button>
-      </div>
-      <div class="tutorial-modal-actions">
-        <button type="button" class="tutorial-btn" id="tutorialBack" onclick="tutorialPrev()">Back</button>
-        <button type="button" class="tutorial-btn primary" id="tutorialNext" onclick="tutorialNext()">Next</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "_tutorial_modal.html" %}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
   crossorigin=""></script>
 
-<!-- Used only by downloadSimulationReport() (script.js) to export the
-     results panel as a PDF -- loaded from CDN like Leaflet above, no
-     bundler in this project. -->
+<!-- Used only by downloadSimulationReport() (script.js) to build the PDF
+     report -- loaded from CDN like Leaflet above, no bundler in this
+     project. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>
+<script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 
 </body>

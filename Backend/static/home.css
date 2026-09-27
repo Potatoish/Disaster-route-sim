@@ -53,8 +53,7 @@ body{
 
 /* Static colorful wavy motif behind "Good to know" onward (Before you
    start / How it works / footer) -- kept off the hero, which already has
-   its own ant-canvas animation, and off the stats strip, which gets its
-   own animated hazard-cycle background instead (see .hazard-zone). Seamless
+   its own ant-canvas animation, and off the plain stats strip. Seamless
    top-to-bottom (the SVG's paths start/end at matching points) so it tiles
    cleanly no matter how tall this section grows; swapped for a
    brighter-stroke variant in dark mode rather than trying to make one
@@ -67,17 +66,6 @@ body{
 }
 body.dark .wave-zone{ background-image: url('wave-bg-dark.svg'); }
 
-/* Stats strip only: a small looping animation that crossfades between a
-   flood motif (flowing water lines) and an earthquake motif (expanding
-   seismic pings) instead of showing both hazards at once. Non-repeating,
-   sized to the strip itself rather than tiled like .wave-zone. */
-.hazard-zone{
-  background-image: url('hazard-cycle-light.svg');
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  background-position: center;
-}
-body.dark .hazard-zone{ background-image: url('hazard-cycle-dark.svg'); }
 h1,h2,h3{font-family:var(--font-heading); font-weight:700; text-wrap:balance; letter-spacing:.2px; margin:0;}
 a{color:inherit;}
 .wrap{max-width:1120px; margin:0 auto; padding-inline:24px;}
@@ -267,7 +255,6 @@ body.dark .about-logo .logo-dark{ display:block; }
 .algo-line-strong{
   stroke:var(--accent); stroke-width:2.4; fill:none; stroke-linecap:round;
   stroke-dasharray:7 5; filter:drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 65%, transparent));
-  animation:algo-flow 1.4s linear infinite;
 }
 .algo-node{ fill:var(--muted); }
 .algo-ant{ fill:var(--accent); opacity:.75; }
@@ -277,13 +264,12 @@ body.dark .about-logo .logo-dark{ display:block; }
   fill:var(--accent-ink); font-family:var(--font-heading); font-size:10px; font-weight:700;
   text-anchor:middle; dominant-baseline:central;
 }
-@keyframes algo-flow{ to{ stroke-dashoffset:-24; } }
 @keyframes algo-pulse{
   0%,100%{ opacity:.5; r:2.4px; }
   50%{ opacity:1; r:3.3px; }
 }
 @media (prefers-reduced-motion: reduce){
-  .algo-line-strong, .algo-pheromone{ animation:none; }
+  .algo-pheromone{ animation:none; }
 }
 
 /* ---------- GOOD TO KNOW (walking-only, data sources, plan-ahead caveat) --
@@ -352,7 +338,7 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .foot-row{ display:flex; justify-content:space-between; align-items:center; padding-block:22px; gap:16px; flex-wrap:wrap; }
 .foot-copy{ font-size:12.5px; color:var(--muted); }
 .foot-links{ display:flex; gap:18px; font-size:12.5px; color:var(--muted); flex-wrap:wrap; }
-.foot-links a{ text-decoration:none; }
+.foot-links a{ text-decoration:none; display:inline-block; padding-block:6px; }
 .foot-links a:hover{ color:var(--accent); }
 
 /* ---------- FEEDBACK FAB ---------- */
@@ -411,6 +397,10 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .scope-modal-close svg{ width:15px; height:15px; }
 .scope-modal-sub{ margin:0; font-size:12.5px; color:var(--muted); }
 .scope-map{ width:100%; height:340px; border-radius:12px; overflow:hidden; border:1px solid var(--border); background:var(--panel); }
+/* Shown until Leaflet fills the box (the library loads on first open, which
+   can take a moment on a slow phone connection). */
+.scope-map:empty{ display:grid; place-items:center; }
+.scope-map:empty::before{ content:"Loading map6"; font-size:12.5px; color:var(--muted); }
 .scope-modal-error{ margin:0; font-size:12.5px; font-weight:600; color:var(--red); text-align:center; }
 .scope-modal-legend{ display:flex; justify-content:center; gap:18px; font-size:12px; color:var(--muted); }
 .scope-modal-legend .dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
@@ -447,6 +437,276 @@ body.scope-modal-open{ overflow:hidden; }
 .tutorial-btn:disabled{ opacity:.4; }
 .tutorial-btn.primary{ border-color:transparent; background:var(--accent); color:var(--accent-ink); }
 body.tutorial-modal-open{ overflow:hidden; }
+
+/* ---------- HAZARD SHOWCASE (flood depth + earthquake layers) ----------
+   Illustrative, not live data: the flood scene is drawn to scale (1 m = 60
+   SVG units) and the earthquake scene plays a scripted quake. Driven by
+   hazard-showcase.js. Colors follow the map's hazard fills (flood.js,
+   earthquake.js). */
+.hz-section{
+  --sky-top:#dfeaf7; --sky-bottom:#f5f8fc;
+  --street:#8d99a8; --street-text:#f8fafc;
+  --house:#cdd8e5; --house-roof:#95a7bd; --window:#f5f8fc;
+  --figure:#334155;
+  --water:rgba(40,104,170,.42); --water-line:#1e5fa8; --groundwater:rgba(37,132,222,.5); --river:#aad3df;
+  --low:#facc15; --low-ink:#a16207; --low-on:#1c1917;
+  --med:#f97316; --med-ink:#c2410c; --med-on:#1c1917;
+  --high:#e11d48; --high-ink:#be123c; --high-on:#ffffff;
+  --liq:#f59e0b; --liq-ink:#b45309;
+  --gs:#c2410c; --gs-ink:#7c2d12;
+  --soil-top:#9c7b5c; --sand:#e3cc98; --sand-grain:#b89a5e; --firm:#7f6f60; --soil-text:#4a3b2c; --crack:#3b2f25;
+  --safe-ink:#15803d; --risk-ink:#b45309; --elim-ink:#b91c1c;
+}
+body.dark .hz-section{
+  --sky-top:#0c1726; --sky-bottom:#14223a;
+  --street:#334155; --street-text:#cbd5e1;
+  --house:#22324a; --house-roof:#34496a; --window:#f3d98b;
+  --figure:#cbd5e1;
+  --water:rgba(56,140,220,.36); --water-line:#60a5fa; --groundwater:rgba(56,150,235,.45); --river:#1b3a4b;
+  --low-ink:#facc15; --med-ink:#fb923c; --high-ink:#fb7185;
+  --liq-ink:#fbbf24; --gs-ink:#fb923c;
+  --soil-top:#5b4636; --sand:#6e5c3c; --sand-grain:#8d7650; --firm:#3b322b; --soil-text:#eadfca; --crack:#f1e6d2;
+  --safe-ink:#4ade80; --risk-ink:#fbbf24; --elim-ink:#f87171;
+}
+.hz-section p{ margin:0; }
+.hz-grid{ display:grid; gap:20px; align-items:start; }
+@media (min-width:1000px){ .hz-grid{ grid-template-columns:1fr 1fr; } }
+
+.hz-module{
+  min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:20px; display:grid; gap:16px; box-shadow:var(--shadow-sm);
+}
+.hz-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.hz-title{ display:flex; gap:12px; align-items:flex-start; min-width:0; }
+.hz-icon{
+  width:36px; height:36px; flex:none; display:grid; place-items:center;
+  border-radius:10px; background:var(--accent-soft-bg); color:var(--accent);
+}
+.hz-icon svg{ width:19px; height:19px; }
+.hz-title h3{ font-size:21px; line-height:1.15; }
+.hz-title p{ font-size:12.5px; color:var(--muted); line-height:1.5; margin-top:2px; }
+.hz-stack{ display:grid; gap:10px; }
+.hz-scene{ border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--panel); }
+.hz-scene svg{ display:block; width:100%; height:auto; }
+.hz-scene-note{ font-size:11.5px; color:var(--muted); line-height:1.5; }
+.hz-caption{ font-size:13px; line-height:1.55; color:var(--text); max-width:65ch; }
+
+/* Flood level cards */
+.hz-levels{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.hz-level{
+  --c:var(--low); --c-ink:var(--low-ink);
+  min-width:0; text-align:left; font:inherit; color:inherit;
+  background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  padding:12px; display:grid; gap:6px; align-content:start;
+  transition:border-color .2s, background-color .2s, box-shadow .2s, transform .2s;
+}
+.hz-level:hover{ border-color:var(--border2); transform:translateY(-1px); }
+.hz-level[aria-pressed="true"]{
+  border-color:var(--c);
+  background:color-mix(in srgb, var(--c) 12%, var(--panel));
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent);
+}
+.hz-level[data-level="medium"]{ --c:var(--med); --c-ink:var(--med-ink); }
+.hz-level[data-level="high"]{ --c:var(--high); --c-ink:var(--high-ink); }
+.hz-level-icon{
+  width:32px; height:32px; border-radius:9px; display:grid; place-items:center;
+  background:color-mix(in srgb, var(--c) 20%, transparent); color:var(--c-ink);
+}
+.hz-level-icon svg{ width:20px; height:20px; }
+.hz-level-name{ font-family:var(--font-heading); font-weight:700; font-size:18px; line-height:1; color:var(--c-ink); }
+.hz-level-range{ font-family:var(--font-meta); font-size:11.5px; color:var(--text); font-variant-numeric:tabular-nums; }
+.hz-level-note{ font-size:11.5px; color:var(--muted); line-height:1.4; }
+
+/* Depth slider */
+.hz-depth{ display:grid; gap:6px; }
+.hz-depth-row{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.hz-depth-row label{ font-size:13px; font-weight:600; }
+.hz-depth-value{ font-family:var(--font-meta); font-size:13px; font-variant-numeric:tabular-nums; color:var(--lvl-ink, var(--text)); }
+.hz-depth input[type="range"]{ width:100%; height:28px; margin:0; accent-color:var(--lvl-ink, var(--accent)); cursor:pointer; }
+.hz-depth-bands{ display:grid; grid-template-columns:4fr 5fr 5fr; gap:3px; }
+.hz-depth-bands span{ height:5px; border-radius:3px; }
+.hz-depth-bands span:nth-child(1){ background:var(--low); }
+.hz-depth-bands span:nth-child(2){ background:var(--med); }
+.hz-depth-bands span:nth-child(3){ background:var(--high); }
+.hz-depth-ticks{ display:grid; grid-template-columns:4fr 5fr 5fr; font-family:var(--font-meta); font-size:10.5px; color:var(--muted); }
+.hz-depth-ticks span:last-child{ display:flex; justify-content:space-between; }
+
+/* Flood readout */
+.hz-readout{
+  display:grid; grid-template-columns:max-content 1fr; gap:14px 16px; align-items:start;
+  margin:0; padding:14px 16px; border-radius:12px; background:var(--panel); border:1px solid var(--border);
+}
+.hz-readout dt{ font-size:12px; font-weight:600; color:var(--muted); padding-top:3px; }
+.hz-readout dd{ margin:0; min-width:0; display:grid; gap:5px; justify-items:start; }
+.hz-reach{ font-size:13.5px; font-weight:600; line-height:1.45; }
+.hz-reach span{ display:block; }
+.hz-note{ font-size:12.5px; color:var(--muted); line-height:1.5; }
+.hz-level-pill{
+  display:inline-flex; padding:3px 10px; border-radius:999px; font-size:12.5px; font-weight:700;
+  background:var(--lvl, var(--low)); color:var(--lvl-on, #1c1917);
+}
+.hz-chip{
+  display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px;
+  font-size:12.5px; font-weight:700; border:1px solid transparent; white-space:nowrap;
+}
+.hz-chip::before{ content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.hz-chip--safe{ color:var(--safe-ink); background:color-mix(in srgb, #22c55e 14%, transparent); border-color:color-mix(in srgb, #22c55e 35%, transparent); }
+.hz-chip--risk{ color:var(--risk-ink); background:color-mix(in srgb, #f59e0b 16%, transparent); border-color:color-mix(in srgb, #f59e0b 40%, transparent); }
+.hz-chip--elim{ color:var(--elim-ink); background:color-mix(in srgb, #ef4444 13%, transparent); border-color:color-mix(in srgb, #ef4444 35%, transparent); }
+
+/* Earthquake layer tiles: the on/off switch sits top-right, beside the name. */
+.hz-tiles{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.hz-tile{
+  --c:var(--gs); --c-ink:var(--gs-ink);
+  min-width:0; text-align:left; font:inherit; color:inherit;
+  background:var(--panel); border:1px solid var(--border); border-radius:12px;
+  padding:12px; display:grid; grid-template-columns:auto 1fr auto; gap:4px 10px; align-items:start;
+  transition:border-color .2s, background-color .2s, box-shadow .2s, transform .2s;
+}
+.hz-tile > *{ min-width:0; }
+.hz-tile[data-layer="liq"]{ --c:var(--liq); --c-ink:var(--liq-ink); }
+.hz-tile:hover{ border-color:var(--border2); transform:translateY(-1px); }
+.hz-tile[aria-pressed="true"]{
+  border-color:var(--c);
+  background:color-mix(in srgb, var(--c) 11%, var(--panel));
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 20%, transparent);
+}
+.hz-tile-icon{
+  grid-row:span 2; width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
+  background:color-mix(in srgb, var(--c) 18%, transparent); color:var(--c-ink);
+}
+.hz-tile-icon svg{ width:22px; height:22px; }
+.hz-tile-name{ font-family:var(--font-heading); font-weight:700; font-size:17px; line-height:1.1; }
+.hz-tile-desc{ grid-column:2 / -1; font-size:11.5px; color:var(--muted); line-height:1.4; }
+.hz-tile-level{ grid-column:1 / -1; margin-top:6px; font-family:var(--font-meta); font-size:10.5px; color:var(--c-ink); letter-spacing:.03em; }
+.hz-switch{
+  grid-column:3; grid-row:1; margin-top:1px;
+  width:30px; height:17px; border-radius:999px; background:var(--border2); position:relative;
+  transition:background-color .2s;
+}
+.hz-switch::after{
+  content:""; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%;
+  background:#fff; transition:transform .2s;
+}
+.hz-tile[aria-pressed="true"] .hz-switch{ background:var(--c); }
+.hz-tile[aria-pressed="true"] .hz-switch::after{ transform:translateX(13px); }
+
+.hz-lens-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.hz-lens-name{ font-size:13px; }
+.hz-lens-name b{ font-family:var(--font-heading); font-size:16px; }
+.hz-sim-btn{
+  --btn-c:var(--gs); --btn-ink:var(--gs-ink);
+  display:inline-flex; align-items:center; gap:7px;
+  border:1px solid var(--border); background:var(--panel); border-radius:10px; padding:7px 12px;
+  font-size:12.5px; font-weight:700; color:var(--text);
+  transition:border-color .2s, background-color .2s;
+}
+.hz-sim-btn[data-mode="liq"]{ --btn-c:var(--liq); --btn-ink:var(--liq-ink); }
+.hz-sim-btn[data-mode="both"]{ border-color:color-mix(in srgb, var(--gs) 45%, var(--liq)); }
+.hz-sim-btn svg{ width:16px; height:16px; color:var(--btn-ink); }
+.hz-sim-btn:hover:not(:disabled){ border-color:var(--btn-c); background:color-mix(in srgb, var(--btn-c) 8%, var(--panel)); }
+.hz-sim-btn:disabled{ opacity:.55; cursor:default; }
+
+/* Flood scene: rising water with a gently moving surface */
+.hz-water, .hz-depth-marker{ transition:transform .75s cubic-bezier(.3,.75,.3,1); }
+.hz-wave{ animation:hz-wave 3.2s linear infinite; }
+@keyframes hz-wave{ to{ transform:translateX(65px); } }
+
+/* Earthquake cross-section. .gs-on / .liq-on follow the tiles; .is-shaking
+   plays the quake and .is-done holds its aftermath (see hazard-showcase.js). */
+.hz-cross .xl text, .hz-cross text.xl{ font-family:var(--font-meta); font-size:10px; }
+.hz-cross .xl-note{ fill:var(--text); paint-order:stroke; stroke:var(--sky-bottom); stroke-width:3px; }
+.hz-cross .xl-soil{ fill:var(--soil-text); }
+.hz-cross .xl-water{ fill:#fff; font-weight:500; }
+.hz-cross .liq-only, .hz-cross .gs-wash, .hz-cross .quake-waves,
+.hz-cross .after-liq, .hz-cross .after-gs, .hz-cross .debris{ opacity:0; transition:opacity .4s; }
+.hz-cross.liq-on .liq-only{ opacity:1; }
+.hz-cross.gs-on .gs-wash{ opacity:.12; }
+.hz-cross.gs-on .quake-waves{ opacity:.3; }
+.hz-cross.gs-on.is-shaking .quake-waves path{ animation:hz-quake-wave .9s ease-out 1; }
+.hz-cross.gs-on.is-shaking .quake-waves path:nth-child(2){ animation-delay:.15s; }
+.hz-cross.gs-on.is-shaking .quake-waves path:nth-child(3){ animation-delay:.3s; }
+.hz-cross.is-shaking .cross-shake{ animation:hz-shake .9s linear 1; }
+/* Liquefaction alone: a light tremor, so the soil giving way is the main event. */
+.hz-cross.liq-on:not(.gs-on).is-shaking .cross-shake{ animation:hz-tremor .7s linear 1; }
+.hz-cross .sway{ transform-box:fill-box; transform-origin:50% 100%; }
+.hz-cross.gs-on.is-shaking .sway{ animation:hz-sway .9s ease-in-out 1; }
+.hz-cross .wt{ transition:transform 1.3s cubic-bezier(.3,.7,.3,1) .35s; }
+.hz-cross.liq-on.is-done .wt-mod{ transform:translateY(-8px); }
+.hz-cross.liq-on.is-done .wt-high{ transform:translateY(-19px); }
+.hz-cross .sink{ transform-box:fill-box; transform-origin:50% 100%; transition:transform 1.5s cubic-bezier(.45,.05,.3,1) .6s; }
+.hz-cross.liq-on.is-done .sink-b{ transform:translateY(9px) rotate(6deg); }
+.hz-cross.liq-on.is-done .sink-a{ transform:translateY(3px); }
+.hz-cross .crack{
+  fill:none; stroke:var(--crack); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;
+  stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset .6s ease-out .9s;
+}
+.hz-cross.liq-on.is-done .crack, .hz-cross.gs-on.is-done .crack{ stroke-dashoffset:0; }
+.hz-cross .boil-in{ transform-box:fill-box; transform-origin:50% 100%; transform:scale(0); transition:transform .5s cubic-bezier(.3,1.6,.5,1) 1.3s; }
+.hz-cross .boil:nth-child(2) .boil-in{ transition-delay:1.45s; }
+.hz-cross .boil:nth-child(3) .boil-in{ transition-delay:1.6s; }
+.hz-cross .boil:nth-child(4) .boil-in{ transition-delay:1.75s; }
+.hz-cross.liq-on.is-done .boil-in{ transform:scale(1); }
+.hz-cross.liq-on.is-done .after-liq{ opacity:1; transition-delay:1.9s; }
+.hz-cross.gs-on:not(.liq-on).is-done .after-gs{ opacity:1; transition-delay:1.1s; }
+.hz-cross.gs-on.is-done .debris{ opacity:1; transition-delay:.8s; }
+.hz-cross .rest-labels{ transition:opacity .4s .3s; }
+.hz-cross.liq-on.is-done .rest-labels{ opacity:0; }
+.hz-cross.no-anim, .hz-cross.no-anim *{ transition:none !important; animation:none !important; }
+@keyframes hz-shake{
+  0%,100%{ transform:translate(0,0); }
+  10%{ transform:translate(-4px,1px); } 20%{ transform:translate(4px,-1px); }
+  30%{ transform:translate(-3px,2px); } 40%{ transform:translate(3px,-2px); }
+  50%{ transform:translate(-3px,1px); } 60%{ transform:translate(2px,-1px); }
+  70%{ transform:translate(-2px,1px); } 80%{ transform:translate(1px,0); } 90%{ transform:translate(-1px,0); }
+}
+@keyframes hz-tremor{
+  0%,100%{ transform:translate(0,0); }
+  20%{ transform:translate(-1.5px,.5px); } 40%{ transform:translate(1.5px,-.5px); }
+  60%{ transform:translate(-1px,.5px); } 80%{ transform:translate(1px,0); }
+}
+@keyframes hz-sway{
+  0%,100%{ transform:rotate(0); } 20%{ transform:rotate(-2.2deg); } 45%{ transform:rotate(2deg); }
+  70%{ transform:rotate(-1.2deg); } 85%{ transform:rotate(.6deg); }
+}
+@keyframes hz-quake-wave{ 0%{ opacity:0; } 30%{ opacity:1; stroke-width:3; } 100%{ opacity:.3; } }
+
+@media (max-width:480px){
+  /* Level cards become rows: icon, name + note, depth range on the right. */
+  .hz-levels{ grid-template-columns:1fr; gap:6px; }
+  .hz-level{
+    grid-template-columns:auto 1fr auto; grid-template-areas:"icon name range" "icon note range";
+    align-items:center; gap:2px 12px; padding:10px 12px;
+  }
+  .hz-level-icon{ grid-area:icon; }
+  .hz-level-name{ grid-area:name; }
+  .hz-level-note{ grid-area:note; }
+  .hz-level-range{ grid-area:range; white-space:nowrap; }
+  /* The scenes shrink to ~45-60% on phones; bigger label text keeps them readable. */
+  .hz-cross .xl text, .hz-cross text.xl{ font-size:15px; }
+  .hz-svg-street text, .hz-svg-ruler text, .hz-svg-marker{ font-size:13px; }
+}
+@media (max-width:520px){
+  .hz-module{ padding:16px; }
+  /* Narrow tiles: icon and switch share the top row, text runs full width below. */
+  .hz-tile{ grid-template-columns:1fr auto; }
+  .hz-tile-icon{ grid-row:auto; }
+  .hz-switch{ grid-column:2; align-self:center; margin-top:0; }
+  .hz-tile-name, .hz-tile-desc{ grid-column:1 / -1; }
+}
+@media (max-width:420px){
+  .hz-head{ flex-direction:column; }
+  .hz-readout{ grid-template-columns:1fr; gap:4px; }
+  .hz-readout dd + dt{ margin-top:10px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .hz-wave, .hz-cross.is-shaking .cross-shake, .hz-cross.gs-on.is-shaking .sway,
+  .hz-cross.gs-on.is-shaking .quake-waves path{ animation:none; }
+  .hz-water, .hz-depth-marker, .hz-level, .hz-tile,
+  .hz-cross .wt, .hz-cross .sink, .hz-cross .crack, .hz-cross .boil-in,
+  .hz-cross .after-liq, .hz-cross .after-gs, .hz-cross .debris, .hz-cross .rest-labels{ transition:none; }
+  .hz-level:hover, .hz-tile:hover{ transform:none; }
+}
 
 [hidden]{ display:none !important; }
 
@@ -490,7 +750,10 @@ body.tutorial-modal-open{ overflow:hidden; }
   .nav-btn{ padding:7px 10px; font-size:12px; }
   .nav-btn svg{ display:none; }
   .theme-switch{ padding:2px; }
-  .theme-switch-btn{ width:24px; height:24px; }
+  .theme-switch-btn{ width:24px; height:24px; position:relative; }
+  /* The buttons shrink to fit the nav; an invisible band above and below
+     keeps each one easy to tap. */
+  .theme-switch-btn::after{ content:""; position:absolute; inset:-8px 0; }
 }
 @media (max-width:440px){
   .nav-label-extra{ display:none; }
