@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>AGNAS</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='agnas-logo.png') }}">
 
@@ -30,6 +30,13 @@
 
   <button class="sidebar-toggle sidebar-reopen-tab" id="sidebarReopenBtn" type="button" onclick="toggleSetupSidebar(true)" aria-label="Show simulation setup" aria-controls="setupPanel">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+  </button>
+
+  <!-- Mobile only (style.css): opens/closes whichever of setup/results is
+       currently relevant. Invisible and inert at every other size. -->
+  <button class="mobile-panel-bar" id="mobilePanelBar" type="button" onclick="toggleMobilePanelBar()" aria-label="Toggle simulation panel">
+    <span id="mobilePanelBarLabel">Simulation setup</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
   </button>
 
   <div class="left-panel" id="setupPanel">
@@ -169,7 +176,7 @@
       </div>
     </div>
 
-    <div class="panel-foot">
+    <div class="panel-foot" id="panelFoot">
       <button class="panel-back-btn" id="changeRunBtn" type="button" onclick="goToHomepageForNewScope()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
         Back to Home
@@ -303,6 +310,11 @@
       <div class="safety-eyebrow">AGNAS</div>
       <h2>Ant guided navigation and safety system</h2>
     </div>
+    <!-- Mobile only (style.css): results is a full-screen panel there, so
+         this is how you get back to setup without closing it first. Hidden
+         everywhere else -- desktop/tablet keep both panels independently
+         visible/docked, with nothing to "return" from. -->
+    <button class="safety-edit-setup-btn" type="button" onclick="openSetupDrawerFromResults()">Edit setup</button>
     <div id="routeSafetyContent" hidden></div>
     <button class="safety-download-btn" id="safetyDownloadBtn" type="button" onclick="downloadSimulationReport()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
@@ -313,6 +325,7 @@
     </button>
   </aside>
 </div>
+
 
 <div class="route-modal-backdrop" id="routeListModal" hidden>
   <section class="route-list-modal" role="dialog" aria-modal="true" aria-label="Alternative routes">

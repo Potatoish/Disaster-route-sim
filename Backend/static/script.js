@@ -460,6 +460,12 @@ function setMapLegendVisible(visible) {
   syncMapOverlayLayout();
 }
 
+// Mobile panel range (style.css: < 640px width, or any width when the
+// viewport is short -- phone landscape) -- setup and results are each a
+// full-screen panel here instead of docking side by side, narrower, in a
+// grid column (tablet and desktop, both untouched).
+const MOBILE_PANEL_QUERY = window.matchMedia('(max-width: 639px), (max-height: 499px)');
+
 function applySetupSidebarState(shouldCollapse) {
   const shell = document.getElementById('appShell');
   // This button lives inside .left-panel itself, so it disappears along
@@ -477,11 +483,16 @@ function applySetupSidebarState(shouldCollapse) {
     if (tipLabel) tipLabel.textContent = shouldCollapse ? 'Show sidebar' : 'Hide sidebar';
   }
 
-  window.setTimeout(() => {
-    if (gMap) {
-      gMap.invalidateSize();
-    }
-  }, 240);
+  // On mobile, setup and results are each a full-screen panel, not two
+  // panels that can both stay open like on desktop/tablet -- so opening
+  // setup there also closes results, if they happened to be open.
+  if (!shouldCollapse && MOBILE_PANEL_QUERY.matches) {
+    setRouteSafetyPanelVisible(false);
+  }
+
+  // No invalidateSize() call here: collapsing/expanding resizes #map's own
+  // box, which the ResizeObserver in initMap() already watches and settles
+  // on its own once the .22s CSS transition finishes.
 }
 
 function toggleSetupSidebar(forceOpen = null) {
@@ -496,6 +507,49 @@ function toggleSetupSidebar(forceOpen = null) {
   // Whichever button is now visible -- the reopen tab when collapsing, the
   // in-panel toggle when opening -- so focus never lands on a hidden element.
   document.getElementById(shouldCollapse ? 'sidebarReopenBtn' : 'sidebarToggleBtn')?.focus({ preventScroll: true });
+}
+
+// "Edit setup" button (mobile results panel): swap back to the setup
+// panel. Goes through toggleSetupSidebar so focus management and the
+// results-panel-closing side effect (applySetupSidebarState above) both
+// happen the same way a bottom-bar tap already would.
+function openSetupDrawerFromResults() {
+  toggleSetupSidebar(true);
+}
+
+// Esc (mobile only): close whichever of setup/results is currently open. At
+// most one ever is by design (see applySetupSidebarState), so this only
+// ever does one or the other. Also the bottom bar's own close path -- see
+// toggleMobilePanelBar below.
+function closeWorkspaceDrawers() {
+  const shell = document.getElementById('appShell');
+  if (!shell) return;
+  if (!shell.classList.contains('sidebar-collapsed')) {
+    toggleSetupSidebar(false);
+  } else if (shell.classList.contains('safety-open')) {
+    setRouteSafetyPanelVisible(false);
+  }
+}
+
+// Bottom bar tap (mobile only): closes whichever panel is open, or -- if
+// neither is -- opens the one that's currently relevant (results once a
+// simulation has run, setup before that).
+function toggleMobilePanelBar() {
+  const shell = document.getElementById('appShell');
+  if (!shell) return;
+  const anyPanelOpen = !shell.classList.contains('sidebar-collapsed') || shell.classList.contains('safety-open');
+  if (anyPanelOpen) {
+    closeWorkspaceDrawers();
+  } else if (simData) {
+    setRouteSafetyPanelVisible(true);
+  } else {
+    toggleSetupSidebar(true);
+  }
+}
+
+function syncMobilePanelBarLabel() {
+  const label = document.getElementById('mobilePanelBarLabel');
+  if (label) label.textContent = simData ? 'Route safety results' : 'Simulation setup';
 }
 
 // On a phone the setup panel sits above the map in the page, so opening it
@@ -562,7 +616,10 @@ document.addEventListener('keydown', event => {
 
   if (key !== 'Escape') return;
 
-  // Topmost first: dialogs, then an open "Choose on Map" menu, then pinning.
+  // Topmost first: dialogs, then an open "Choose on Map" menu, then pinning,
+  // then the mobile setup/results panel (lowest priority: if a pin is
+  // actively being placed, Esc backs out of that first -- a second press
+  // then closes the panel).
   if (document.getElementById('emergencyContactModal')?.hidden === false) {
     event.preventDefault();
     closeEmergencyContactModal();
@@ -575,6 +632,12 @@ document.addEventListener('keydown', event => {
   } else if (pinPlacementRole) {
     event.preventDefault();
     cancelPinPlacement();
+  } else if (MOBILE_PANEL_QUERY.matches) {
+    const shell = document.getElementById('appShell');
+    if (shell && (!shell.classList.contains('sidebar-collapsed') || shell.classList.contains('safety-open'))) {
+      event.preventDefault();
+      closeWorkspaceDrawers();
+    }
   }
 });
 
@@ -854,22 +917,53 @@ function initMap() {
     mapViewportObserver.observe(mapEl);
   }
 
+  // window 'resize' alone misses container-size changes that don't resize
+  // the window itself -- the setup sidebar collapsing, the results panel
+  // opening, a breakpoint's layout swapping in, a drawer/sheet opening --
+  // and a media-query change event fires too early, while the panel is
+  // still mid-transition. Watching the map's own box with ResizeObserver
+  // instead catches all of those in one place, debounced so a CSS
+  // transition's many intermediate sizes collapse into one
+  // invalidateSize() once it settles.
   let mapResizeDebounceTimer = null;
-  window.addEventListener('resize', () => {
-    syncMapOverlayLayout();
-
-    // Leaflet caches its container size, so rotating the phone or toggling
-    // the browser's mobile address bar (both fire 'resize') needs an
-    // explicit nudge or the map keeps the old dimensions and shows
-    // blank/cropped tiles.
+  const mapResizeObserver = new ResizeObserver(() => {
     clearTimeout(mapResizeDebounceTimer);
     mapResizeDebounceTimer = window.setTimeout(() => {
-      if (gMap) {
-        gMap.invalidateSize();
-      }
+      if (!gMap) return;
+      // Leaflet caches its container size, so any of the above (also
+      // rotating the phone or toggling the browser's mobile address bar)
+      // needs this explicit nudge or the map keeps the old dimensions and
+      // shows blank/cropped tiles.
+      gMap.invalidateSize();
+      refitMapToCurrentRoute();
     }, 150);
   });
+  mapResizeObserver.observe(document.getElementById('map'));
+
+  window.addEventListener('resize', syncMapOverlayLayout);
   startApp();
+}
+
+// Re-fits the map to whatever route is currently on screen, with the same
+// overlay-aware padding used right after a run (getMapFitPadding) -- called
+// after invalidateSize() so a panel/drawer/sheet opening or closing, or a
+// breakpoint change, doesn't leave the route sitting under the setup panel,
+// the results panel, or the map's own overlay chips.
+function refitMapToCurrentRoute() {
+  if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return;
+
+  const bestRoute = getBestRoute(simData.routes);
+  const routeCoords = getRoutePoints(bestRoute);
+  if (!routeCoords.length) return;
+
+  const isEarthquakeResult = isEarthquakeSimulationResult(simData);
+  const pinCoords = normalizePathCoordinates([
+    getReadyPin('start'),
+    isEarthquakeResult ? null : getReadyPin('end'),
+    { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
+  ].filter(Boolean));
+
+  gMap.fitBounds(L.latLngBounds([...routeCoords, ...pinCoords]), getMapFitPadding());
 }
 
 async function startApp() {
@@ -1626,17 +1720,6 @@ function setPinPlacementRole(role) {
   }
 }
 
-function scrollMapIntoViewIfStacked() {
-  const mapWrap = document.querySelector('.map-wrap');
-  if (!mapWrap || window.innerWidth > 920) return;
-
-  const rect = mapWrap.getBoundingClientRect();
-  const viewportHeight = window.innerHeight || 0;
-  if (rect.top > viewportHeight * 0.35 || rect.bottom < viewportHeight * 0.65) {
-    mapWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}
-
 function closePinMenus() {
   PIN_ROLES.forEach(role => {
     const menu = document.getElementById(`${role}PinMenu`);
@@ -1688,8 +1771,20 @@ function chooseOnMap(role) {
 
   clearPinHintError();
   setPinPlacementRole(role);
-  scrollMapIntoViewIfStacked();
+  closeMobilePanelForMapInteraction();
   zoomMapForPinPlacement(role);
+}
+
+// Mobile only: the setup panel covers the whole screen there, so it has to
+// get out of the way for the map to actually be tappable, same as
+// desktop/tablet already let you tap it beside the always-visible/docked
+// setup panel.
+function closeMobilePanelForMapInteraction() {
+  if (!MOBILE_PANEL_QUERY.matches) return;
+  const shell = document.getElementById('appShell');
+  if (shell && !shell.classList.contains('sidebar-collapsed')) {
+    applySetupSidebarState(true);
+  }
 }
 
 function cancelPinPlacement() {
@@ -2963,6 +3058,7 @@ async function runSimulation() {
     setLoaderStep('draw', 92);
     statusTxt.textContent = 'Opening results…';
     renderRouteSafetyPanel(simData);
+    syncMobilePanelBarLabel();
     // The setup panel folds away to give the results room -- before drawing,
     // so the route is fitted around the map overlays as they will end up.
     applySetupSidebarState(true);
@@ -2970,9 +3066,6 @@ async function runSimulation() {
     await renderActiveSimulationRoutes();
     applyRouteFocusState(null);
     setResultsSidebarActionsVisible(true);
-    // Stacked (phone) layout: with the setup panel folded away the map is at
-    // the top of the page, so show it rather than wherever Run was scrolled.
-    if (window.innerWidth <= 920) window.scrollTo(0, 0);
 
     setLoaderStep('complete', 100);
     statusTxt.textContent = 'Simulation Complete';
@@ -2986,7 +3079,10 @@ async function runSimulation() {
     setLoaderStep('stopped', 100);
     loaderHideDelay = 320;
     // A failed re-run leaves the previous result on the map; bring its panel back.
-    if (simData) renderRouteSafetyPanel(simData);
+    if (simData) {
+      renderRouteSafetyPanel(simData);
+      syncMobilePanelBarLabel();
+    }
     alert(isBackendSimulationBusyError(err) ? err.message : `${request[2]} failed: ${err.message}`);
   } finally {
     stopLoaderProgressPolling();
@@ -3026,11 +3122,21 @@ function setRouteSafetyPanelVisible(visible) {
   if (!shell || shell.classList.contains('safety-open') === visible) return;
 
   shell.classList.toggle('safety-open', visible);
-  window.setTimeout(() => {
-    if (gMap) {
-      gMap.invalidateSize();
-    }
-  }, 240);
+
+  // Same mutual-exclusivity rule as applySetupSidebarState's, defended from
+  // this side too -- so a caller that shows results without explicitly
+  // collapsing setup first (a failed re-run restoring the previous result,
+  // for instance) still can't leave both open at once on mobile.
+  // Safe against the two functions re-triggering each other: each only
+  // calls the other when *opening*, and the call it makes is always a
+  // *close*, which doesn't call back.
+  if (visible && MOBILE_PANEL_QUERY.matches) {
+    applySetupSidebarState(true);
+  }
+
+  // No invalidateSize() call here either, same reason as
+  // applySetupSidebarState above: the ResizeObserver in initMap() picks up
+  // #map's resize once the results column's own transition settles.
 }
 
 function resetRouteSafetyPanel() {
@@ -3916,7 +4022,10 @@ initLoaderGraphPulses();
 setFloodLegendContent();
 syncEarthquakeRouteUi();
 syncEarthquakeViewSelector();
-// The setup panel always starts open; hiding it is per-visit only.
-applySetupSidebarState(false);
+// The setup panel starts open on desktop/tablet (a docked column, covering
+// nothing) but closed on mobile (a full-screen panel over the map) --
+// per-visit only either way.
+applySetupSidebarState(MOBILE_PANEL_QUERY.matches);
+syncMobilePanelBarLabel();
 syncFloodFilterControl();
 advanceStep(1);

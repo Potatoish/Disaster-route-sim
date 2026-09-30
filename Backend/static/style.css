@@ -123,6 +123,16 @@ body.dark {
   box-sizing: border-box;
 }
 
+/* Baseline visible focus ring for every interactive element that doesn't
+   define a more specific one of its own elsewhere in this file (several
+   already do, e.g. .card-action-btn/.run-btn below -- this just fills the
+   gaps rather than replacing those). */
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 body {
   background:
     radial-gradient(circle at top left, var(--glow-a), transparent 26%),
@@ -130,7 +140,11 @@ body {
     linear-gradient(180deg, var(--page-top) 0%, var(--page-bottom) 100%);
   color: var(--text);
   font-family: var(--font-body);
+  /* dvh accounts for the mobile browser chrome (address bar, home indicator)
+     that vh ignores; the vh line first is a fallback for browsers without
+     dvh support -- dvh simply overrides it where supported. */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   transition: background .38s ease, color .28s ease;
 }
@@ -139,7 +153,16 @@ body {
   position: relative;
   display: grid;
   grid-template-columns: var(--setup-col) minmax(0, 1fr) var(--safety-col);
+  /* Without this, the single implicit row auto-sizes to its tallest
+     in-flow grid item instead of filling the container -- harmless while
+     .left-panel/.route-safety-panel were normal grid items (their own tall
+     content stretched the row anyway), but both are position:fixed (removed
+     from grid layout entirely) at mobile/tablet widths, leaving nothing to
+     stretch it and .right-panel's height:100% resolving against an
+     almost-content-sized row instead of the real viewport height. */
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
   transition: grid-template-columns .22s ease;
 }
 
@@ -805,6 +828,7 @@ body.dark .run-btn:hover {
   flex: 1 1 0;
   position: relative;
   min-height: clamp(300px, 44vh, 520px);
+  min-height: clamp(300px, 44dvh, 520px);
   overflow: hidden;
 }
 
@@ -840,8 +864,8 @@ body.dark .run-btn:hover {
 .map-legend {
   /* Docked bottom-left, lifted clear of the Google Maps attribution logo. */
   top: auto;
-  bottom: 34px;
-  left: 14px;
+  bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+  left: calc(14px + env(safe-area-inset-left, 0px));
   right: auto;
   min-width: 158px;
   max-width: min(232px, calc(100% - 28px));
@@ -1618,14 +1642,14 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-download-btn:disabled { opacity: .55; cursor: not-allowed; }
 .safety-download-btn.show { display: flex; }
 
-.flood-filter-control { position: absolute; z-index: 6; top: 13px; left: 13px; right: auto; padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); }
+.flood-filter-control { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); right: auto; padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); }
 .flood-filter-title { margin: 0 2px 5px; color: var(--map-ui-muted); font: 700 .56rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
 .flood-filter-buttons { display: flex; gap: 4px; }
 .flood-filter-buttons button { border: 1px solid var(--map-ui-border); border-radius: 5px; padding: 4px 6px; background: transparent; color: var(--map-ui-text); font: 700 .59rem var(--font-body); cursor: pointer; }
 .flood-filter-buttons button.active { background: var(--map-ui-accent); border-color: var(--map-ui-accent); color: #fff; }
 
 .route-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(2, 8, 23, .56); backdrop-filter: blur(3px); }
-.route-list-modal { width: min(700px, 100%); max-height: min(76vh, 720px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border2); border-radius: 15px; background: var(--surface); box-shadow: 0 28px 70px rgba(0,0,0,.35); }
+.route-list-modal { width: min(700px, 100%); max-height: min(76vh, 720px); max-height: min(76dvh, 720px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border2); border-radius: 15px; background: var(--surface); box-shadow: 0 28px 70px rgba(0,0,0,.35); }
 .route-list-modal-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 17px 19px; border-bottom: 1px solid var(--border); }
 .modal-close-btn { width: 30px; height: 30px; border: 1px solid var(--border2); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .route-list-modal-body { overflow: auto; overscroll-behavior: contain; padding: 13px; display: grid; gap: 8px; }
@@ -1677,7 +1701,10 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .flood-filter-buttons button.active .swatch { box-shadow: 0 0 0 1px rgba(255,255,255,.75); }
 
 /* Route list modal. */
-.route-list-modal-body:focus-visible { outline: none; }
+/* A visible box-shadow rather than outline: this is a scrolling container
+   (arrow-key scrollable once focused), and an outline here would sit right
+   against the modal's own rounded corner and adjacent header/footer. */
+.route-list-modal-body:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .route-modal-caution { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border: 1px solid rgba(220,38,38,.45); border-radius: 10px; background: rgba(220,38,38,.07); color: var(--red); font-size: .8rem; line-height: 1.5; font-weight: 600; }
 .route-modal-caution svg { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .route-modal-card.is-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -1691,7 +1718,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 
 @media (max-width: 640px) {
   .route-modal-backdrop { padding: 10px; }
-  .route-list-modal { max-height: 88vh; }
+  .route-list-modal { max-height: 88vh; max-height: 88dvh; }
   .route-list-modal-head, .route-modal-foot { padding: 13px 14px; }
   .flood-filter-control, .earthquake-view-switcher { top: 10px; left: 10px; right: auto; }
 }
@@ -1718,7 +1745,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .about-modal {
   position: relative;
   width: min(440px, 100%);
-  max-height: min(84vh, 640px);
+  max-height: min(84vh, 640px); max-height: min(84dvh, 640px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 26px 24px 22px;
@@ -1786,7 +1813,7 @@ body.dark .about-modal {
 .tutorial-modal[hidden] { display: none; }
 .tutorial-modal-backdrop { position: absolute; inset: 0; background: rgba(2, 8, 23, .58); backdrop-filter: blur(4px); }
 .tutorial-modal-panel {
-  position: relative; width: 100%; max-width: 420px; max-height: min(84vh, 640px); overflow-y: auto;
+  position: relative; width: 100%; max-width: 420px; max-height: min(84vh, 640px); max-height: min(84dvh, 640px); overflow-y: auto;
   overscroll-behavior: contain; display: flex; flex-direction: column; gap: 14px; padding: 20px;
   border: 1px solid var(--border); border-radius: 18px; background: var(--surface);
   box-shadow: 0 28px 64px rgba(0, 0, 0, .28); animation: aboutModalIn .26s cubic-bezier(.22, 1, .36, 1);
@@ -1890,7 +1917,7 @@ body.dark .emergency-modal {
    two are mutually exclusive (flood-only vs. earthquake-only) and should read
    as the same kind of control rather than one living on the map and the other
    buried in the right panel. */
-.earthquake-view-switcher { position: absolute; z-index: 6; top: 13px; left: 13px; padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); max-width: min(230px, calc(100% - 28px)); }
+.earthquake-view-switcher { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); max-width: min(230px, calc(100% - 28px)); }
 .earthquake-view-title { margin: 0 2px 5px; color: var(--map-ui-muted); font: 700 .56rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
 .earthquake-view-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .earthquake-view-hint { margin: 6px 2px 0; color: var(--map-ui-muted); font-size: .75rem; line-height: 1.45; }
@@ -2055,6 +2082,15 @@ body.dark .leaflet-popup-close-button {
   border-color: var(--map-ui-border) !important;
 }
 
+/* Leaflet's own corner containers default to sitting flush against the map
+   pane's edges; nudge them in by the device safe-area so a notch or the
+   home-indicator gesture bar never sits over the zoom/layers controls once
+   the map runs edge-to-edge on a phone. Zero everywhere else. */
+.leaflet-top { top: env(safe-area-inset-top, 0px); }
+.leaflet-right { right: env(safe-area-inset-right, 0px); }
+.leaflet-bottom { bottom: env(safe-area-inset-bottom, 0px); }
+.leaflet-left { left: env(safe-area-inset-left, 0px); }
+
 .leaflet-control-zoom a:hover {
   background: var(--map-ui-bg) !important;
 }
@@ -2141,72 +2177,10 @@ body.dark .leaflet-popup-close-button {
   }
 }
 
-@media (max-width: 920px) {
-  body {
-    height: auto;
-    min-height: 100vh;
-    overflow: auto;
-  }
-
-  .app,
-  .app.sidebar-collapsed {
-    display: block;
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .left-panel,
-  .app.sidebar-collapsed .left-panel {
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .app.sidebar-collapsed .left-panel {
-    display: none;
-  }
-
-  .app.safety-open .route-safety-panel {
-    min-height: 0;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-  }
-
-  .panel-body {
-    overflow: visible;
-  }
-
-  /* Same fix as .panel-body above, for the same reason: .right-panel's
-     height:100% (base rule) and .route-safety-panel's overflow-y:auto
-     (base rule) both depend on .app stretching them to a fixed 100vh grid
-     row on desktop. Once .app switches to display:block/height:auto for
-     mobile, height:100% no longer resolves to anything -- but leaving
-     overflow:hidden/auto in place risks trapping a scroll region inside
-     these boxes instead of letting the page itself scroll, which is what
-     made it impossible to scroll down to the rest of the results/safety
-     panel content on a phone. */
-  .right-panel {
-    height: auto;
-    overflow: visible;
-    min-height: 68vh;
-  }
-
-  .route-safety-panel {
-    overflow-y: visible;
-  }
-
-  .map-wrap {
-    min-height: 56vh;
-  }
-
-  /* The map sits below the setup panel here, so a loader covering only the
-     map would start below the fold; cover the screen instead. */
-  #loader {
-    position: fixed;
-  }
-
+/* Below desktop (< 1024px), whichever of the two layouts further down
+   applies: map chrome (overlay controls, tap targets) that's cramped at any
+   not-quite-desktop width either way. */
+@media (max-width: 1023px) {
   /* The reopen tab is bigger here; keep the map chips below it. */
   .app.sidebar-collapsed .flood-filter-control,
   .app.sidebar-collapsed .earthquake-view-switcher {
@@ -2214,16 +2188,17 @@ body.dark .leaflet-popup-close-button {
   }
 
   .map-legend {
-    left: 12px;
-    bottom: 32px;
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    bottom: calc(32px + env(safe-area-inset-bottom, 0px));
     max-width: min(220px, calc(100% - 24px));
   }
 
   /* Compact desktop hit targets are precise-pointer-only; widen the ones that
-     sit directly on the map or trigger navigation for reliable tapping. */
+     sit directly on the map or trigger navigation for reliable tapping --
+     44px is the tap-target floor for every size from here down. */
   .sidebar-toggle {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
   }
 
   .sidebar-toggle svg {
@@ -2232,15 +2207,15 @@ body.dark .leaflet-popup-close-button {
   }
 
   .modal-close-btn {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
   }
 
   .leaflet-control-zoom a,
   .leaflet-control-layers-toggle {
-    width: 34px !important;
-    height: 34px !important;
-    line-height: 34px !important;
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 44px !important;
   }
 
   .eqtab,
@@ -2250,15 +2225,158 @@ body.dark .leaflet-popup-close-button {
   }
 }
 
-@media (max-width: 920px) and (max-height: 480px) {
-  /* Landscape phones: a 56vh map plus a full sidebar leaves almost nothing
-     for the results below the fold, so cap the map's share of a short viewport. */
-  .right-panel {
-    min-height: 0;
+/* Base (hidden/off) states for elements the media queries below need --
+   defined here, before those queries, so their overrides reliably win the
+   cascade by source order rather than by a specificity fight. */
+.safety-edit-setup-btn {
+  display: none;
+  width: 100%;
+  margin-bottom: 11px;
+  padding: 9px 12px;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: 700 .68rem var(--font-body);
+  cursor: pointer;
+}
+.safety-edit-setup-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mobile-panel-bar {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 210;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font: 700 .8rem var(--font-body);
+  cursor: pointer;
+}
+.mobile-panel-bar svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  transition: transform .2s ease;
+}
+.app:not(.sidebar-collapsed) .mobile-panel-bar svg,
+.app.safety-open .mobile-panel-bar svg {
+  transform: rotate(180deg);
+}
+
+/* ---------- TABLET (640-1023px, normal height) ----------
+   No overlay, no drawer -- the same docked 3-column grid as desktop, just
+   narrower columns, reusing the exact collapse-on-run / reopen-tab
+   mechanism desktop already has (applySetupSidebarState /
+   setRouteSafetyPanelVisible, untouched below). A short window (phone
+   landscape) is handled by the mobile panel further down instead of here --
+   a docked 3-column grid doesn't have room to breathe when the viewport is
+   short, even if it's wide enough on paper. */
+@media (min-width: 640px) and (max-width: 1023px) and (min-height: 500px) {
+  :root {
+    --setup-col: 216px;
+    --safety-col-open: 208px;
+  }
+}
+
+/* ---------- MOBILE (< 640px), and any short viewport (phone landscape) ----------
+   The map is always full-bleed and the page itself never scrolls (same
+   non-scrolling grid as desktop/tablet) -- setup and results each become a
+   full-screen panel, opened from one bar fixed at the bottom
+   (#mobilePanelBar / toggleMobilePanelBar() in script.js). Only one panel is
+   ever open; applySetupSidebarState / setRouteSafetyPanelVisible (reused
+   from desktop) enforce that via MOBILE_PANEL_QUERY, same as they enforced
+   it for the tablet drawer this replaced. */
+@media (max-width: 639px), (max-height: 499px) {
+  :root {
+    --mobile-bar-h: 56px;
   }
 
-  .map-wrap {
-    min-height: 260px;
+  #appShell {
+    --setup-col: 0px;
+    --safety-col: 0px;
+  }
+
+  /* Belt-and-suspenders alongside .app's grid-template-rows fix further up:
+     takes .right-panel out of grid layout entirely (same trick already used
+     for .left-panel/.route-safety-panel below) so the map's size comes
+     directly from the viewport via inset:0, not from a percentage height
+     resolved through a grid row. */
+  .right-panel {
+    position: fixed;
+    inset: 0;
+  }
+
+  /* The corner reopen tab is a desktop/tablet affordance; the bottom bar
+     below replaces it here, so showing both would be redundant. */
+  .sidebar-reopen-tab {
+    display: none;
+  }
+
+  .left-panel,
+  .route-safety-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    border: none;
+    /* Leaves room for the bar (higher z-index, sits on top) so neither
+       panel's own footer content renders underneath it. */
+    padding-bottom: calc(var(--mobile-bar-h) + env(safe-area-inset-bottom, 0px));
+    transition: transform .26s ease;
+  }
+
+  .app.sidebar-collapsed .left-panel {
+    opacity: 1;
+    pointer-events: none;
+    transform: translateY(100%);
+  }
+
+  .app:not(.sidebar-collapsed) .left-panel {
+    transform: translateY(0);
+  }
+
+  .route-safety-panel {
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+  }
+
+  .app.safety-open .route-safety-panel {
+    transform: translateY(0);
+  }
+
+  .mobile-panel-bar {
+    display: flex;
+  }
+
+  .safety-edit-setup-btn {
+    display: block;
+  }
+
+  /* Belt-and-suspenders: #loader is already position:absolute inside
+     .right-panel, which now spans the full viewport itself (both side
+     columns are 0 above), so this shouldn't be load-bearing -- but costs
+     nothing to keep explicit. */
+  #loader {
+    position: fixed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .left-panel,
+  .route-safety-panel,
+  .mobile-panel-bar svg {
+    transition: none;
   }
 }
 
@@ -2271,12 +2389,6 @@ body.dark .leaflet-popup-close-button {
 
   .workflow-card {
     padding: 12px;
-  }
-
-  /* At least 440px: on short phones (568px) half the screen left only a
-     sliver of map between the lens / filter card and the legend strip. */
-  .map-wrap {
-    min-height: max(50vh, 440px);
   }
 
   /* On a phone the stacked legend card and the filter / lens card covered

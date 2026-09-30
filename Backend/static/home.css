@@ -38,7 +38,12 @@ body.dark{
   --shadow-sm: 0 10px 22px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box;}
-html,body{ height:auto; overflow-x:hidden; }
+/* overflow-x:clip, not :hidden -- :hidden forces the browser to compute
+   overflow-y as auto too (an axis can't stay visible once the other isn't),
+   turning body into its own scroll container and breaking position:sticky
+   on .site-nav. :clip has the same effect of preventing a horizontal
+   scrollbar without that side effect. */
+html,body{ height:auto; overflow-x:clip; }
 /* Full-height gradient base. This used to carry the `fixed` attachment
    keyword, which sizes/tiles a background against the viewport instead of
    the page -- on any page taller than one screen (i.e. this one) that made
@@ -78,6 +83,14 @@ a{color:inherit;}
 
 button{font-family:inherit; cursor:pointer;}
 
+/* Baseline visible focus ring for every interactive element that doesn't
+   define a more specific one of its own elsewhere in this file. Real UA
+   default outlines are inconsistent across browsers and easy to lose behind
+   this page's own backgrounds, so give keyboard focus one deliberate look. */
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
 
 .site-nav{
   position:sticky; top:0; z-index:40; padding:14px 24px 0;
@@ -328,7 +341,9 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .form-row label{ font-size:12.5px; font-weight:700; color:var(--muted); }
 .form-row input, .form-row textarea{
   border:1px solid var(--border); background:var(--panel); border-radius:9px; padding:9px 12px;
-  font-family:inherit; font-size:13.5px; color:var(--text); resize:vertical; width:100%;
+  /* 16px minimum, not the 13.5px every other form-ish text here uses -- iOS
+     Safari auto-zooms the page on focus for any text input under 16px. */
+  font-family:inherit; font-size:16px; color:var(--text); resize:vertical; width:100%;
 }
 .form-row input:focus, .form-row textarea:focus{ outline:2px solid var(--accent); outline-offset:1px; }
 .panel .contact-note{ margin:20px 0 0; font-size:9.5px; color:var(--dim); line-height:1.5; text-align:center; }
@@ -343,14 +358,14 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 
 /* ---------- FEEDBACK FAB ---------- */
 .fab{
-  position:fixed; right:20px; bottom:20px; z-index:50; height:48px; border-radius:999px;
+  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:calc(20px + env(safe-area-inset-bottom,0px)); z-index:50; height:48px; border-radius:999px;
   background:linear-gradient(180deg,var(--accent2),var(--accent)); color:var(--accent-ink); border:none; padding:0 18px 0 16px;
   box-shadow:0 12px 26px rgba(0,0,0,.22); display:flex; align-items:center; gap:8px;
   font-size:13.5px; font-weight:700;
 }
 .fab svg{ width:20px; height:20px; flex:none; }
 .fab-panel{
-  position:fixed; right:20px; bottom:82px; z-index:50; width:300px; max-width:calc(100vw - 32px);
+  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:calc(82px + env(safe-area-inset-bottom,0px)); z-index:50; width:300px; max-width:calc(100vw - 32px);
   background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow);
   padding:18px; transform:translateY(8px) scale(.98); opacity:0; pointer-events:none; transition:.16s ease;
 }
@@ -370,13 +385,14 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .fab-field label{ font-size:12px; font-weight:700; color:var(--muted); }
 .fab-field select{
   width:100%; border:1px solid var(--border); background:var(--panel); border-radius:9px; padding:9px 10px;
-  font-family:inherit; font-size:13px; color:var(--text);
+  /* 16px, not 13px -- same iOS auto-zoom reason as .form-row above. */
+  font-family:inherit; font-size:16px; color:var(--text);
 }
-.fab-panel textarea{ width:100%; border:1px solid var(--border); background:var(--panel); border-radius:9px; padding:9px 10px; font-family:inherit; font-size:13px; color:var(--text); resize:vertical; min-height:64px; }
+.fab-panel textarea{ width:100%; border:1px solid var(--border); background:var(--panel); border-radius:9px; padding:9px 10px; font-family:inherit; font-size:16px; color:var(--text); resize:vertical; min-height:64px; }
 .fab-send{ margin-top:2px; width:100%; border:none; border-radius:9px; padding:9px; background:var(--accent); color:var(--accent-ink); font-weight:700; font-size:13px; }
 .fab-note{ margin:10px 0 0; font-size:11px; line-height:1.5; color:var(--dim); text-align:center; }
 .toast{
-  position:fixed; right:20px; bottom:82px; z-index:60; background:var(--text); color:var(--surface);
+  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:calc(82px + env(safe-area-inset-bottom,0px)); z-index:60; background:var(--text); color:var(--surface);
   padding:10px 16px; border-radius:10px; font-size:13px; box-shadow:var(--shadow-sm);
   transform:translateY(10px); opacity:0; transition:.2s; pointer-events:none;
 }
@@ -770,11 +786,14 @@ body.dark .hz-section{
 @media (max-width:480px){
   .coverage-badge span{ display:none; }
   .coverage-badge{ padding:8px; }
-
+}
+@media (max-width:639px){
   /* The feedback FAB is fixed to the corner at every width; on a phone-width
      hero the quickstart card's full-width CTA sits right under it, so the
      text label (not just the icon) was overlapping "See map" / body copy.
-     Icon-only keeps its footprint small enough to clear both. */
+     Icon-only keeps its footprint small enough to clear both -- the button's
+     own aria-label ("Send feedback") still gives it an accessible name with
+     the visible text gone. */
   .fab{ width:48px; padding:0; justify-content:center; }
   .fab span{ display:none; }
 }
