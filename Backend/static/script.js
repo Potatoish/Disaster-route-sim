@@ -460,11 +460,11 @@ function setMapLegendVisible(visible) {
   syncMapOverlayLayout();
 }
 
-// Mobile panel range (style.css: < 640px width, or any width when the
-// viewport is short -- phone landscape) -- setup and results are each a
-// full-screen panel here instead of docking side by side, narrower, in a
-// grid column (tablet and desktop, both untouched).
-const MOBILE_PANEL_QUERY = window.matchMedia('(max-width: 639px), (max-height: 499px)');
+// Short viewports (style.css: phone landscape, any width) -- setup and
+// results are each a full-screen panel here instead of docking side by side
+// in a grid column (desktop). Phones and tablets have their own bottom
+// sheet instead (mobile-sim.js), which hides both panels.
+const MOBILE_PANEL_QUERY = window.matchMedia('(max-height: 499px)');
 
 function applySetupSidebarState(shouldCollapse) {
   const shell = document.getElementById('appShell');
@@ -483,7 +483,7 @@ function applySetupSidebarState(shouldCollapse) {
     if (tipLabel) tipLabel.textContent = shouldCollapse ? 'Show sidebar' : 'Hide sidebar';
   }
 
-  // On mobile, setup and results are each a full-screen panel, not two
+  // On a short viewport, setup and results are each a full-screen panel, not two
   // panels that can both stay open like on desktop/tablet -- so opening
   // setup there also closes results, if they happened to be open.
   if (!shouldCollapse && MOBILE_PANEL_QUERY.matches) {
@@ -517,7 +517,7 @@ function openSetupDrawerFromResults() {
   toggleSetupSidebar(true);
 }
 
-// Esc (mobile only): close whichever of setup/results is currently open. At
+// Esc (short viewports only): close whichever of setup/results is open. At
 // most one ever is by design (see applySetupSidebarState), so this only
 // ever does one or the other. Also the bottom bar's own close path -- see
 // toggleMobilePanelBar below.
@@ -531,7 +531,7 @@ function closeWorkspaceDrawers() {
   }
 }
 
-// Bottom bar tap (mobile only): closes whichever panel is open, or -- if
+// Bottom bar tap (short viewports only): closes whichever panel is open, or -- if
 // neither is -- opens the one that's currently relevant (results once a
 // simulation has run, setup before that).
 function toggleMobilePanelBar() {
@@ -592,6 +592,7 @@ function syncFloodFilterControl() {
       ? `${overlayConfig.label} highlighted. Click again to show all.`
       : 'All levels shown. Click one to highlight it.';
   }
+  window.mobileSim?.scheduleSync();
 }
 
 function isTypingTarget(node) {
@@ -626,6 +627,9 @@ document.addEventListener('keydown', event => {
   } else if (document.getElementById('routeListModal')?.hidden === false) {
     event.preventDefault();
     closeRouteListModal();
+  } else if (window.mobileSim?.handleEscape()) {
+    // Closed the phone layout's Map layers sheet.
+    event.preventDefault();
   } else if (PIN_ROLES.some(role => document.getElementById(`${role}PinMenu`)?.hidden === false)) {
     event.preventDefault();
     closePinMenus();
@@ -653,6 +657,7 @@ function syncSimulationConfigLock() {
 
   document.querySelectorAll('.hazard-card').forEach(card => {
     card.classList.toggle('interaction-locked', interactionLocked);
+    card.setAttribute('aria-disabled', String(interactionLocked));
   });
 
   // changeHazardBtn/changeRouteBtn are deliberately left out of this list:
@@ -878,6 +883,12 @@ function initMap() {
     zoomSnap: 0.25,
     zoomDelta: 0.5,
     wheelPxPerZoomLevel: 100,
+    // Leaflet's own zoom/fade animations; programmatic moves opt out
+    // individually through mapMoveOptions() (osm.js). Read once here, like
+    // every other Leaflet option, so it applies from the next page load.
+    zoomAnimation: !prefersReducedMotion(),
+    fadeAnimation: !prefersReducedMotion(),
+    markerZoomAnimation: !prefersReducedMotion(),
   });
 
   const streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -904,6 +915,8 @@ function initMap() {
   // layers glyph that doesn't render here since this page never loads
   // Leaflet's marker/layers image sprites, only its CSS/JS).
   L.control.layers({ 'Map': streetLayer, 'Satellite': satelliteLayer }, null, { position: 'topright', collapsed: false }).addTo(gMap);
+  // The phone layout swaps these from its own Map layers sheet.
+  window.mobileSim?.attachMap(gMap, { street: streetLayer, satellite: satelliteLayer });
 
   // The focused route's marching dash (createRoutePreview) animates for as
   // long as a route is selected. On mobile the map often scrolls out of view
@@ -963,7 +976,7 @@ function refitMapToCurrentRoute() {
     { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
   ].filter(Boolean));
 
-  gMap.fitBounds(L.latLngBounds([...routeCoords, ...pinCoords]), getMapFitPadding());
+  gMap.fitBounds(L.latLngBounds([...routeCoords, ...pinCoords]), mapMoveOptions(getMapFitPadding()));
 }
 
 async function startApp() {
@@ -1757,8 +1770,8 @@ function zoomMapForPinPlacement(role) {
     : L.latLngBounds(barangayBoundaryRings.flat()).getCenter();
   const zoom = Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM);
 
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-    gMap.setView(target, zoom);
+  if (prefersReducedMotion()) {
+    gMap.setView(target, zoom, mapMoveOptions());
   } else {
     gMap.flyTo(target, zoom, { duration: 0.7 });
   }
@@ -1775,7 +1788,7 @@ function chooseOnMap(role) {
   zoomMapForPinPlacement(role);
 }
 
-// Mobile only: the setup panel covers the whole screen there, so it has to
+// Short viewports only: the setup panel covers the whole screen there, so it has to
 // get out of the way for the map to actually be tappable, same as
 // desktop/tablet already let you tap it beside the always-visible/docked
 // setup panel.
@@ -1835,6 +1848,9 @@ function syncRoutePinFields() {
       ? `${start} → ${end}`
       : 'Pin your location and destination on the map.';
   }
+
+  // Most setup changes pass through here; the phone sheet re-reads them all.
+  window.mobileSim?.scheduleSync();
 }
 
 function buildPinPopupContent(role) {
@@ -1896,6 +1912,12 @@ function syncRoutePinMarkers() {
     }
 
     marker.setLatLng({ lat: pin.lat, lng: pin.lng });
+    // Phone layout: while this pin is being moved, the fixed center pin
+    // (mobile-sim.js) stands in for its marker.
+    if (window.mobileSim?.isCenterPinRole(role)) {
+      marker.remove();
+      return;
+    }
     if (!gMap.hasLayer(marker)) marker.addTo(gMap);
     marker.getElement()?.classList.toggle('route-pin-checking', pin.status === 'checking');
     marker.getElement()?.setAttribute('title', pin.label || PIN_ROLE_COPY[role].fallbackLabel);
@@ -1985,6 +2007,8 @@ async function placeRoutePin(role, lat, lng) {
 }
 
 function onMapClickForPin(event) {
+  // The phone layout sets pins with its center pin instead.
+  if (window.mobileSim?.handleMapTap(event.latlng)) return;
   if (!pinPlacementRole || !canPlaceRoutePins()) return;
   placeRoutePin(pinPlacementRole, event.latlng.lat, event.latlng.lng);
 }
@@ -2067,6 +2091,7 @@ function syncEarthquakeViewSelector() {
     button.classList.toggle('active', activeEarthquakeView === viewKey);
     button.setAttribute('aria-pressed', String(activeEarthquakeView === viewKey));
   });
+  window.mobileSim?.scheduleSync();
 }
 
 function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
@@ -2157,6 +2182,7 @@ function clearSimulationOutput() {
 function clearHazardSelectionState() {
   document.querySelectorAll('.hazard-card').forEach(card => {
     card.classList.remove('selected', ...HAZARD_SELECTION_CLASSES);
+    card.setAttribute('aria-pressed', 'false');
   });
 }
 
@@ -2207,7 +2233,12 @@ function fitMapToBoundaryPaths(paths, padding = 42) {
 
   if (!hasPoints) return false;
 
-  gMap.fitBounds(bounds, { padding: [padding, padding] });
+  // Phone layout: fit into the strip between the top bar and the sheet.
+  const covered = window.mobileSim?.getCoveredInsets();
+  const fitOptions = covered
+    ? { paddingTopLeft: [padding, covered.top + padding], paddingBottomRight: [padding, covered.bottom + padding] }
+    : { padding: [padding, padding] };
+  gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
   return true;
 }
 
@@ -2247,6 +2278,15 @@ function getMapFitPadding(base = 36) {
     if (!el || !el.getClientRects().length) return;
     top = Math.max(top, el.getBoundingClientRect().bottom - mapRect.top + 12);
   });
+
+  // Phone layout: its top bar and bottom sheet (those overlays are hidden
+  // there). Read from the sheet's target height, not its box, which may
+  // still be animating.
+  const covered = window.mobileSim?.getCoveredInsets();
+  if (covered) {
+    top = Math.max(top, covered.top + 12);
+    bottom = Math.max(bottom, covered.bottom + 12);
+  }
   top += MAP_FIT_MARKER_HEADROOM;
 
   const legend = document.getElementById('mapLegend');
@@ -2317,7 +2357,7 @@ function fitEarthquakeMapScope(options = {}) {
     return false;
   }
 
-  gMap.fitBounds(bounds, getMapFitPadding(52));
+  gMap.fitBounds(bounds, mapMoveOptions(getMapFitPadding(52)));
   gMap.once('moveend', () => {
     if (gMap.getZoom() < EARTHQUAKE_MIN_FOCUS_ZOOM) {
       gMap.setZoom(EARTHQUAKE_MIN_FOCUS_ZOOM);
@@ -2598,6 +2638,7 @@ async function selectHazard(name, el) {
 
   clearHazardSelectionState();
   el.classList.add('selected', name.toLowerCase());
+  el.setAttribute('aria-pressed', 'true');
   selectedHazard = name;
   applyHazardTheme();
   workflowFocusSection = null;
@@ -3059,6 +3100,7 @@ async function runSimulation() {
     statusTxt.textContent = 'Opening results…';
     renderRouteSafetyPanel(simData);
     syncMobilePanelBarLabel();
+    window.mobileSim?.showResults();
     // The setup panel folds away to give the results room -- before drawing,
     // so the route is fitted around the map overlays as they will end up.
     applySetupSidebarState(true);
@@ -3082,6 +3124,7 @@ async function runSimulation() {
     if (simData) {
       renderRouteSafetyPanel(simData);
       syncMobilePanelBarLabel();
+      window.mobileSim?.showResults();
     }
     alert(isBackendSimulationBusyError(err) ? err.message : `${request[2]} failed: ${err.message}`);
   } finally {
@@ -3147,6 +3190,7 @@ function resetRouteSafetyPanel() {
   }
   setRouteSafetyPanelVisible(false);
   closeRouteListModal();
+  window.mobileSim?.clearResults();
 }
 
 function getRouteTurnSteps(route) {
@@ -3317,6 +3361,7 @@ function renderRouteSafetyPanel(result) {
       </div>
     </div>
     <button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See all ${Math.max(routes.length - 1, 0)} alternative route${Math.max(routes.length - 1, 0) === 1 ? '' : 's'}</button>`;
+  window.mobileSim?.renderResults(result);
 }
 
 let routeListModalReturnFocus = null;
@@ -3561,6 +3606,7 @@ function applyRouteFocusState(routeNo) {
     }
     syncRoutePreview(group, isFocused);
   });
+  window.mobileSim?.syncRouteRows();
 }
 
 // Re-applies the route styles (widths are zoom-scaled) for the current focus.
@@ -4023,8 +4069,8 @@ setFloodLegendContent();
 syncEarthquakeRouteUi();
 syncEarthquakeViewSelector();
 // The setup panel starts open on desktop/tablet (a docked column, covering
-// nothing) but closed on mobile (a full-screen panel over the map) --
-// per-visit only either way.
+// nothing) but closed on a short viewport (a full-screen panel over the
+// map) -- per-visit only either way. (Phones and tablets hide both panels.)
 applySetupSidebarState(MOBILE_PANEL_QUERY.matches);
 syncMobilePanelBarLabel();
 syncFloodFilterControl();

@@ -73,7 +73,8 @@ body.dark .wave-zone{ background-image: url('wave-bg-dark.svg'); }
 
 h1,h2,h3{font-family:var(--font-heading); font-weight:700; text-wrap:balance; letter-spacing:.2px; margin:0;}
 a{color:inherit;}
-.wrap{max-width:1120px; margin:0 auto; padding-inline:24px;}
+/* max(): never less than 24px, but clear of a phone's notch in landscape. */
+.wrap{max-width:1120px; margin:0 auto; padding-inline:max(24px, env(safe-area-inset-left,0px)) max(24px, env(safe-area-inset-right,0px));}
 .eyebrow{
   font-family:var(--font-meta); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
   color:var(--accent); display:inline-flex; align-items:center; gap:8px;
@@ -108,7 +109,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible{
   backdrop-filter:blur(10px); box-shadow:0 12px 30px rgba(15,23,42,.10);
 }
 body.dark .nav-row{ box-shadow:0 12px 30px rgba(0,0,0,.32); }
-.brand{display:flex; align-items:center; gap:0; text-decoration:none;}
+.brand{position:relative; display:flex; align-items:center; gap:0; text-decoration:none;}
+/* A short divider line between the logo and the links (per the user),
+   centered in the nav's gap -- `right` is half of .nav-row's gap. */
+.brand::after{
+  content:""; position:absolute; top:50%; right:-10px; width:1px; height:24px; margin-top:-12px;
+  background:var(--border2);
+}
 /* Logo doubles as the wordmark's "A" -- sized up and pulled flush against
    the text (negative margin eats its built-in padding) so "GNAS" reads as
    a continuation of the glyph instead of a separate icon+label pair. */
@@ -300,6 +307,27 @@ body.dark .about-logo .logo-dark{ display:block; }
 .gtk-icon svg{ width:18px; height:18px; }
 .gtk-card h3{ font-size:15.5px; margin:0; }
 .gtk-card p{ margin:0; font-size:12.5px; color:var(--muted); line-height:1.55; }
+/* The one card that asks something of the reader gets a stronger edge and
+   a way to the hotlines. */
+.gtk-card--emphasis{ border:1.5px solid color-mix(in srgb, var(--text) 50%, var(--border)); }
+.gtk-link{
+  align-self:flex-end; margin-top:auto; display:inline-flex; align-items:center; gap:6px;
+  border:0; background:none; padding:4px 0; color:var(--accent); font-size:13px; font-weight:700;
+  text-decoration:underline; text-underline-offset:3px;
+}
+.gtk-link svg{ width:15px; height:15px; flex:none; }
+
+/* Emergency hotlines dialog (homepage): same numbers as the simulator's. */
+.hotline-modal .scope-modal-panel{ max-width:440px; }
+.emergency-contact-list{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.emergency-contact-item{
+  display:flex; flex-direction:column; gap:2px; padding:10px 14px;
+  border:1px solid var(--border); border-radius:12px; background:var(--panel);
+}
+.emergency-contact-name{ font-size:12.5px; font-weight:600; color:var(--muted); }
+.emergency-contact-number{ font-family:var(--font-meta); font-size:15px; color:var(--text); }
+.emergency-contact-number a{ color:var(--accent); text-decoration:none; }
+.emergency-contact-number a:hover{ text-decoration:underline; }
 
 /* ---------- TUTORIAL SHOT (used inside the "How to use" modal) ---------- */
 .tutorial-tile-shot{
@@ -348,8 +376,14 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .form-row input:focus, .form-row textarea:focus{ outline:2px solid var(--accent); outline-offset:1px; }
 .panel .contact-note{ margin:20px 0 0; font-size:9.5px; color:var(--dim); line-height:1.5; text-align:center; }
 
-/* ---------- FOOTER (homepage only) ---------- */
-.site-footer{ border-top:1px solid var(--border); background:var(--panel); }
+/* ---------- FOOTER (homepage only) ----------
+   Compact: instead of padding it for the feedback button, the button (and
+   its panel/toast) rises above the footer as it scrolls in (--fab-lift in
+   the .fab rules below, set by home.js). */
+.site-footer{
+  border-top:1px solid var(--border); background:var(--panel);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
 .foot-row{ display:flex; justify-content:space-between; align-items:center; padding-block:22px; gap:16px; flex-wrap:wrap; }
 .foot-copy{ font-size:12.5px; color:var(--muted); }
 .foot-links{ display:flex; gap:18px; font-size:12.5px; color:var(--muted); flex-wrap:wrap; }
@@ -358,16 +392,21 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 
 /* ---------- FEEDBACK FAB ---------- */
 .fab{
-  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:calc(20px + env(safe-area-inset-bottom,0px)); z-index:50; height:48px; border-radius:999px;
+  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:max(calc(20px + env(safe-area-inset-bottom,0px)), calc(var(--fab-lift, 0px) + 12px)); z-index:50; height:48px; border-radius:999px;
   background:linear-gradient(180deg,var(--accent2),var(--accent)); color:var(--accent-ink); border:none; padding:0 18px 0 16px;
   box-shadow:0 12px 26px rgba(0,0,0,.22); display:flex; align-items:center; gap:8px;
   font-size:13.5px; font-weight:700;
 }
 .fab svg{ width:20px; height:20px; flex:none; }
 .fab-panel{
-  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:calc(82px + env(safe-area-inset-bottom,0px)); z-index:50; width:300px; max-width:calc(100vw - 32px);
+  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:max(calc(82px + env(safe-area-inset-bottom,0px)), calc(var(--fab-lift, 0px) + 74px)); z-index:50; width:300px; max-width:calc(100vw - 32px);
   background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow);
   padding:18px; transform:translateY(8px) scale(.98); opacity:0; pointer-events:none; transition:.16s ease;
+  /* Scrolls inside itself when the screen is short (phone landscape), rather
+     than running off the top with the send button out of reach. */
+  max-height:calc(100vh - 98px);
+  max-height:calc(100dvh - 98px - env(safe-area-inset-bottom,0px));
+  overflow-y:auto; overscroll-behavior:contain;
 }
 .fab-panel.open{ transform:translateY(0) scale(1); opacity:1; pointer-events:auto; }
 .fab-panel-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -392,17 +431,22 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .fab-send{ margin-top:2px; width:100%; border:none; border-radius:9px; padding:9px; background:var(--accent); color:var(--accent-ink); font-weight:700; font-size:13px; }
 .fab-note{ margin:10px 0 0; font-size:11px; line-height:1.5; color:var(--dim); text-align:center; }
 .toast{
-  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:calc(82px + env(safe-area-inset-bottom,0px)); z-index:60; background:var(--text); color:var(--surface);
+  position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:max(calc(82px + env(safe-area-inset-bottom,0px)), calc(var(--fab-lift, 0px) + 74px)); z-index:60; background:var(--text); color:var(--surface);
   padding:10px 16px; border-radius:10px; font-size:13px; box-shadow:var(--shadow-sm);
   transform:translateY(10px); opacity:0; transition:.2s; pointer-events:none;
 }
 .toast.show{ transform:translateY(0); opacity:1; }
 
-.scope-modal{ position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; }
+.scope-modal{
+  position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center;
+  padding:max(20px, env(safe-area-inset-top,0px)) max(20px, env(safe-area-inset-right,0px)) max(20px, env(safe-area-inset-bottom,0px)) max(20px, env(safe-area-inset-left,0px));
+}
 .scope-modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.55); }
 .scope-modal-panel{
   position:relative; width:100%; max-width:560px; background:var(--surface); border:1px solid var(--border);
   border-radius:18px; box-shadow:var(--shadow); padding:20px; display:flex; flex-direction:column; gap:12px;
+  /* Scrolls inside itself on a short screen instead of running off it. */
+  max-height:100%; overflow-y:auto; overscroll-behavior:contain;
 }
 .scope-modal-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .scope-modal-head h3{ font-size:16px; }
@@ -412,11 +456,11 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 }
 .scope-modal-close svg{ width:15px; height:15px; }
 .scope-modal-sub{ margin:0; font-size:12.5px; color:var(--muted); }
-.scope-map{ width:100%; height:340px; border-radius:12px; overflow:hidden; border:1px solid var(--border); background:var(--panel); }
+.scope-map{ width:100%; height:340px; height:min(340px, 46vh); height:min(340px, 46dvh); flex-shrink:0; border-radius:12px; overflow:hidden; border:1px solid var(--border); background:var(--panel); }
 /* Shown until Leaflet fills the box (the library loads on first open, which
    can take a moment on a slow phone connection). */
 .scope-map:empty{ display:grid; place-items:center; }
-.scope-map:empty::before{ content:"Loading map6"; font-size:12.5px; color:var(--muted); }
+.scope-map:empty::before{ content:"Loading map\2026"; font-size:12.5px; color:var(--muted); }
 .scope-modal-error{ margin:0; font-size:12.5px; font-weight:600; color:var(--red); text-align:center; }
 .scope-modal-legend{ display:flex; justify-content:center; gap:18px; font-size:12px; color:var(--muted); }
 .scope-modal-legend .dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
@@ -424,7 +468,10 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 body.scope-modal-open{ overflow:hidden; }
 
 /* ---------- TUTORIAL MODAL (step-by-step "How to use") ---------- */
-.tutorial-modal{ position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:20px; }
+.tutorial-modal{
+  position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center;
+  padding:max(20px, env(safe-area-inset-top,0px)) max(20px, env(safe-area-inset-right,0px)) max(20px, env(safe-area-inset-bottom,0px)) max(20px, env(safe-area-inset-left,0px));
+}
 .tutorial-modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.55); }
 .tutorial-modal-panel{
   position:relative; width:100%; max-width:420px; background:var(--surface); border:1px solid var(--border);
@@ -687,20 +734,31 @@ body.dark .hz-section{
 }
 @keyframes hz-quake-wave{ 0%{ opacity:0; } 30%{ opacity:1; stroke-width:3; } 100%{ opacity:.3; } }
 
-@media (max-width:480px){
-  /* Level cards become rows: icon, name + note, depth range on the right. */
+.hz-key{ display:none; }
+@media (max-width:639px){
+  /* Level cards become compact rows: icon, name + note, depth range on the right. */
   .hz-levels{ grid-template-columns:1fr; gap:6px; }
   .hz-level{
     grid-template-columns:auto 1fr auto; grid-template-areas:"icon name range" "icon note range";
     align-items:center; gap:2px 12px; padding:10px 12px;
   }
   .hz-level-icon{ grid-area:icon; }
-  .hz-level-name{ grid-area:name; }
+  .hz-level-name{ grid-area:name; font-size:16px; }
   .hz-level-note{ grid-area:note; }
   .hz-level-range{ grid-area:range; white-space:nowrap; }
-  /* The scenes shrink to ~45-60% on phones; bigger label text keeps them readable. */
-  .hz-cross .xl text, .hz-cross text.xl{ font-size:15px; }
-  .hz-svg-street text, .hz-svg-ruler text, .hz-svg-marker{ font-size:13px; }
+
+  /* The scenes shrink to about half size on a phone, which would put their
+     labels near 7px. They're hidden instead: the flood scene's caption and
+     the depth readout carry the same facts, and the cross-section gets a
+     key under it. */
+  .hz-svg-street, .hz-svg-ruler, #hzDepthMarker,
+  .hz-cross .xl, .hz-cross g.liq-only{ display:none; }
+  .hz-key{
+    display:flex; flex-wrap:wrap; gap:6px 16px; margin:0; padding:0; list-style:none;
+    font-size:12.5px; color:var(--muted);
+  }
+  .hz-key li{ display:inline-flex; align-items:center; gap:7px; }
+  .hz-key i{ width:14px; height:10px; border-radius:3px; border:1px solid var(--border); }
 }
 @media (max-width:520px){
   .hz-module{ padding:16px; }
@@ -726,15 +784,19 @@ body.dark .hz-section{
 
 [hidden]{ display:none !important; }
 
+/* Tablet widths keep the stats in three columns and the barangay cards side
+   by side (they fit); only phones stack those (see the < 640 block). */
 @media (max-width:820px){
-  .stats{ grid-template-columns:1fr; }
   .algo-flow{ flex-direction:column; }
   .gtk-grid{ grid-template-columns:1fr; }
-  .about-grid, .research-grid{ grid-template-columns:1fr; }
+  .about-grid{ grid-template-columns:1fr; }
   .hero-split{ grid-template-columns:1fr; text-align:center; }
   .hero-copy{ align-items:center; }
   .hero-actions{ justify-content:center; }
-  .qs-barangay-grid{ grid-template-columns:1fr; }
+}
+@media (max-width:1023px){
+  .stat{ padding:18px 14px; }
+  .stat b{ font-size:22px; }
 }
 /* The pill nav stays a single row at every width, same as desktop -- wrapping
    it (links pushed to their own row, labels breaking onto 2-3 lines) is what
@@ -747,7 +809,8 @@ body.dark .hz-section{
 @media (max-width:720px){
   .site-nav{ padding:10px 10px 0; }
   .site-nav .wrap{ padding-inline:0; }
-  .nav-row{ gap:8px; padding:5px 5px 5px 12px; }
+  .nav-row{ gap:12px; padding:5px 5px 5px 12px; }
+  .brand::after{ right:-6px; height:22px; margin-top:-11px; }
   .brand, .nav-actions{ flex:none; }
   .nav-links{ min-width:0; overflow-x:auto; scrollbar-width:none; }
   .nav-links::-webkit-scrollbar{ display:none; }
@@ -770,9 +833,6 @@ body.dark .hz-section{
   /* The buttons shrink to fit the nav; an invisible band above and below
      keeps each one easy to tap. */
   .theme-switch-btn::after{ content:""; position:absolute; inset:-8px 0; }
-}
-@media (max-width:440px){
-  .nav-label-extra{ display:none; }
 }
 @media (max-width:360px){
   .site-nav{ padding-inline:8px; }
@@ -797,4 +857,238 @@ body.dark .hz-section{
   .fab{ width:48px; padding:0; justify-content:center; }
   .fab span{ display:none; }
 }
+/* ---------- TOUCH TARGETS (< 1024px) ----------
+   Anything tappable is at least 44x44px below desktop width; desktop keeps
+   its compact sizes (a mouse doesn't need them). Small round controls keep
+   their look and gain an invisible band instead: in `inset`, 100% is the
+   button's own size, so each side grows by half of what is missing. The phone
+   nav (< 640px) gets rebuilt separately (menu button, single theme toggle),
+   so only its 640-1023px pill is sized here. The depth slider is sized with
+   the rest of the hazard showcase. */
+@media (max-width:1023px){
+  .hero-action, .hz-sim-btn, .fab-send, .tutorial-btn, .cta, .gtk-link{ min-height:44px; }
+  .emergency-contact-number a{ display:inline-flex; align-items:center; min-height:44px; }
+  /* The depth slider's thumb is small; a 44px-tall input is its tap area. */
+  .hz-depth input[type="range"]{ height:44px; }
+  .form-row input, .fab-field select, .rate-row button{ min-height:44px; }
+  .foot-links a{ display:inline-flex; align-items:center; min-height:44px; padding-block:0; padding-inline:6px; }
+
+  .fab-panel-close, .tutorial-modal-close, .scope-modal-close{ position:relative; }
+  .fab-panel-close::after, .tutorial-modal-close::after, .scope-modal-close::after{
+    content:""; position:absolute; inset:calc((44px - 100%) / -2);
+  }
+
+  /* Tutorial step dots: each gets a 44px box with the small mark drawn inside. */
+  .tutorial-dots{ gap:0; }
+  .tutorial-dot, .tutorial-dot.is-active{ position:relative; width:44px; height:44px; border-radius:0; background:none; }
+  .tutorial-dot::before{
+    content:""; position:absolute; top:50%; left:50%; width:7px; height:7px; border-radius:50%;
+    background:var(--border2); transform:translate(-50%,-50%);
+  }
+  .tutorial-dot.is-active::before{ width:20px; border-radius:4px; background:var(--accent); }
+
+  /* The coverage map's own zoom buttons (Leaflet's default is 30px). Its
+     stylesheet is injected after this one, so the selector is made stronger
+     rather than relying on source order. */
+  .scope-modal .scope-map .leaflet-control-zoom a{ width:44px; height:44px; line-height:44px; }
+}
+@media (min-width:640px) and (max-width:1023px){
+  .brand, .nav-btn{ min-height:44px; }
+  .theme-switch-btn{ width:44px; height:44px; }
+}
 @media (prefers-reduced-motion: reduce){ .hero canvas{ display:none; } }
+
+/* ---------- PHONE LAYOUT (< 640px) ----------
+   Follows the user's mobile wireframes (landing top, hazard guide, lower
+   sections). The pill nav and the round feedback button stay as they are
+   (per the user). */
+@media (max-width:639px){
+  /* Hero: left-aligned copy, then the barangay card, then Coverage map.
+     .hero-copy steps out of the way (display:contents) so its children and
+     the card share one column and can be reordered. */
+  .hero-inner{ padding-block:28px 36px; }
+  .hero-split{ display:flex; flex-direction:column; align-items:stretch; gap:14px; text-align:left; }
+  .hero-copy{ display:contents; }
+  .hero h1{ font-size:34px; line-height:1.08; }
+  .hero p.lede{ font-size:15px; line-height:1.55; }
+  .hero-quickstart{ order:1; margin-top:8px; padding:18px; gap:14px; border-radius:16px; }
+  .hero-actions{ order:2; justify-content:flex-start; }
+
+  .qs-head h2{ font-size:18px; }
+  .qs-label{ display:none; }
+  .qs-barangay-grid{ grid-template-columns:1fr; }
+  .qs-barangay-card{ min-height:58px; gap:12px; padding:10px 14px; border-radius:12px; }
+  .qs-barangay-card strong{ font-size:14.5px; }
+  .qs-barangay-card span{ font-size:12.5px; }
+  /* Same pin icon as the desktop cards (per the user), a touch larger. */
+  .qs-barangay-icon{ width:32px; height:32px; }
+  .qs-barangay-icon svg{ width:16px; height:16px; }
+  .qs-barangay-card.is-active{ box-shadow:inset 0 0 0 1px var(--accent); }
+  .qs-note{ font-size:12px; }
+
+  /* Stat strip: one compact, centered box per fact. */
+  .stats-section{ padding-block:28px; }
+  .stats{ grid-template-columns:1fr; gap:10px; }
+  .stat{ padding:14px 16px; }
+  .stat b{ font-size:22px; margin-bottom:2px; }
+  .stat span{ font-size:13px; }
+
+  /* Footer: two columns side by side (per the user) -- on the left
+     "© 2026 AGNAS Project." over "All rights reserved.", on the right Privacy
+     Policy over Terms of Service. */
+  .foot-row{ flex-wrap:nowrap; align-items:center; gap:16px; padding-block:12px 4px; }
+  /* Each copyright line gets the same 34px row as a link, so the two
+     columns share one rhythm and their lines sit level with each other. */
+  .foot-copy > span{ display:flex; align-items:center; min-height:34px; }
+  .foot-links{ flex-direction:column; align-items:flex-end; gap:0; text-align:right; }
+  /* Stacked, each link is a 34px row with an invisible band that brings its
+     tap area to 44px; the right padding goes so the text meets the edge. */
+  .foot-links a{ position:relative; min-height:34px; padding-inline:6px 0; }
+  .foot-links a::after{ content:""; position:absolute; inset:calc((44px - 100%) / -2) 0; }
+
+  /* About page: each credit's source stays right-aligned even when its
+     label wraps. */
+  .credit-row span{ margin-left:auto; text-align:right; }
+  .research-grid{ grid-template-columns:1fr; gap:18px; }
+
+  section.block{ padding-block:40px; }
+  .block-head{ margin-bottom:22px; gap:8px; }
+  .block-head h2{ font-size:26px; }
+  .block-head p{ font-size:14px; }
+
+  .gtk-grid{ gap:10px; }
+  .gtk-card{ padding:14px 16px; }
+  .gtk-icon{ width:32px; height:32px; }
+
+  /* Hazard guide. */
+  .hz-module{ padding:16px; gap:14px; }
+  .hz-tiles{ grid-template-columns:1fr; }
+  .hz-depth-ticks{ display:flex; justify-content:space-between; }
+  /* Only the ends of the scale: the middle ticks collide on a narrow slider. */
+  .hz-depth-ticks > span:nth-child(2),
+  .hz-depth-ticks > span:last-child > span:first-child{ display:none; }
+  /* Readout: label above value, rows split by a rule. */
+  .hz-readout{ grid-template-columns:1fr; gap:0; padding:0; border:0; border-radius:0; background:none; }
+  .hz-readout dt{
+    padding:12px 0 4px; border-top:1px solid var(--border);
+    font:600 10.5px var(--font-meta); letter-spacing:.1em; text-transform:uppercase;
+  }
+  .hz-readout dt:first-child{ padding-top:0; border-top:0; }
+  .hz-readout dd{ padding-bottom:12px; }
+  .hz-readout dd + dt{ margin-top:0; }
+
+  .algo-step p{ font-size:13px; }
+}
+
+/* ---------- STACKED LAYOUT (<= 820px: phones and tablets) ----------
+   Where the lower sections turn into one column, they take the phone's
+   compact forms instead of full-width desktop cards. */
+@media (max-width:820px){
+  /* Before you start: icon and title on one line, text under both. */
+  .gtk-card{ display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:10px 12px; }
+  .gtk-card p, .gtk-card .gtk-link{ grid-column:1 / -1; }
+  .gtk-card .gtk-link{ justify-self:end; margin-top:-4px; }
+
+  /* How it works: a vertical stepper -- numbered circle and a connecting line
+     on the left; title, the diagram, its caption and the text on the right. */
+  .algo-flow{ gap:0; }
+  .algo-step{
+    position:relative; display:grid; grid-template-columns:32px minmax(0,1fr); gap:8px 14px;
+    padding:0 0 26px; border:0; border-radius:0; background:none; box-shadow:none;
+  }
+  .algo-step:last-child{ padding-bottom:0; }
+  .algo-step > *{ grid-column:2; }
+  .algo-step-no{
+    grid-column:1; grid-row:1; width:32px; height:32px; border-radius:50%; display:grid; place-items:center;
+    border:1.5px solid var(--border2); background:var(--surface); color:var(--text);
+    font-family:var(--font-heading); font-size:15px; font-weight:700; letter-spacing:0;
+  }
+  .algo-step-zero{ display:none; }
+  .algo-step:not(:last-child)::before{
+    content:""; position:absolute; left:15px; top:38px; bottom:6px; width:2px; border-radius:1px; background:var(--border);
+  }
+  .algo-step h3{ grid-row:1; align-self:center; font-size:16px; }
+  .algo-diagram{ padding:0; border:0; border-radius:0; background:none; }
+  .algo-diagram svg{
+    width:100%; height:150px; padding:8px; box-sizing:border-box;
+    border:1px solid var(--border); border-radius:10px; background:var(--panel);
+  }
+  .algo-diagram-caption{
+    margin-top:8px; font-family:var(--font-body); font-size:12.5px; font-weight:700; letter-spacing:0;
+    color:var(--text); text-align:left;
+  }
+}
+/* Phones: shorter stepper diagrams. */
+@media (max-width:639px){
+  .algo-diagram svg{ height:112px; }
+}
+
+/* Phone nav: the same pill, packed tight -- logo, a short divider line, the
+   links, then the theme button, with no stretched gaps between them (per the
+   user). Each link and the theme button is a 44px tap box, but a 4px
+   transparent border (with the fill clipped inside it) keeps the visible
+   pill a moderate 36px -- and that border doubles as the spacing between the
+   pill's edge and its contents. The light/dark pair becomes one button that
+   switches to the other theme (the active one hides). */
+@media (max-width:639px){
+  .site-nav{ padding:8px 8px 0; }
+  .nav-row{ gap:2px; padding:0 0 0 10px; }
+  /* The nav's gap is tiny here, so the divider sits inside the brand's own
+     right padding instead. */
+  .brand{ min-height:44px; padding-right:11px; }
+  .brand::after{ right:0; height:22px; margin-top:-11px; }
+  .brand img{ width:30px; height:30px; margin-right:-7px; }
+  .brand-word{ font-size:16px; }
+  .nav-links{ gap:0; }
+  .nav-btn{
+    min-height:44px; padding:0 10px; font-size:13.5px;
+    border:4px solid transparent; background-clip:padding-box;
+  }
+  /* These states set `background` as a shorthand, which resets the clip. */
+  .nav-btn.is-active, .nav-btn:hover, .nav-btn:active{ background-clip:padding-box; }
+  .theme-switch{ padding:0; border:0; background:none; }
+  .theme-switch-btn.is-active{ display:none; }
+  .theme-switch-btn{
+    width:44px; height:44px; border:4px solid transparent; background:var(--panel); background-clip:padding-box;
+    box-shadow:inset 0 0 0 1px var(--border); color:var(--text);
+  }
+  .theme-switch-btn svg{ width:16px; height:16px; }
+  .theme-switch-btn::after{ content:none; }
+}
+@media (max-width:380px){
+  .nav-btn{ padding:0 7px; font-size:13px; }
+}
+@media (max-width:340px){
+  .nav-row{ padding-left:6px; }
+  .nav-btn{ padding:0 5px; }
+}
+
+/* ---------- JUSTIFIED TEXT ----------
+   Every running-text paragraph is justified (per the user). Paragraphs that
+   sit under a centered heading keep their last line centered, so the block
+   still lines up with it; single-line notes are unaffected either way. */
+.hero p.lede,
+.block-head p,
+.gtk-card p,
+.algo-step p,
+.panel p,
+.hz-title p,
+.hz-scene-note,
+.hz-caption,
+.hz-note,
+.tutorial-slide p,
+.scope-modal-sub,
+.fab-panel p.sub{
+  text-align:justify;
+}
+.block-head.center-head p,
+.panel .contact-note,
+.panel .thesis-note,
+.fab-note,
+.scope-modal-coverage{
+  text-align:justify; text-align-last:center;
+}
+/* 640-820px centers the hero, so its intro ends centered there too. */
+@media (min-width:640px) and (max-width:820px){
+  .hero p.lede{ text-align-last:center; }
+}

@@ -40,7 +40,8 @@
      The safety column stays at 0 until a simulation has been run. */
   --setup-col: 300px;
   --safety-col: 0px;
-  --safety-col-open: 286px;
+  /* Wide enough that the justified results text doesn't open large gaps. */
+  --safety-col-open: 330px;
 
   --accent-soft-bg: rgba(37, 99, 235, .05);
   --accent-soft-border: rgba(37, 99, 235, .15);
@@ -485,6 +486,11 @@ body.dark .earthquake-route-copy strong {
   align-items: center;
   gap: 8px;
   position: relative;
+  /* A real <button> (keyboard-reachable), so undo the UA button look. */
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
 }
 
 .hazard-card:hover {
@@ -502,6 +508,7 @@ body.dark .earthquake-route-copy strong {
 }
 
 .hazard-name {
+  display: block;
   font-family: var(--font-heading);
   font-size: .86rem;
   font-weight: 600;
@@ -513,6 +520,7 @@ body.dark .earthquake-route-copy strong {
 }
 
 .hazard-sub {
+  display: block;
   font-family: var(--font-body);
   font-size: .78rem;
   font-weight: 500;
@@ -692,6 +700,8 @@ body.dark .pin-input-menu {
 .pin-input-menu-item:hover,
 .pin-input-menu-item:focus-visible {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
+  /* A tint alone is too faint to count as a focus indicator. */
+  box-shadow: inset 0 0 0 2px var(--accent);
   outline: none;
 }
 
@@ -937,7 +947,7 @@ body.dark .run-btn:hover {
   position: absolute;
   z-index: 7;
   left: 50%;
-  bottom: 34px;
+  bottom: calc(34px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -1001,6 +1011,7 @@ body.dark .run-btn:hover {
 .map-pin-hint-close:focus-visible {
   background: var(--map-ui-chip);
   color: var(--map-ui-text);
+  box-shadow: 0 0 0 2px var(--map-ui-accent);
   outline: none;
 }
 
@@ -1509,13 +1520,18 @@ body.dark .empty-map {
 /* Three-panel simulation workspace */
 .left-panel {
   min-width: 0;
-  transition: opacity .18s ease, transform .22s ease;
+  transition: opacity .18s ease, transform .22s ease, visibility 0s linear 0s;
 }
 
 .app.sidebar-collapsed .left-panel {
   opacity: 0;
   pointer-events: none;
   transform: translateX(-12px);
+  /* Fading alone left the collapsed panel's controls in the tab order (and
+     the accessibility tree) while invisible. visibility flips once the fade
+     has played (the .22s delay), and back at once on reopen (0s above). */
+  visibility: hidden;
+  transition: opacity .18s ease, transform .22s ease, visibility 0s linear .22s;
 }
 
 .panel-head-title-row {
@@ -1732,7 +1748,9 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  /* max(): never less than 20px, but clear of a notch / home indicator. */
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px))
+           max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
   background: rgba(2, 8, 23, .58);
   backdrop-filter: blur(4px);
   animation: fadeIn .2s ease;
@@ -1808,7 +1826,9 @@ body.dark .about-modal {
 /* ---------- TUTORIAL MODAL (step-by-step "How to use", mirrors home.css) ---------- */
 .tutorial-modal {
   position: fixed; inset: 0; z-index: 1150; display: flex; align-items: center;
-  justify-content: center; padding: 20px; animation: fadeIn .2s ease;
+  justify-content: center; animation: fadeIn .2s ease;
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px))
+           max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
 }
 .tutorial-modal[hidden] { display: none; }
 .tutorial-modal-backdrop { position: absolute; inset: 0; background: rgba(2, 8, 23, .58); backdrop-filter: blur(4px); }
@@ -2172,8 +2192,8 @@ body.dark .leaflet-popup-close-button {
 
 @media (max-width: 1180px) {
   :root {
-    --setup-col: 268px;
-    --safety-col-open: 264px;
+    --setup-col: 280px;
+    --safety-col-open: 300px;
   }
 }
 
@@ -2223,6 +2243,82 @@ body.dark .leaflet-popup-close-button {
     padding: 7px 10px;
     font-size: .68rem;
   }
+
+  /* Setup-panel controls only need height (they're already wide). */
+  .card-action-btn,
+  .panel-back-btn,
+  .pin-input,
+  .earthquake-evac-btn {
+    min-height: 44px;
+  }
+
+  /* Small round controls keep their look; an invisible band around them
+     brings the tap area up to 44px. (100% is the button's own size, so each
+     side grows by half of whatever is missing.) */
+  .map-pin-hint-close,
+  .tutorial-modal-close {
+    position: relative;
+  }
+
+  .map-pin-hint-close::after,
+  .tutorial-modal-close::after {
+    content: "";
+    position: absolute;
+    inset: calc((44px - 100%) / -2);
+  }
+
+  /* Leaflet's stock Map/Satellite radios are 13px. The label row is what gets
+     tapped, so make that row 44px. (Replaced by the Layers panel later, but it
+     has to be tappable until then.) */
+  .leaflet-control-layers-base label > span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+
+  .leaflet-control-layers-selector {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+  }
+
+  /* "How to use" dialog (same markup as the landing page's, see home.css):
+     each step dot gets a 44px box with the small mark drawn inside it. */
+  .tutorial-btn {
+    min-height: 44px;
+  }
+
+  .tutorial-dots {
+    gap: 0;
+  }
+
+  .tutorial-dot,
+  .tutorial-dot.is-active {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border-radius: 0;
+    background: none;
+  }
+
+  .tutorial-dot::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border2);
+    transform: translate(-50%, -50%);
+  }
+
+  .tutorial-dot.is-active::before {
+    width: 20px;
+    border-radius: 4px;
+    background: var(--accent);
+  }
 }
 
 /* Base (hidden/off) states for elements the media queries below need --
@@ -2255,6 +2351,7 @@ body.dark .leaflet-popup-close-button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-height: 44px;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
   border: none;
   border-top: 1px solid var(--border);
@@ -2274,34 +2371,13 @@ body.dark .leaflet-popup-close-button {
   transform: rotate(180deg);
 }
 
-/* ---------- TABLET (640-1023px, normal height) ----------
-   No overlay, no drawer -- the same docked 3-column grid as desktop, just
-   narrower columns, reusing the exact collapse-on-run / reopen-tab
-   mechanism desktop already has (applySetupSidebarState /
-   setRouteSafetyPanelVisible, untouched below). A short window (phone
-   landscape) is handled by the mobile panel further down instead of here --
-   a docked 3-column grid doesn't have room to breathe when the viewport is
-   short, even if it's wide enough on paper. */
-@media (min-width: 640px) and (max-width: 1023px) and (min-height: 500px) {
-  :root {
-    --setup-col: 216px;
-    --safety-col-open: 208px;
-  }
-}
-
-/* ---------- MOBILE (< 640px), and any short viewport (phone landscape) ----------
+/* ---------- PHONES AND TABLETS (< 1024px) and any short viewport ----------
    The map is always full-bleed and the page itself never scrolls (same
-   non-scrolling grid as desktop/tablet) -- setup and results each become a
-   full-screen panel, opened from one bar fixed at the bottom
-   (#mobilePanelBar / toggleMobilePanelBar() in script.js). Only one panel is
-   ever open; applySetupSidebarState / setRouteSafetyPanelVisible (reused
-   from desktop) enforce that via MOBILE_PANEL_QUERY, same as they enforced
-   it for the tablet drawer this replaced. */
-@media (max-width: 639px), (max-height: 499px) {
-  :root {
-    --mobile-bar-h: 56px;
-  }
-
+   non-scrolling grid as desktop). What sits over the map differs: the
+   bottom sheet (phones and tablets, mobile-sim.js) is at the end of this
+   file, the short-viewport panels right below. (Tablets used to get the
+   desktop's docked columns, squeezed to ~210px each -- too narrow to read.) */
+@media (max-width: 1023px), (max-height: 499px) {
   #appShell {
     --setup-col: 0px;
     --safety-col: 0px;
@@ -2315,6 +2391,26 @@ body.dark .leaflet-popup-close-button {
   .right-panel {
     position: fixed;
     inset: 0;
+  }
+
+  /* Belt-and-suspenders: #loader is already position:absolute inside
+     .right-panel, which now spans the full viewport itself (both side
+     columns are 0 above), so this shouldn't be load-bearing -- but costs
+     nothing to keep explicit. */
+  #loader {
+    position: fixed;
+  }
+}
+
+/* ---------- SHORT VIEWPORTS (phone landscape, any width) ----------
+   Setup and results each become a full-screen panel, opened from one bar
+   fixed at the bottom (#mobilePanelBar / toggleMobilePanelBar() in
+   script.js). Only one panel is ever open; applySetupSidebarState /
+   setRouteSafetyPanelVisible (reused from desktop) enforce that via
+   MOBILE_PANEL_QUERY. */
+@media (max-height: 499px) {
+  :root {
+    --mobile-bar-h: 56px;
   }
 
   /* The corner reopen tab is a desktop/tablet affordance; the bottom bar
@@ -2332,27 +2428,36 @@ body.dark .leaflet-popup-close-button {
     /* Leaves room for the bar (higher z-index, sits on top) so neither
        panel's own footer content renders underneath it. */
     padding-bottom: calc(var(--mobile-bar-h) + env(safe-area-inset-bottom, 0px));
-    transition: transform .26s ease;
+    transition: transform .26s ease, visibility 0s linear 0s;
   }
 
   .app.sidebar-collapsed .left-panel {
     opacity: 1;
     pointer-events: none;
     transform: translateY(100%);
+    /* visibility:hidden itself comes from the base collapsed rule; only the
+       delay is redone here so the slide-out finishes before it applies. */
+    transition: transform .26s ease, visibility 0s linear .26s;
   }
 
   .app:not(.sidebar-collapsed) .left-panel {
     transform: translateY(0);
   }
 
+  /* Off-screen is not out of the tab order: a closed panel is also
+     visibility:hidden, after its slide-out. */
   .route-safety-panel {
     display: flex;
     flex-direction: column;
     transform: translateY(100%);
+    visibility: hidden;
+    transition: transform .26s ease, visibility 0s linear .26s;
   }
 
   .app.safety-open .route-safety-panel {
     transform: translateY(0);
+    visibility: visible;
+    transition: transform .26s ease, visibility 0s linear 0s;
   }
 
   .mobile-panel-bar {
@@ -2362,21 +2467,23 @@ body.dark .leaflet-popup-close-button {
   .safety-edit-setup-btn {
     display: block;
   }
-
-  /* Belt-and-suspenders: #loader is already position:absolute inside
-     .right-panel, which now spans the full viewport itself (both side
-     columns are 0 above), so this shouldn't be load-bearing -- but costs
-     nothing to keep explicit. */
-  #loader {
-    position: fixed;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app,
   .left-panel,
+  .app.sidebar-collapsed .left-panel,
   .route-safety-panel,
+  .app.safety-open .route-safety-panel,
   .mobile-panel-bar svg {
     transition: none;
+  }
+
+  .about-modal-backdrop,
+  .about-modal,
+  .tutorial-modal,
+  .tutorial-modal-panel {
+    animation: none;
   }
 }
 
@@ -2448,4 +2555,1242 @@ body.dark .leaflet-popup-close-button {
   .leaflet-popup-content {
     max-width: min(280px, calc(100vw - 84px)) !important;
   }
+}
+
+/* ---------- PHONE / TABLET SIMULATOR (< 1024px wide and >= 500px tall) ----------
+   mobile-sim.js drives this layer (#msim in index.html): a floating top bar,
+   map controls and a fixed center pin over the full-screen map, one bottom
+   sheet holding setup or results, and a Map layers sheet. Mobile-first:
+   these rules are the phone layout, and every other size hides the whole
+   layer (the desktop/tablet panels do its job there). --sheet-h (on
+   #appShell) is the sheet's visible height and --msim-pin-y the center
+   pin's tip; mobile-sim.js sets both. */
+:root {
+  --msim-ease: cubic-bezier(.22, .8, .3, 1);
+}
+
+.msim [hidden],
+.msim[hidden] {
+  display: none !important;
+}
+
+.msim svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Top bar: back, barangay, Layers. */
+.msim-topbar {
+  position: fixed;
+  z-index: 225;
+  top: calc(6px + env(safe-area-inset-top, 0px));
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--map-ui-border);
+  border-radius: 12px;
+  background: var(--map-ui-bg-soft);
+  box-shadow: var(--map-ui-shadow);
+  backdrop-filter: blur(10px);
+  color: var(--map-ui-text);
+}
+
+.msim-topbar-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.msim-topbar-title {
+  overflow: hidden;
+  font: 800 .94rem/1.2 var(--font-body);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.msim-topbar-sub {
+  color: var(--map-ui-muted);
+  font: 500 .74rem/1.25 var(--font-body);
+}
+
+.msim-icon-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.msim-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.msim-icon-btn--boxed {
+  border-color: var(--map-ui-border);
+  background: var(--map-ui-chip);
+}
+
+.msim-icon-btn:hover {
+  color: var(--map-ui-accent);
+}
+
+/* Center pin: the tip marks the spot "Set start/end here" will use. It
+   lifts while the map is dragged; the dot stays on the exact spot. */
+.msim-center-pin {
+  position: fixed;
+  z-index: 211;
+  top: 0;
+  left: 50%;
+  width: 48px;
+  height: 60px;
+  margin-left: -24px;
+  transform: translateY(calc(var(--msim-pin-y, 50vh) - 53px));
+  pointer-events: none;
+  transition: transform .28s var(--msim-ease);
+}
+
+.msim-center-pin-img {
+  position: relative;
+  display: block;
+  width: 48px;
+  height: 60px;
+  transition: transform .16s ease;
+}
+
+.msim-center-pin-dot {
+  position: absolute;
+  top: 51px;
+  left: 20px;
+  width: 8px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, .55);
+  opacity: 0;
+  transition: opacity .16s ease;
+}
+
+.msim-center-pin.is-lifted .msim-center-pin-img {
+  transform: translateY(-10px);
+}
+
+.msim-center-pin.is-lifted .msim-center-pin-dot {
+  opacity: 1;
+}
+
+.msim-center-pin.is-checking .msim-center-pin-img {
+  animation: msimPinChecking .8s ease-in-out infinite alternate;
+}
+
+@keyframes msimPinChecking {
+  from { opacity: 1; }
+  to { opacity: .45; }
+}
+
+/* Zoom and locate, bottom-right, riding just above the sheet (and the map
+   attribution under them). Hidden when the sheet leaves too little map. */
+.msim-map-controls {
+  position: fixed;
+  z-index: 212;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(var(--sheet-h, 0px) + 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
+}
+
+#appShell.msim-controls-hidden .msim-map-controls {
+  opacity: 0;
+  visibility: hidden;
+  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
+}
+
+.msim-map-group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--map-ui-border);
+  border-radius: 12px;
+  background: var(--map-ui-bg-soft);
+  box-shadow: var(--map-ui-shadow);
+  backdrop-filter: blur(8px);
+}
+
+.msim-map-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--map-ui-text);
+  cursor: pointer;
+}
+
+.msim-map-btn + .msim-map-btn {
+  border-top: 1px solid var(--map-ui-border);
+}
+
+.msim-map-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.msim-map-btn:focus-visible {
+  outline-offset: -3px;
+}
+
+.msim-map-btn:disabled {
+  color: var(--map-ui-muted);
+  opacity: .45;
+  cursor: default;
+}
+
+.msim-map-btn.is-busy svg {
+  animation: msimLocating 1.2s linear infinite;
+}
+
+@keyframes msimLocating {
+  to { transform: rotate(360deg); }
+}
+
+/* The bottom sheet. Its height is --sheet-h (peek, half, full, or wherever a
+   drag has it); only the inner scroller scrolls, and only at half or full. */
+.msheet {
+  position: fixed;
+  z-index: 220;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--sheet-h, 0px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -12px 32px rgba(2, 8, 23, .28);
+  color: var(--text);
+  font-family: var(--font-body);
+  transition: height .28s var(--msim-ease);
+}
+
+/* 24px tall; the band below brings the tap area to 44px without adding
+   empty space above the header. Controls it overlaps (the chip, the lens
+   buttons) are positioned, so they stay on top of it. */
+.msheet-handle {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 100%;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.msheet-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: -20px;
+}
+
+.msheet-handle span {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  margin-left: -18px;
+  border-radius: 2px;
+  background: var(--border2);
+}
+
+.msheet-handle:focus-visible {
+  outline-offset: -4px;
+}
+
+.msheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  padding: 0 14px 16px;
+}
+
+.msheet[data-snap="half"] .msheet-scroll,
+.msheet[data-snap="full"] .msheet-scroll {
+  overflow-y: auto;
+}
+
+[data-sheet-drag] {
+  touch-action: none;
+}
+
+.msheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 8px;
+}
+
+.msheet-title {
+  color: var(--ink-strong);
+  font: 800 1rem/1.25 var(--font-body);
+}
+
+.msheet-title:focus,
+.mverdict-title:focus {
+  outline: none;
+}
+
+/* The active disaster; tapping it opens the Disaster cards. */
+.msheet-chip {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--hazard-chip-border);
+  border-radius: 999px;
+  background: var(--hazard-chip-bg);
+  color: var(--hazard-chip-text);
+  font: 700 .84rem var(--font-body);
+  cursor: pointer;
+}
+
+.msheet-chip::after {
+  content: "";
+  position: absolute;
+  inset: calc((44px - 100%) / -2) 0;
+}
+
+.msheet-chip-icon {
+  display: inline-grid;
+}
+
+.msheet-chip svg {
+  width: 15px;
+  height: 15px;
+}
+
+.msheet-chip:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.msheet-setup-flow {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Before a disaster is picked the Disaster cards come first. */
+.msheet-setup-flow.is-choosing .msheet-section {
+  order: -1;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Start / End / Evacuation sites slots. */
+.mslots {
+  display: grid;
+  gap: 6px;
+}
+
+.mslot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.mslot-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: #0891b2;
+  color: #fff;
+  font: 800 .72rem var(--font-body);
+}
+
+.mslot--end .mslot-badge { background: #9333ea; }
+.mslot--evac .mslot-badge { background: #d97706; }
+
+.mslot-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mslot.is-empty {
+  border-style: dashed;
+}
+
+.mslot.is-empty .mslot-badge {
+  border-color: var(--border2);
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+}
+
+.mslot.is-active {
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.mslot.is-disabled {
+  opacity: .55;
+}
+
+.mslot-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mslot-label {
+  color: var(--muted);
+  font: 700 .66rem var(--font-meta);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mslot-value {
+  color: var(--text);
+  font: 600 .86rem/1.28 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.mslot.is-empty .mslot-value {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.mslot-edit {
+  flex: none;
+  min-width: 60px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font: 700 .86rem var(--font-body);
+  cursor: pointer;
+}
+
+.mslot-edit:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* Buttons. */
+.msheet-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.msheet-actions > .mbtn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.mbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: 700 .9rem var(--font-body);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+
+.mbtn:hover {
+  border-color: var(--accent);
+}
+
+.mbtn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.mbtn--primary:hover {
+  filter: brightness(1.06);
+}
+
+.mbtn:disabled,
+.mbtn--primary:disabled {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: not-allowed;
+  filter: none;
+}
+
+.mbtn--block {
+  width: 100%;
+}
+
+.mbtn-link {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 700 .92rem var(--font-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.mbtn-link:disabled {
+  color: var(--muted);
+  cursor: progress;
+}
+
+.msheet-help {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+.msheet-help:empty {
+  display: none;
+}
+
+/* Sections below the peek line. */
+.msheet-section,
+.msheet-details {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.msheet-label {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font: 700 .74rem var(--font-meta);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.mhazard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mhazard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mhazard-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .98rem;
+  font-weight: 800;
+}
+
+.mhazard-name svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.mhazard-sub {
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.35;
+}
+
+.mhazard.selected {
+  border: 1.5px solid var(--accent);
+  background: var(--hazard-selected-bg);
+}
+
+.mhazard:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.msheet-links {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.msheet-links .mbtn {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: .9rem;
+}
+
+/* Results: earthquake lens, verdict, time and distance. */
+.mlens {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin: 0 0 8px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.mlens button {
+  position: relative;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: 700 .78rem var(--font-body);
+  cursor: pointer;
+}
+
+.mlens button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.mverdict {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border2);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.mverdict.is-safe { border-color: color-mix(in srgb, var(--green) 70%, transparent); }
+.mverdict.is-danger { border-color: color-mix(in srgb, var(--red) 70%, transparent); }
+
+.mverdict-title {
+  color: var(--text);
+  font: 800 .96rem/1.25 var(--font-body);
+}
+
+.mverdict.is-safe .mverdict-title { color: var(--green); }
+.mverdict.is-danger .mverdict-title { color: var(--red); }
+
+.mverdict-sub {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+.msummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.msummary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-strong);
+  font: 500 1rem var(--font-meta);
+}
+
+.msummary-main strong {
+  font-weight: 500;
+}
+
+.msummary-main svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.msummary-route {
+  flex: none;
+  color: var(--muted);
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.msummary-dest {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+/* Results details (half / full). */
+.mhotlines {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1.5px solid color-mix(in srgb, var(--red) 70%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 7%, transparent);
+  color: var(--text);
+  font: 800 .9rem var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mhotlines span {
+  flex: 1 1 auto;
+}
+
+.mhotlines-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--red);
+}
+
+.mhotlines-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.msheet-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 16px 0 8px;
+}
+
+.msheet-label-row .msheet-label {
+  margin: 0;
+}
+
+.msheet-label-hint {
+  color: var(--muted);
+  font-size: .82rem;
+  text-align: right;
+}
+
+.mroutes {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+}
+
+.mroute {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 50px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The picked route; with none picked, the best one is the route on show. */
+.mroute.is-active,
+.mroutes:not(:has(.mroute.is-active)) .mroute.is-best {
+  border: 1.5px solid var(--accent);
+}
+
+.mroute.is-active {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Same colors as the lines on the map (osm.js). */
+.mroute-swatch {
+  flex: none;
+  width: 24px;
+  height: 5px;
+  border-radius: 3px;
+  background: #22c55e;
+}
+
+.mroute-swatch--best-unsafe { background: #ef4444; }
+.mroute-swatch--available { background: #8b5cf6; }
+.mroute-swatch--eliminated {
+  background: repeating-linear-gradient(90deg, #ef4444 0 6px, transparent 6px 10px);
+}
+
+.mroute-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mroute-name {
+  font-size: .88rem;
+  font-weight: 800;
+}
+
+.mroute-risk {
+  font-size: .78rem;
+  font-weight: 600;
+}
+
+.mroute-risk--low { color: #a16207; }
+.mroute-risk--moderate { color: #c2410c; }
+.mroute-risk--high { color: var(--red); }
+.mroute-risk--unknown { color: var(--muted); }
+body.dark .mroute-risk--low { color: #facc15; }
+body.dark .mroute-risk--moderate { color: #fb923c; }
+
+.mroute-dest {
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.mroute-time {
+  flex: none;
+  color: var(--muted);
+  font: 500 .78rem var(--font-meta);
+}
+
+.mroute-steps {
+  margin: 6px 0 2px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: .86rem;
+  list-style: none;
+}
+
+.mroutes-more {
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 700 .92rem var(--font-body);
+  cursor: pointer;
+}
+
+.msheet-source {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+.maccordion {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.maccordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font: 800 .9rem var(--font-body);
+  list-style: none;
+  cursor: pointer;
+}
+
+.maccordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.maccordion summary svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  transition: transform .2s ease;
+}
+
+.maccordion[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.maccordion p {
+  padding: 0 12px 12px;
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.55;
+}
+
+#msimNewSimBtn {
+  margin-top: 12px;
+}
+
+/* Map layers sheet. */
+.msim-scrim {
+  position: fixed;
+  z-index: 230;
+  inset: 0;
+  background: rgba(2, 8, 23, .55);
+  opacity: 0;
+  transition: opacity .22s ease;
+}
+
+.msim-scrim.is-open {
+  opacity: 1;
+}
+
+.msim-layers {
+  position: fixed;
+  z-index: 240;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: calc(100vh - 72px);
+  max-height: calc(100dvh - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -12px 32px rgba(2, 8, 23, .32);
+  color: var(--text);
+  font-family: var(--font-body);
+  transform: translateY(100%);
+  transition: transform .26s var(--msim-ease);
+}
+
+.msim-layers.is-open {
+  transform: translateY(0);
+}
+
+.msim-layers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.msim-layers-title {
+  font: 800 1.15rem var(--font-body);
+}
+
+.msim-layers .msheet-label {
+  margin-top: 16px;
+}
+
+.mseg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mseg button {
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: 800 .96rem var(--font-body);
+  cursor: pointer;
+}
+
+.mseg button[aria-pressed="true"] {
+  border: 1.5px solid var(--accent);
+  background: var(--hazard-selected-bg);
+}
+
+.mchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mchips button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: 700 .92rem var(--font-body);
+  cursor: pointer;
+}
+
+.mchips button.active {
+  border: 1.5px solid var(--accent);
+  background: var(--hazard-selected-bg);
+}
+
+.mchips .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.mchips .swatch--all {
+  background: linear-gradient(90deg, #facc15 0 34%, #f97316 34% 67%, #e11d48 67%);
+}
+
+/* The legend reuses the map legend's rows (script.js / earthquake.js), set
+   larger for reading on a phone. */
+.msim-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.msim-legend > div:not(.legend-row) {
+  display: grid;
+  gap: 10px;
+  margin: 0 !important;
+}
+
+.msim-legend .legend-row {
+  gap: 12px;
+  margin: 0;
+  color: var(--text);
+}
+
+.msim-legend .legend-row span {
+  font-size: .94rem !important;
+}
+
+.msim-legend .legend-line {
+  width: 26px;
+}
+
+.msim-legend .legend-dot-sm {
+  width: 14px;
+  height: 14px;
+  margin: 0 6px;
+}
+
+.msim-legend-swatch {
+  flex: none;
+  width: 26px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.msim-layers-done {
+  margin-top: 22px;
+}
+
+/* No transitions mid-drag or on an instant resize (mobile-sim.js). */
+#appShell.msim-dragging .msheet,
+#appShell.msim-dragging .msim-center-pin,
+#appShell.msim-dragging .msim-map-controls,
+#appShell.msim-dragging .leaflet-bottom,
+#appShell.msim-instant .msheet,
+#appShell.msim-instant .msim-center-pin,
+#appShell.msim-instant .msim-map-controls,
+#appShell.msim-instant .leaflet-bottom {
+  transition: none !important;
+}
+
+#appShell.msim-dragging .msheet-handle {
+  cursor: grabbing;
+}
+
+/* Short phones (a 320x568 SE, say): the peek content packs tighter still so
+   it leaves more of the map above it. */
+@media (max-height: 667px) {
+  .msheet-head { padding-bottom: 6px; }
+  .msheet-actions { margin-top: 8px; }
+  .msheet-help { margin-top: 6px; }
+  .mlens { margin-bottom: 6px; }
+  .mverdict { padding: 7px 10px; }
+  .msummary { margin-top: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msheet,
+  .msim-center-pin,
+  .msim-center-pin-img,
+  .msim-center-pin-dot,
+  .msim-map-controls,
+  #appShell.msim-controls-hidden .msim-map-controls,
+  .msim-scrim,
+  .msim-layers,
+  .maccordion summary svg {
+    transition: none;
+  }
+
+  .msim-center-pin.is-checking .msim-center-pin-img,
+  .msim-map-btn.is-busy svg {
+    animation: none;
+  }
+}
+
+/* Tablets (640-1023px): the same sheets, as a centered card rather than
+   edge to edge, so their text keeps a readable line length. */
+@media (min-width: 640px) {
+  .msheet,
+  .msim-layers {
+    width: min(560px, calc(100% - 32px));
+    margin-inline: auto;
+  }
+}
+
+/* Every other size: the desktop panels are in charge. */
+@media (min-width: 1024px), (max-height: 499px) {
+  .msim {
+    display: none;
+  }
+}
+
+/* Phones and tablets: the sheet replaces the setup/results panels and the
+   floating map boxes (their controls live in the sheet and the Layers
+   sheet now). */
+@media (max-width: 1023px) and (min-height: 500px) {
+  .left-panel,
+  .route-safety-panel,
+  .mobile-panel-bar,
+  .sidebar-reopen-tab,
+  .flood-filter-control,
+  .earthquake-view-switcher,
+  .map-legend,
+  .leaflet-control-zoom,
+  .leaflet-control-layers {
+    display: none !important;
+  }
+
+  /* The sheet already says what to do next, so the map hint shows only a
+     rejected spot -- under the top bar, clear of the sheet. */
+  .map-pin-hint {
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    /* Leaves the right edge to the zoom buttons, which reach this high on a
+       short phone. */
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    right: calc(68px + env(safe-area-inset-right, 0px));
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  .map-pin-hint:not(.is-error),
+  .map-pin-hint-close {
+    display: none;
+  }
+
+  /* The map attribution stays readable just above the sheet -- and steps
+     away only when a full-height sheet leaves no map to credit. */
+  .leaflet-bottom {
+    bottom: var(--sheet-h, 0px);
+    transition: bottom .28s var(--msim-ease);
+  }
+
+  #appShell.msim-map-covered .leaflet-bottom {
+    visibility: hidden;
+  }
+
+  /* A smaller time label on the route, so it hides less of the map. */
+  .leaflet-tooltip.route-eta-tooltip {
+    padding: 3px 8px 3px 6px;
+  }
+
+  .route-eta {
+    gap: 5px;
+  }
+
+  .route-eta svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .route-eta-text strong {
+    font-size: .76rem;
+  }
+
+  .route-eta-text span {
+    font-size: .66rem;
+  }
+}
+
+/* ---------- JUSTIFIED TEXT ----------
+   Every running-text paragraph is justified (per the user), in the setup and
+   results panels, the dialogs and the phone sheet alike. Short one-line
+   notes are unaffected; labels, buttons and numbers are not paragraphs and
+   stay as they are. */
+.panel-head-sub,
+.workflow-card-summary,
+.earthquake-route-copy,
+.pin-field-help,
+.info-box,
+.safety-route-hint,
+.safety-notes li,
+.safety-disclaimer-text,
+.route-modal-caution span,
+.about-modal-copy,
+.tutorial-slide p,
+.msheet-help,
+.mverdict-sub,
+.msheet-source,
+.maccordion p {
+  text-align: justify;
 }

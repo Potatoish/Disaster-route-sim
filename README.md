@@ -70,6 +70,7 @@ Disaster-route-sim/
 |   |   `-- index.html
 |   |-- static/
 |   |   |-- script.js
+|   |   |-- mobile-sim.js
 |   |   |-- osm.js
 |   |   |-- earthquake.js
 |   |   |-- flood.js

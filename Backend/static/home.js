@@ -1,4 +1,4 @@
-// Homepage / About & Contact page behavior: theme toggle, ant-trail hero
+// Homepage / About page behavior: theme toggle, ant-trail hero
 // background, and the feedback widget. Loaded on every page that extends
 // site_base.html.
 
@@ -90,7 +90,7 @@ function submitContactForm() {
   showHomeToast('Thanks — preview only, this would send your message.');
 }
 
-// ---- hero quick-start card: barangay pick, folded into the "See map"
+// ---- hero quick-start card: barangay pick, folded into the "Open simulator"
 // link's query string (?barangay=...) so the simulator page can read a
 // starting selection from the URL. No barangay is pre-selected, so the
 // link stays inert (href="#") until the visitor picks one -- clicking it
@@ -100,6 +100,13 @@ let quickStartBarangay = null;
 function syncQuickStartLink() {
   const link = document.getElementById('quickStartLaunch');
   if (!link) return;
+
+  // The helper line under the button names the pick once there is one.
+  const note = document.getElementById('quickStartNote');
+  if (note) {
+    note.dataset.defaultText ??= note.textContent;
+    note.textContent = quickStartBarangay ? `Opens with ${quickStartBarangay} selected.` : note.dataset.defaultText;
+  }
 
   if (!quickStartBarangay) {
     link.href = '#';
@@ -187,10 +194,21 @@ function loadScopeLeaflet() {
   return scopeLeafletPromise;
 }
 
+// Same "reduce motion" rule as the simulator's map (prefersReducedMotion in
+// osm.js, which this page doesn't load).
+function scopeMapMayAnimate() {
+  return !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
 function initScopeMap() {
   if (scopeMapInstance) return scopeMapInstance;
 
-  scopeMapInstance = L.map('scopeMapEl', { attributionControl: false });
+  scopeMapInstance = L.map('scopeMapEl', {
+    attributionControl: false,
+    zoomAnimation: scopeMapMayAnimate(),
+    fadeAnimation: scopeMapMayAnimate(),
+    markerZoomAnimation: scopeMapMayAnimate(),
+  });
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors',
@@ -226,7 +244,7 @@ async function loadScopeBoundaries() {
     }
 
     if (allLatLngs.length) {
-      scopeMapInstance.fitBounds(allLatLngs, { padding: [24, 24] });
+      scopeMapInstance.fitBounds(allLatLngs, { padding: [24, 24], animate: scopeMapMayAnimate() });
     }
   })();
 
@@ -264,9 +282,55 @@ function setScopeMapError(message) {
   el.textContent = message || '';
 }
 
+// ---- feedback button vs. footer ----
+// --fab-lift is how much of the footer is on screen. home.css raises the
+// feedback button by that much, so the footer can stay compact and the
+// button still never lands on its links.
+(function trackFooterForFab() {
+  const footer = document.querySelector('.site-footer');
+  if (!footer) return;
+
+  let frame = null;
+  const update = () => {
+    frame = null;
+    const visible = Math.max(0, window.innerHeight - footer.getBoundingClientRect().top);
+    document.body.style.setProperty('--fab-lift', `${Math.round(visible)}px`);
+  };
+  const schedule = () => {
+    if (!frame) frame = window.requestAnimationFrame(update);
+  };
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  update();
+})();
+
+// ---- "Emergency hotlines" (Plan ahead card, homepage only) ----
+let hotlinesReturnFocus = null;
+
+function openHotlines(event) {
+  const modal = document.getElementById('hotlineModal');
+  if (!modal) return;
+  hotlinesReturnFocus = event?.currentTarget || document.activeElement;
+  modal.hidden = false;
+  document.body.classList.add('scope-modal-open');
+  document.getElementById('hotlineModalClose')?.focus({ preventScroll: true });
+}
+
+function closeHotlines() {
+  const modal = document.getElementById('hotlineModal');
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
+  document.body.classList.remove('scope-modal-open');
+  hotlinesReturnFocus?.focus?.({ preventScroll: true });
+  hotlinesReturnFocus = null;
+}
+
 document.addEventListener('keydown', (event) => {
   if (event.defaultPrevented || event.key !== 'Escape') return;
-  if (document.getElementById('scopeModal')?.hidden === false) {
+  if (document.getElementById('hotlineModal')?.hidden === false) {
+    event.preventDefault();
+    closeHotlines();
+  } else if (document.getElementById('scopeModal')?.hidden === false) {
     event.preventDefault();
     closeScopeMap();
   } else if (fabOpen) {

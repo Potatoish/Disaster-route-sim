@@ -64,6 +64,19 @@ function ensureHazardPane(map) {
   return HAZARD_PANE;
 }
 
+// Leaflet's motion is a few per-map options (zoom, fade, marker zoom) plus an
+// `animate` flag on each programmatic move (fitBounds/setView/panBy); both
+// read this, so "reduce motion" is honored in one place. Checked at call
+// time because the OS setting can change while the page is open.
+function prefersReducedMotion() {
+  return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
+// Wrap the options of any fitBounds/setView/panBy call.
+function mapMoveOptions(options = {}) {
+  return prefersReducedMotion() ? { ...options, animate: false } : options;
+}
+
 function formatDistanceKm(distanceMeters) {
   const numericDistance = Number(distanceMeters);
   if (!Number.isFinite(numericDistance)) {
@@ -394,7 +407,7 @@ async function renderRoutesOnRoads({
       ...fitPoints,
       { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
     ]);
-    gMap.fitBounds(L.latLngBounds([...defaultCoords, ...pinCoords]), fitOptions);
+    gMap.fitBounds(L.latLngBounds([...defaultCoords, ...pinCoords]), mapMoveOptions(fitOptions));
   }
 
   // Only the first MAP_ROUTES_SHOWN routes (display order, best first) stay

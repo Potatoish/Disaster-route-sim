@@ -72,21 +72,21 @@
         </div>
         <div class="workflow-card-body">
           <div class="hazard-grid">
-            <div class="hazard-card flood" id="hFlood" onclick="selectHazard('Flood', this)">
-              <div class="hazard-icon">&#127754;</div>
-              <div>
-                <div class="hazard-name">Flood</div>
-                <div class="hazard-sub">Water level</div>
-              </div>
-            </div>
+            <button type="button" class="hazard-card flood" id="hFlood" aria-pressed="false" onclick="selectHazard('Flood', this)">
+              <span class="hazard-icon" aria-hidden="true">&#127754;</span>
+              <span>
+                <span class="hazard-name">Flood</span>
+                <span class="hazard-sub">Water level</span>
+              </span>
+            </button>
 
-            <div class="hazard-card" id="hEarthquake" onclick="selectHazard('Earthquake', this)">
-              <div class="hazard-icon">&#9888;&#65039;</div>
-              <div>
-                <div class="hazard-name">Earthquake</div>
-                <div class="hazard-sub">Liquefaction / Ground shaking</div>
-              </div>
-            </div>
+            <button type="button" class="hazard-card" id="hEarthquake" aria-pressed="false" onclick="selectHazard('Earthquake', this)">
+              <span class="hazard-icon" aria-hidden="true">&#9888;&#65039;</span>
+              <span>
+                <span class="hazard-name">Earthquake</span>
+                <span class="hazard-sub">Liquefaction / Ground shaking</span>
+              </span>
+            </button>
           </div>
         </div>
       </div>
@@ -247,6 +247,211 @@
 
     </div>
 
+    <!-- Phones and tablets (< 1024px wide, >= 500px tall; mobile-sim.js):
+         the full-screen map's top bar, controls and center pin, the
+         setup/results bottom sheet, and the Map layers sheet. Hidden on
+         desktops and short viewports, where the setup and results panels
+         do this job.
+         Inside .right-panel so the loader (z-index 999, same stacking
+         context) still covers it. -->
+    <div class="msim" id="msim">
+      <header class="msim-topbar" id="msimTopbar">
+        <button class="msim-icon-btn" type="button" onclick="goToHomepageForNewScope()" aria-label="Back to home">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <div class="msim-topbar-text">
+          <div class="msim-topbar-title" id="msimTitle">Simulator</div>
+          <div class="msim-topbar-sub" id="msimSubtitle">Location</div>
+        </div>
+        <button class="msim-icon-btn msim-icon-btn--boxed" id="msimLayersBtn" type="button" onclick="openMobileLayers()" aria-label="Map layers" aria-haspopup="dialog" aria-expanded="false" aria-controls="msimLayers">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 3 8.5l9 4.5 9-4.5L12 4Z"/><path d="m3 12.5 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>
+        </button>
+      </header>
+
+      <div class="msim-center-pin" id="msimCenterPin" hidden aria-hidden="true">
+        <span class="msim-center-pin-dot"></span>
+        <img class="msim-center-pin-img" id="msimCenterPinImg" alt="" width="48" height="60">
+      </div>
+
+      <div class="msim-map-controls" id="msimMapControls">
+        <div class="msim-map-group" role="group" aria-label="Zoom">
+          <button type="button" class="msim-map-btn" id="msimZoomIn" onclick="mobileMapZoom(1)" aria-label="Zoom in">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button type="button" class="msim-map-btn" id="msimZoomOut" onclick="mobileMapZoom(-1)" aria-label="Zoom out">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="msim-map-group">
+          <button type="button" class="msim-map-btn" id="msimLocateBtn" onclick="locateMobileUser()" aria-label="Go to my location">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <section class="msheet" id="msimSheet" aria-label="Simulation panel" data-snap="peek">
+        <button class="msheet-handle" id="msimSheetHandle" type="button" aria-label="Expand panel" aria-controls="msimSheetScroll"><span aria-hidden="true"></span></button>
+        <div class="msheet-scroll" id="msimSheetScroll">
+
+          <div class="msheet-mode" id="msimSetup">
+            <div class="msheet-head" data-sheet-drag>
+              <h2 class="msheet-title" id="msimSetupTitle" tabindex="-1">Simulation setup</h2>
+              <button class="msheet-chip" id="msimHazardChip" type="button" onclick="showMobileHazardPicker()" hidden>
+                <span class="msheet-chip-icon" id="msimHazardChipIcon" aria-hidden="true"></span>
+                <span id="msimHazardChipLabel"></span>
+                <span class="sr-only">(change disaster)</span>
+              </button>
+            </div>
+
+            <div class="msheet-setup-flow" id="msimSetupFlow">
+              <div class="mslots" id="msimSlots">
+                <div class="mslot mslot--start" id="msimSlot-start">
+                  <span class="mslot-badge" aria-hidden="true">S</span>
+                  <div class="mslot-text">
+                    <span class="mslot-label">Start</span>
+                    <span class="mslot-value" id="msimSlotValue-start"></span>
+                  </div>
+                  <button class="mslot-edit" id="msimSlotEdit-start" type="button" onclick="editMobilePin('start')" hidden>Edit</button>
+                </div>
+                <div class="mslot mslot--end" id="msimSlot-end">
+                  <span class="mslot-badge" aria-hidden="true">E</span>
+                  <div class="mslot-text">
+                    <span class="mslot-label">End</span>
+                    <span class="mslot-value" id="msimSlotValue-end"></span>
+                  </div>
+                  <button class="mslot-edit" id="msimSlotEdit-end" type="button" onclick="editMobilePin('end')" hidden>Edit</button>
+                </div>
+                <div class="mslot mslot--evac" id="msimSlot-evac" hidden>
+                  <span class="mslot-badge" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>
+                  </span>
+                  <div class="mslot-text">
+                    <span class="mslot-label">Evacuation sites</span>
+                    <span class="mslot-value" id="msimSlotValue-evac"></span>
+                  </div>
+                  <button class="mslot-edit" id="msimEvacBtn" type="button" onclick="showEvacuationSites()" hidden>Show</button>
+                </div>
+              </div>
+
+              <div class="msheet-actions" id="msimSetupActions">
+                <button class="mbtn mbtn--primary" id="msimSetPinBtn" type="button" onclick="setMobilePinHere()" hidden>Set start here</button>
+                <button class="mbtn" id="msimSeeResultsBtn" type="button" onclick="showMobileResults()" hidden>See results</button>
+                <button class="mbtn" id="msimRunBtn" type="button" onclick="runSimulation()" disabled>Run simulation</button>
+              </div>
+              <p class="msheet-help" id="msimSetupHelp" aria-live="polite"></p>
+
+              <div class="msheet-section" id="msimHazardSection">
+                <h3 class="msheet-label">Disaster</h3>
+                <div class="mhazard-grid">
+                  <button type="button" class="mhazard" data-msim-hazard="Flood" aria-pressed="false" onclick="chooseMobileHazard('Flood')">
+                    <span class="mhazard-name">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><path d="M3 19.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><circle cx="12" cy="6.5" r="2"/><path d="M12 8.5v3.8"/></svg>
+                      Flood
+                    </span>
+                    <span class="mhazard-sub">Water level</span>
+                  </button>
+                  <button type="button" class="mhazard" data-msim-hazard="Earthquake" aria-pressed="false" onclick="chooseMobileHazard('Earthquake')">
+                    <span class="mhazard-name">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12h4l2-5 3.5 10 3-8 2 3h4.5"/></svg>
+                      Earthquake
+                    </span>
+                    <span class="mhazard-sub">Ground shaking, liquefaction</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="msheet-links" id="msimSetupLinks">
+                <button class="mbtn" type="button" onclick="return handleNavHowToUse(event)">How to use</button>
+                <button class="mbtn" type="button" onclick="goToHomepageForNewScope()">Back to Home</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="msheet-mode" id="msimResults" hidden>
+            <div class="mlens" id="msimLens" role="group" aria-label="Earthquake lens" hidden>
+              <button type="button" data-msim-eq-view="overall" aria-pressed="true" onclick="switchEarthquakeView('overall')">Overall</button>
+              <button type="button" data-msim-eq-view="liquefaction" aria-pressed="false" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
+              <button type="button" data-msim-eq-view="ground_shaking" aria-pressed="false" onclick="switchEarthquakeView('ground_shaking')">Ground shaking</button>
+            </div>
+            <div class="mverdict" id="msimVerdict" data-sheet-drag>
+              <h2 class="mverdict-title" id="msimVerdictTitle" tabindex="-1"></h2>
+              <p class="mverdict-sub" id="msimVerdictSub"></p>
+            </div>
+            <div class="msummary" data-sheet-drag>
+              <span class="msummary-main" id="msimSummaryMain"></span>
+              <span class="msummary-route" id="msimSummaryRoute"></span>
+            </div>
+            <p class="msummary-dest" id="msimSummaryDest" hidden></p>
+            <div class="msheet-actions" id="msimResultActions">
+              <button class="mbtn" type="button" onclick="showMobileSetup()">Edit setup</button>
+              <button class="mbtn mbtn--primary" id="msimDetailsBtn" type="button" onclick="toggleMobileResultDetails()">See details</button>
+            </div>
+
+            <div class="msheet-details">
+              <button class="mhotlines" type="button" onclick="openEmergencyContactModal(event)">
+                <svg class="mhotlines-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
+                <span>Emergency hotlines</span>
+                <svg class="mhotlines-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+              </button>
+
+              <div class="msheet-label-row">
+                <h3 class="msheet-label">Routes</h3>
+                <span class="msheet-label-hint">Tap one to see it on the map</span>
+              </div>
+              <ul class="mroutes" id="msimRouteList"></ul>
+              <button class="mroutes-more" id="msimRoutesMore" type="button" onclick="toggleMobileMoreRoutes()" aria-controls="msimRouteList" aria-expanded="false" hidden></button>
+              <p class="msheet-source" id="msimSource"></p>
+
+              <details class="maccordion" id="msimDisclaimer">
+                <summary>
+                  Disclaimer
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </summary>
+                <p id="msimDisclaimerText"></p>
+              </details>
+
+              <button class="mbtn mbtn--primary mbtn--block" id="msimNewSimBtn" type="button" onclick="goToHomepageForNewScope()">New simulation</button>
+              <button class="mbtn-link" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download report (PDF)</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="msim-scrim" id="msimScrim" hidden onclick="closeMobileLayers()"></div>
+      <section class="msim-layers" id="msimLayers" role="dialog" aria-modal="true" aria-labelledby="msimLayersTitle" hidden>
+        <div class="msim-layers-head">
+          <h2 class="msim-layers-title" id="msimLayersTitle">Map layers</h2>
+          <button class="msim-icon-btn" id="msimLayersClose" type="button" onclick="closeMobileLayers()" aria-label="Close map layers">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+
+        <h3 class="msheet-label">Base map</h3>
+        <div class="mseg" role="group" aria-label="Base map">
+          <button type="button" data-msim-base="street" aria-pressed="true" onclick="setMobileBaseLayer('street')">Map</button>
+          <button type="button" data-msim-base="satellite" aria-pressed="false" onclick="setMobileBaseLayer('satellite')">Satellite</button>
+        </div>
+
+        <div id="msimLayersFlood" hidden>
+          <h3 class="msheet-label">Flood severity</h3>
+          <div class="mchips" role="group" aria-label="Highlight flood severity">
+            <button type="button" data-flood-filter="all" onclick="setFloodHazardOverlayMode('all')"><span class="swatch swatch--all"></span>All</button>
+            <button type="button" data-flood-filter="low" onclick="setFloodHazardOverlayMode('low')"><span class="swatch" style="background:rgba(250,204,21,.86)"></span>Low</button>
+            <button type="button" data-flood-filter="moderate" onclick="setFloodHazardOverlayMode('moderate')"><span class="swatch" style="background:rgba(249,115,22,.90)"></span>Medium</button>
+            <button type="button" data-flood-filter="high" onclick="setFloodHazardOverlayMode('high')"><span class="swatch" style="background:rgba(225,29,72,.94)"></span>High</button>
+          </div>
+        </div>
+
+        <div id="msimLayersLegendWrap" hidden>
+          <h3 class="msheet-label">Legend</h3>
+          <div class="msim-legend" id="msimLayersLegend"></div>
+        </div>
+
+        <button class="mbtn mbtn--primary mbtn--block msim-layers-done" type="button" onclick="closeMobileLayers()">Done</button>
+      </section>
+    </div>
+
     <div id="loader" aria-live="polite">
       <div class="loader-card">
         <div class="loader-visual" id="loaderVisual" aria-hidden="true">
@@ -353,24 +558,7 @@
       If you are in immediate danger, call one of these numbers right away.
     </p>
 
-    <ul class="emergency-contact-list">
-      <li class="emergency-contact-item">
-        <span class="emergency-contact-name">General Emergency</span>
-        <span class="emergency-contact-number"><a href="tel:911">911</a></span>
-      </li>
-      <li class="emergency-contact-item">
-        <span class="emergency-contact-name">Pasig City DRRMO Emergency Hotline</span>
-        <span class="emergency-contact-number"><a href="tel:86430000">8643-0000</a></span>
-      </li>
-      <li class="emergency-contact-item">
-        <span class="emergency-contact-name">Barangay Pinagbuhatan Action Center Hotline</span>
-        <span class="emergency-contact-number"><a href="tel:88804609">8880-4609</a> or <a href="tel:88809394">8880-9394</a></span>
-      </li>
-      <li class="emergency-contact-item">
-        <span class="emergency-contact-name">Barangay Santa Lucia Hotline</span>
-        <span class="emergency-contact-number"><a href="tel:09173119756">0917 3119 756</a> or <a href="tel:09624964778">0962 496 4778</a></span>
-      </li>
-    </ul>
+    {% include "_emergency_contacts.html" %}
   </div>
 </div>
 
@@ -390,6 +578,7 @@
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+<script src="{{ url_for('static', filename='mobile-sim.js') }}"></script>
 
 </body>
 </html>

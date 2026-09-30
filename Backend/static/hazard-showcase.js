@@ -9,10 +9,12 @@
   const $ = id => document.getElementById(id);
 
   // ================= FLOOD =================
+  // `walk` is the readout's Walking row: AGNAS plans walking routes only, so
+  // it says whether a person can walk through, not whether a road is open.
   const LEVELS = {
-    low: { preset: 0.3, color: 'var(--low)', ink: 'var(--low-ink)', on: 'var(--low-on)', label: 'Low', road: ['safe', 'Passable'] },
-    medium: { preset: 0.75, color: 'var(--med)', ink: 'var(--med-ink)', on: 'var(--med-on)', label: 'Medium', road: ['risk', 'Passable'] },
-    high: { preset: 1.25, color: 'var(--high)', ink: 'var(--high-ink)', on: 'var(--high-on)', label: 'High', road: ['elim', 'Not passable'] },
+    low: { preset: 0.3, color: 'var(--low)', ink: 'var(--low-ink)', on: 'var(--low-on)', label: 'Low', walk: ['safe', 'Walkable'] },
+    medium: { preset: 0.75, color: 'var(--med)', ink: 'var(--med-ink)', on: 'var(--med-on)', label: 'Medium', walk: ['risk', 'Walk with caution'] },
+    high: { preset: 1.25, color: 'var(--high)', ink: 'var(--high-ink)', on: 'var(--high-on)', label: 'High', walk: ['elim', 'Not walkable'] },
   };
   // Same class boundaries as the app's FLOOD_DEPTH_RANGE_BY_VAR.
   const levelFor = d => (d < 0.5 ? 'low' : d < 1.0 ? 'medium' : 'high');
@@ -65,7 +67,7 @@
       + `<span>Child: ${reachText(firstAtOrAbove(CHILD, depth))}</span>`;
     $('hzLevel').textContent = lvl.label;
     $('hzLevelNote').textContent = firstAtOrAbove(DEPTH_NOTES, depth);
-    $('hzRoad').innerHTML = `<span class="hz-chip hz-chip--${lvl.road[0]}">${lvl.road[1]}</span>`;
+    $('hzRoad').innerHTML = `<span class="hz-chip hz-chip--${lvl.walk[0]}">${lvl.walk[1]}</span>`;
   }
 
   cards.forEach(card => card.addEventListener('click', () => setDepth(LEVELS[card.dataset.level].preset)));

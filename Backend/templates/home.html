@@ -7,7 +7,7 @@
 
     <div class="hero-copy">
       <span class="eyebrow">Ant Guided Navigation And Safety System</span>
-      <h1>Disaster Preparedness<br>for safer communities,</h1>
+      <h1>Disaster Preparedness<br>for safer communities</h1>
       <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios filtering out hazard prone routes before evaluating path distance.</p>
       <div class="hero-actions">
         <button type="button" class="hero-action" onclick="openScopeMap()">
@@ -39,9 +39,9 @@
       <p class="qs-error" id="qsBarangayError" role="alert" hidden>Select a barangay first to start the simulation.</p>
 
       <a class="cta big full qs-cta" id="quickStartLaunch" href="#" data-base-href="{{ url_for('simulator_app') }}" onclick="handleQuickStartLaunch(event)">
-        See map <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        Open simulator <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
-      <p class="qs-note">Opens the simulator pre-set to your choices above.</p>
+      <p class="qs-note" id="quickStartNote">Opens the simulator pre-set to your choices above.</p>
     </div>
 
   </div>
@@ -78,12 +78,16 @@
         <h3>Built on official hazard data</h3>
         <p>Flood levels come from Project NOAH. Earthquake liquefaction and ground shaking levels come from PHIVOLCS.</p>
       </div>
-      <div class="gtk-card">
+      <div class="gtk-card gtk-card--emphasis">
         <span class="gtk-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.3"/><path d="M12 7.5V12l3.2 1.9"/></svg>
         </span>
         <h3>Plan ahead, not during an emergency</h3>
         <p>AGNAS is built for preparation, not live alerts. When a disaster strikes, rely on your local authorities for instructions.</p>
+        <button type="button" class="gtk-link" onclick="openHotlines(event)" aria-haspopup="dialog" aria-controls="hotlineModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
+          Emergency hotlines
+        </button>
       </div>
     </div>
   </div>
@@ -222,7 +226,7 @@
           <dd><span class="hz-reach" id="hzReach"></span></dd>
           <dt>Level</dt>
           <dd><span class="hz-level-pill" id="hzLevel"></span><span class="hz-note" id="hzLevelNote"></span></dd>
-          <dt>Road</dt>
+          <dt>Walking</dt>
           <dd><span id="hzRoad"></span></dd>
         </dl>
       </article>
@@ -390,6 +394,13 @@
               </g>
             </svg>
           </div>
+          <!-- Phones only (home.css): the scene's own ground labels are hidden
+               there, too small to read at that width. -->
+          <ul class="hz-key" aria-label="Ground layers">
+            <li><i style="background: var(--sand)"></i>Loose, wet sand</li>
+            <li><i style="background: var(--groundwater)"></i>Groundwater</li>
+            <li><i style="background: var(--firm)"></i>Firm soil</li>
+          </ul>
           <p class="hz-caption" id="hzCrossCaption" aria-live="polite"><b>Ground shaking:</b> strong shaking cracks walls and drops debris on roads.</p>
         </div>
       </article>
@@ -406,7 +417,7 @@
     </div>
     <div class="algo-flow">
       <div class="algo-step">
-        <span class="algo-step-no">01</span>
+        <span class="algo-step-no"><span class="algo-step-zero">0</span>1</span>
         <h3>Ants explore the graph</h3>
         <div class="algo-diagram" aria-hidden="true">
           <svg viewBox="0 0 220 100" fill="none">
@@ -426,7 +437,7 @@
       </div>
 
       <div class="algo-step">
-        <span class="algo-step-no">02</span>
+        <span class="algo-step-no"><span class="algo-step-zero">0</span>2</span>
         <h3>Pheromone reinforces safe, short trails</h3>
         <div class="algo-diagram" aria-hidden="true">
           <svg viewBox="0 0 220 100" fill="none">
@@ -446,7 +457,7 @@
       </div>
 
       <div class="algo-step">
-        <span class="algo-step-no">03</span>
+        <span class="algo-step-no"><span class="algo-step-zero">0</span>3</span>
         <h3>Routes are ranked safety-first</h3>
         <div class="algo-diagram" aria-hidden="true">
           <svg viewBox="0 0 220 100" fill="none">
@@ -465,13 +476,30 @@
 
 <footer class="site-footer">
   <div class="wrap foot-row">
-    <span class="foot-copy">&copy; 2026 AGNAS Project. All rights reserved.</span>
+    <span class="foot-copy"><span>&copy; 2026 AGNAS Project.</span> <span>All rights reserved.</span></span>
     <div class="foot-links">
       <a href="#">Privacy Policy</a>
       <a href="#">Terms of Service</a>
     </div>
   </div>
 </footer>
+</div>
+
+<!-- "Emergency hotlines" in the Plan ahead card: the same numbers as the
+     simulator's results panel (_emergency_contacts.html), styled like the
+     coverage-map dialog. -->
+<div class="scope-modal hotline-modal" id="hotlineModal" role="dialog" aria-modal="true" aria-labelledby="hotlineModalTitle" hidden>
+  <div class="scope-modal-backdrop" onclick="closeHotlines()"></div>
+  <div class="scope-modal-panel">
+    <div class="scope-modal-head">
+      <h3 id="hotlineModalTitle">Emergency hotlines</h3>
+      <button type="button" class="scope-modal-close" id="hotlineModalClose" onclick="closeHotlines()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="scope-modal-sub">If you are in immediate danger, call one of these numbers right away.</p>
+    {% include "_emergency_contacts.html" %}
+  </div>
 </div>
 {% endblock %}
 
