@@ -24,7 +24,7 @@ AGNAS helps users explore evacuation routes under two hazard scenarios:
 - **Diverse alternate routes** — the search penalizes corridors already used by other candidate routes, so the map shows genuinely different route options instead of several near-identical variations.
 - **Flood hazard routing** — classifies roads by flood severity class (`Var 1`/`2`/`3`) and highlights which segments are safe to cross versus which should be avoided.
 - **Earthquake hazard routing** — routes toward the nearest road-reachable evacuation sites using liquefaction and ground-shaking hazard layers, with separate result views per hazard lens.
-- **Interactive map** — built on Leaflet with OpenStreetMap tiles and an optional Esri World Imagery satellite layer, no API key required.
+- **Interactive map** — built on Leaflet with OpenStreetMap tiles and an optional Esri World Imagery satellite layer, no API key required. A recenter button returns to the route (or the whole barangay before a run), and the barangay can be switched in place (the setup panel's toggle, or the top bar's barangay name on phones). On phones a small, foldable legend sits in the map's bottom-left corner. The best route is drawn sky blue so it stays distinct from the flood colors for color-blind viewers.
 - **Downloadable PDF report** — generates a shareable PDF of the best route, including a route map with a real OpenStreetMap basemap and a risk summary, rendered entirely client-side.
 - **Light/dark theme** — site-wide theme switch for comfortable viewing in any lighting.
 - **Guided "How to use" tutorial** — step-by-step walkthrough for picking a barangay, hazard type, and start/end points before running a simulation.

@@ -669,6 +669,7 @@ function syncSimulationConfigLock() {
   // markers are likewise recomputed from state each time.
   syncRoutePinFields();
   syncRoutePinMarkers();
+  syncBarangaySwitch();
 
   ['showEvacBtn', 'runBtn']
     .forEach(id => {
@@ -906,6 +907,22 @@ function initMap() {
   });
 
   L.control.zoom({ position: 'topright' }).addTo(gMap);
+  // Recenter (recenterMap), under the zoom buttons. Phones and tablets hide
+  // the Leaflet controls and have their own (mobile-sim.js).
+  const recenterControl = L.control({ position: 'topright' });
+  recenterControl.onAdd = () => {
+    const bar = L.DomUtil.create('div', 'leaflet-bar map-recenter-control');
+    const button = L.DomUtil.create('button', 'map-recenter-btn', bar);
+    button.type = 'button';
+    button.title = 'Recenter map';
+    button.setAttribute('aria-label', 'Recenter map');
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>';
+    // Otherwise the click also reaches the map and drops a pin.
+    L.DomEvent.disableClickPropagation(bar);
+    L.DomEvent.on(button, 'click', () => recenterMap());
+    return bar;
+  };
+  recenterControl.addTo(gMap);
   gMap.on('click', onMapClickForPin);
   // Route widths are zoom-scaled (getRouteZoomScale); re-apply them so a
   // zoomed-in route doesn't shrink to a thin line lost in the hazard fills.
@@ -963,11 +980,11 @@ function initMap() {
 // breakpoint change, doesn't leave the route sitting under the setup panel,
 // the results panel, or the map's own overlay chips.
 function refitMapToCurrentRoute() {
-  if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return;
+  if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return false;
 
   const bestRoute = getBestRoute(simData.routes);
   const routeCoords = getRoutePoints(bestRoute);
-  if (!routeCoords.length) return;
+  if (!routeCoords.length) return false;
 
   const isEarthquakeResult = isEarthquakeSimulationResult(simData);
   const pinCoords = normalizePathCoordinates([
@@ -977,6 +994,25 @@ function refitMapToCurrentRoute() {
   ].filter(Boolean));
 
   gMap.fitBounds(L.latLngBounds([...routeCoords, ...pinCoords]), mapMoveOptions(getMapFitPadding()));
+  return true;
+}
+
+// The recenter button. Leaflet's map never rotates, so this stands in for a
+// compass: it brings back the view the current step started from -- the
+// picked route, else the best route and its pins after a run, and the whole
+// barangay before one.
+function recenterMap() {
+  if (!gMap) return;
+
+  const focusedGroup = selectedRouteFocus
+    ? (mapLayers.routeGroups || []).find(group => Number(group.routeNo) === Number(selectedRouteFocus.routeNo))
+    : null;
+  const focusedPath = getRoutePreviewPath(focusedGroup);
+  if (focusedPath.length > 1) {
+    gMap.fitBounds(L.latLngBounds(focusedPath), mapMoveOptions(getMapFitPadding()));
+  } else if (!refitMapToCurrentRoute()) {
+    fitMapToBoundaryPaths(barangayBoundaryRings);
+  }
 }
 
 async function startApp() {
@@ -996,12 +1032,12 @@ async function startApp() {
   await bootstrapBarangayFromUrl();
 }
 
-// The barangay picker no longer lives in this page -- the homepage's
-// quick-start card sends the choice via ?barangay=... and this loads it
-// immediately so the workflow opens straight on the "Disaster" step. With
-// nothing in this page able to change barangay, a missing/unknown value
-// means the visitor skipped the homepage picker, so send them back to it
-// instead of stranding them on a workflow with no way to pick a scope.
+// The homepage's quick-start card sends the barangay via ?barangay=... and
+// this loads it immediately so the workflow opens straight on the "Disaster"
+// step. This page can only switch between barangays once one is loaded
+// (switchBarangay), so a missing/unknown value
+// means the visitor skipped the homepage picker: send them back to it
+// instead of stranding them on a workflow with no scope.
 async function bootstrapBarangayFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('barangay') || '';
 
@@ -2117,16 +2153,36 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
 // drawn solid red (createRouteGroup in osm.js), and the legend says so.
 function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   const row = (swatch, label) => `<div class="legend-row">${swatch}<span style="font-size:.78rem;">${label}</span></div>`;
-  const eliminatedRow = row('<div class="legend-line legend-line--eliminated"></div>', 'Eliminated Route');
+  // The solid best route keeps its darker edge here too (ROUTE_EDGE_COLORS).
+  const bestLine = color => `<div class="legend-line" style="background:${color};height:4px;box-shadow:0 0 0 1px ${getRouteEdgeColor(color)};"></div>`;
+  const eliminatedRow = row('<div class="legend-line legend-line--eliminated"></div>', 'Eliminated route');
   const noSafeRoute = routes.length > 0 && routes.every(route => route.category === 'eliminated');
 
   if (noSafeRoute) {
-    return row('<div class="legend-line" style="background:#ef4444;height:4px;"></div>', 'Best Route')
-      + eliminatedRow;
+    return row(bestLine('#ef4444'), 'Best route') + eliminatedRow;
   }
-  return row('<div class="legend-line" style="background:#22c55e;height:4px;"></div>', 'Best Route')
-    + row('<div class="legend-line legend-line--available"></div>', 'Available Route')
+  return row(bestLine(ROUTE_BEST_COLOR), 'Best route')
+    + row('<div class="legend-line legend-line--available"></div>', 'Available route')
     + eliminatedRow;
+}
+
+// A small copy of a map marker for the legend: a teardrop in the marker's
+// colors with its letter (the S/E pins, makeRouteEndpointPinIcon) or a
+// house (evacuation sites, earthquake.js).
+function buildLegendPinSvg(fill, stroke, glyph) {
+  const mark = glyph === 'house'
+    ? '<path d="M6.6 9.6 10 6.8l3.4 2.8M7.8 9v3.4h4.4V9" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
+    : `<text x="10" y="12.4" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="8.5" font-weight="800" fill="#fff" stroke="none">${glyph}</text>`;
+  return `<svg class="legend-pin" viewBox="0 0 20 24" aria-hidden="true"><path d="M10 1.5C5.6 1.5 2 5 2 9.4c0 5.6 6.3 9.4 8 13.1 1.7-3.7 8-7.5 8-13.1C18 5 14.4 1.5 10 1.5z" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>${mark}</svg>`;
+}
+
+// Same names as the setup panel's Start / End fields.
+function buildPinLegendRow(role) {
+  const label = role === 'start' ? 'Start' : 'End';
+  const pin = role === 'start'
+    ? buildLegendPinSvg('#06b6d4', '#155e75', 'S')
+    : buildLegendPinSvg('#a855f7', '#6b21a8', 'E');
+  return `<div class="legend-row">${pin}<span style="font-size:.78rem;">${label}</span></div>`;
 }
 
 function setFloodLegendContent() {
@@ -2136,8 +2192,8 @@ function setFloodLegendContent() {
   body.innerHTML = `
     ${buildRouteLegendRows()}
     <div style="margin-top:5px;">
-      <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Your Location</span></div>
-      <div class="legend-row"><div class="legend-dot-sm" style="background:#a855f7;"></div><span style="font-size:.78rem;">Destination</span></div>
+      ${buildPinLegendRow('start')}
+      ${buildPinLegendRow('end')}
     </div>`;
 }
 
@@ -2489,6 +2545,7 @@ async function selectBarangay(name) {
 
   workflowFocusSection = null;
   selectedBarangay = name;
+  syncBarangaySwitch();
   clearBarangaySelections();
   if (selectedHazard === 'Flood') floodHazardOverlayMode = 'all';
   document.getElementById('emptyMap').style.display = 'none';
@@ -3844,8 +3901,9 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
   ctx.lineCap = 'round';
 
   // Same slim line as the map (addRouteCasing in osm.js): a thin edge in a
-  // darker shade of the route color, not a wide band covering the road.
-  const routeColor = route?.color || '#22c55e';
+  // darker shade of the route color, not a wide band covering the road. The
+  // color comes from osm.js, not route.color (the backend still sends green).
+  const routeColor = route?.category === 'eliminated' ? '#ef4444' : ROUTE_BEST_COLOR;
   ctx.strokeStyle = getRouteEdgeColor(routeColor);
   ctx.lineWidth = 7;
   tracePath();
@@ -4009,7 +4067,7 @@ async function downloadSimulationReport() {
 }
 
 // Sends the visitor back to the homepage so a new simulation starts from
-// scratch, since barangay can't be changed here. Plain '/' rather than the
+// scratch. Plain '/' rather than the
 // '#heroBarangaySelector' anchor -- with the homepage's scroll-behavior:smooth,
 // landing on that hash played a visible auto-scroll past the hero on every
 // "Back to Home" click, which read as a bug rather than a shortcut.
@@ -4017,6 +4075,46 @@ function goToHomepageForNewScope() {
   if (simulationInProgress) return;
   window.location.href = '/';
 }
+
+// Changes barangay without leaving the page (the setup panel's toggle, the
+// phone top bar's switcher): the same reset as loading it fresh, and the URL
+// follows so a reload stays on the new one.
+async function switchBarangay(name) {
+  if (name === selectedBarangay || !SUPPORTED_QUICKSTART_BARANGAYS.includes(name) || isSimulationInteractionLocked()) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('barangay', name);
+  history.replaceState(history.state, '', url);
+  await selectBarangay(name);
+}
+
+// The setup panel's Pinagbuhatan | Sta. Lucia toggle (desktop; phones and
+// tablets use the top bar's switcher). Built once, then only its pressed and
+// disabled states change, so a focused button keeps focus.
+function syncBarangaySwitch() {
+  const group = document.getElementById('panelBarangaySwitch');
+  if (!group) return;
+  if (!group.children.length) {
+    group.innerHTML = SUPPORTED_QUICKSTART_BARANGAYS
+      .map(name => `<button type="button" data-switch-barangay="${escapeHtml(name)}">${escapeHtml(name)}</button>`)
+      .join('');
+  }
+  const locked = isSimulationInteractionLocked();
+  group.querySelectorAll('[data-switch-barangay]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.switchBarangay === selectedBarangay));
+    button.disabled = locked;
+  });
+}
+
+// One click switches, so ask first when that would drop pins or routes.
+document.getElementById('panelBarangaySwitch')?.addEventListener('click', event => {
+  const name = event.target.closest?.('[data-switch-barangay]')?.dataset.switchBarangay;
+  if (!name || name === selectedBarangay) return;
+  const hasWork = !!simData || PIN_ROLES.some(role => routePins[role]);
+  if (hasWork && !window.confirm(`Switch to Brgy. ${name}? Your pins and routes will be cleared.`)) return;
+  switchBarangay(name);
+});
 
 async function checkBackend() {
   // Generous: on a slow phone connection (or a just-woken server) a couple of
@@ -4065,6 +4163,7 @@ document.getElementById('routeListModal')?.addEventListener('mousedown', event =
 
 syncLoaderContext();
 initLoaderGraphPulses();
+syncBarangaySwitch();
 setFloodLegendContent();
 syncEarthquakeRouteUi();
 syncEarthquakeViewSelector();

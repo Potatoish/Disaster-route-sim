@@ -12,6 +12,9 @@
 // this sheet can never disagree. script.js calls in through window.mobileSim.
 (function initMobileSim() {
   const SHEET_QUERY = window.matchMedia('(max-width: 1023px) and (min-height: 500px)');
+  // On a phone this short the open legend covers much of the route, so it
+  // starts folded there (until the visitor opens it once; that is remembered).
+  const LEGEND_STARTS_FOLDED_QUERY = window.matchMedia('(max-height: 700px)');
   // Gap between the top bar and a full-height sheet.
   const FULL_SHEET_TOP_GAP = 8;
   // Space kept under the last item that shows at peek height.
@@ -19,20 +22,24 @@
   // Matches the sheet's height transition in style.css.
   const SNAP_MS = 280;
   // Least map height left between the top bar and the sheet for the center
-  // pin, and for the zoom/locate buttons, to stay on screen.
+  // pin, and for the zoom/recenter/locate buttons, to stay on screen.
   const PIN_MIN_ROOM = 90;
-  const CONTROLS_MIN_ROOM = 170;
+  const CONTROLS_MIN_ROOM = 220;
+  // The on-map legend's gap above the sheet (style.css) plus a little air
+  // under the top bar; it needs its own height on top of this.
+  const LEGEND_ROOM_MARGIN = 32;
   // Below this the sheet is full height and the map is just a sliver.
   const MAP_COVERED_ROOM = 40;
   const ROUTES_SHOWN = 3;
   // A second tap inside this window is a double-tap zoom, not a pin move.
   const MAP_TAP_DELAY_MS = 260;
   const DISCLAIMER_SEEN_KEY = 'agnas-disclaimer-seen';
+  const LEGEND_FOLDED_KEY = 'agnas-map-legend-folded';
   const SNAP_ORDER = ['peek', 'half', 'full'];
   const FLOOD_LEGEND_ROWS = [
-    ['rgba(250,204,21,.86)', 'Low flooding'],
-    ['rgba(249,115,22,.90)', 'Medium flooding'],
-    ['rgba(225,29,72,.94)', 'High flooding'],
+    ['rgba(250,204,21,.86)', 'Low'],
+    ['rgba(249,115,22,.90)', 'Medium'],
+    ['rgba(225,29,72,.94)', 'High'],
   ];
 
   const $ = id => document.getElementById(id);
@@ -53,8 +60,11 @@
     suppressHandleClick: false,
     layersOpen: false,
     layersCloseTimer: null,
+    barangayMenuOpen: false,
     baseLayers: null,
     mapTapTimer: null,
+    legendFolded: readLegendFolded(),
+    legendHtml: null,
   };
 
   function isActive() {
@@ -194,6 +204,7 @@
     shell.classList.toggle('msim-controls-hidden', isActive() && room < CONTROLS_MIN_ROOM);
     shell.classList.toggle('msim-map-covered', isActive() && room < MAP_COVERED_ROOM);
     syncCenterPin();
+    syncMapLegendChrome();
   }
 
   function syncCenterPin() {
@@ -317,6 +328,7 @@
     if (state.mode === 'setup') syncSetup();
     else syncResultsChrome();
     if (state.layersOpen) syncLayersPanel();
+    renderMapLegend();
     measureSnaps();
   }
 
@@ -325,10 +337,82 @@
       || new URLSearchParams(window.location.search).get('barangay')
       || 'Simulator';
     $('msimTitle').textContent = barangay;
-    $('msimSubtitle').textContent = state.mode === 'results' && simData
-      ? `${isEarthquakeSimulationResult(simData) ? 'Earthquake' : 'Flood'} route`
-      : 'Location';
+    // Which disaster and which step: "Flood · Setup", "Flood · Results".
+    const results = state.mode === 'results' && simData;
+    const hazard = results
+      ? (isEarthquakeSimulationResult(simData) ? 'Earthquake' : 'Flood')
+      : selectedHazard;
+    $('msimSubtitle').textContent = hazard
+      ? `${hazard} · ${results ? 'Results' : 'Setup'}`
+      : 'Choose a disaster';
+
+    // The title opens the barangay switcher, except mid-run.
+    const button = $('msimBarangayBtn');
+    const locked = isSimulationInteractionLocked();
+    button.disabled = locked;
+    button.setAttribute('aria-label', `${barangay}, change barangay`);
+    if (locked) closeBarangayMenu({ restoreFocus: false });
   }
+
+  // ---- barangay switcher (the top bar's title) ----
+
+  function renderBarangayMenu() {
+    const pin = '<svg class="msim-bgy-pin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>';
+    const check = '<svg class="msim-bgy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+    $('msimBarangayOptions').innerHTML = SUPPORTED_QUICKSTART_BARANGAYS.map(name => {
+      const current = name === selectedBarangay;
+      return `<button type="button" class="msim-bgy-option" data-msim-barangay="${escapeHtml(name)}" aria-pressed="${current}">
+        ${pin}<span class="msim-bgy-name">${escapeHtml(name)}<span>Pasig City</span></span>${current ? check : ''}
+      </button>`;
+    }).join('');
+    // Switching starts over, so say what goes when there is something to lose.
+    $('msimBarangayNote').hidden = !simData && !PIN_ROLES.some(role => routePins[role]);
+  }
+
+  function openBarangayMenu() {
+    if (!isActive() || state.barangayMenuOpen || isSimulationInteractionLocked()) return;
+    state.barangayMenuOpen = true;
+    renderBarangayMenu();
+    $('msimBarangayMenu').hidden = false;
+    $('msimBarangayScrim').hidden = false;
+    $('msimBarangayBtn').setAttribute('aria-expanded', 'true');
+    const menu = $('msimBarangayMenu');
+    (menu.querySelector('[aria-pressed="true"]') || menu.querySelector('.msim-bgy-option'))?.focus({ preventScroll: true });
+  }
+
+  function closeBarangayMenu({ restoreFocus = true } = {}) {
+    if (!state.barangayMenuOpen) return;
+    state.barangayMenuOpen = false;
+    $('msimBarangayMenu').hidden = true;
+    $('msimBarangayScrim').hidden = true;
+    $('msimBarangayBtn').setAttribute('aria-expanded', 'false');
+    if (restoreFocus) $('msimBarangayBtn').focus({ preventScroll: true });
+  }
+
+  function toggleBarangayMenu() {
+    if (state.barangayMenuOpen) closeBarangayMenu();
+    else openBarangayMenu();
+  }
+
+  $('msimBarangayOptions').addEventListener('click', async event => {
+    const name = event.target.closest?.('[data-msim-barangay]')?.dataset.msimBarangay;
+    if (!name) return;
+    closeBarangayMenu();
+    if (name === selectedBarangay) return;
+    state.mode = 'setup';
+    state.snap = 'peek';
+    scroller.scrollTop = 0;
+    await switchBarangay(name);
+    scheduleSync();
+  });
+
+  // Tabbing out of the open switcher closes it.
+  $('msimBarangayMenu').addEventListener('focusout', event => {
+    const next = event.relatedTarget;
+    if (state.barangayMenuOpen && next && !$('msimBarangayMenu').contains(next)) {
+      closeBarangayMenu({ restoreFocus: next === $('msimBarangayBtn') });
+    }
+  });
 
   function getHazardIcon(name) {
     return document.querySelector(`[data-msim-hazard="${name}"] svg`)?.outerHTML || '';
@@ -599,6 +683,8 @@
       if (steps) steps.hidden = !active;
     });
     syncMoreRoutes();
+    // A picked route past the first few is on the map only while picked.
+    renderMapLegend();
   }
 
   // Top ROUTES_SHOWN rows, then "+ N more"; a focused extra row stays shown.
@@ -788,10 +874,17 @@
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   }
 
-  // ---- Map layers sheet ----
+  // ---- legend on the map ----
+
+  // Same condition as the desktop severity filter (syncFloodFilterControl),
+  // which also keeps the Layers sheet's chips' active state.
+  function isFloodLevelsShown() {
+    return $('floodFilterControl')?.hidden === false;
+  }
 
   // The map legend's rows, minus route kinds not on the map right now (e.g.
-  // no eliminated route drawn), plus the flood levels while they show.
+  // no eliminated route drawn), plus the flood levels on one line while
+  // they show.
   function buildLegendHtml(floodShown) {
     const legend = $('mapLegend');
     const body = $('mapLegendBody');
@@ -814,11 +907,56 @@
       html = rows.innerHTML.trim();
     }
     if (floodShown) {
-      html += `<div class="msim-legend-group">${FLOOD_LEGEND_ROWS.map(([color, label]) => (
+      const rows = FLOOD_LEGEND_ROWS.map(([color, label]) => (
         `<div class="legend-row"><span class="msim-legend-swatch" style="background:${color}"></span><span>${label}</span></div>`
-      )).join('')}</div>`;
+      )).join('');
+      html += `<div><span class="msim-legend-caption">Flood level</span><div class="msim-legend-levels">${rows}</div></div>`;
     }
     return html;
+  }
+
+  function readLegendFolded() {
+    try {
+      const stored = localStorage.getItem(LEGEND_FOLDED_KEY);
+      if (stored === '1' || stored === '0') return stored === '1';
+    } catch (err) {}
+    return LEGEND_STARTS_FOLDED_QUERY.matches;
+  }
+
+  // The legend on the map, bottom-left above the sheet, while there is
+  // something to list.
+  function renderMapLegend() {
+    const card = $('msimMapLegend');
+    if (!card) return;
+    const html = isActive() ? buildLegendHtml(isFloodLevelsShown()) : '';
+    if (html !== state.legendHtml) {
+      state.legendHtml = html;
+      $('msimMapLegendBody').innerHTML = html;
+    }
+    card.hidden = !html;
+    syncMapLegendChrome();
+  }
+
+  // Folded to its header or open, and out of the way while the center pin
+  // shows (on a small phone it would sit under the pin) or when the map
+  // strip is too short to hold it below the top bar.
+  function syncMapLegendChrome() {
+    const card = $('msimMapLegend');
+    if (!card) return;
+    card.classList.toggle('is-folded', state.legendFolded);
+    $('msimMapLegendBody').hidden = state.legendFolded;
+    $('msimMapLegendToggle').setAttribute('aria-expanded', String(!state.legendFolded));
+    const fits = getMapRoom() >= card.offsetHeight + LEGEND_ROOM_MARGIN;
+    shell.classList.toggle('msim-legend-hidden', isActive() && (card.hidden || isCenterPinShown() || !fits));
+  }
+
+  // Remembered per browser, so a visitor who folds it away keeps it folded.
+  function toggleMapLegend() {
+    state.legendFolded = !state.legendFolded;
+    try {
+      localStorage.setItem(LEGEND_FOLDED_KEY, state.legendFolded ? '1' : '0');
+    } catch (err) {}
+    syncMapLegendChrome();
   }
 
   function syncLayersPanel() {
@@ -828,19 +966,12 @@
       button.setAttribute('aria-pressed', String((button.dataset.msimBase === 'street') === onStreet));
     });
 
-    // Same condition as the desktop severity filter (syncFloodFilterControl),
-    // which also keeps these chips' active state.
-    const floodShown = $('floodFilterControl')?.hidden === false;
-    $('msimLayersFlood').hidden = !floodShown;
-
-    const legendHtml = buildLegendHtml(floodShown);
-    $('msimLayersLegendWrap').hidden = !legendHtml;
-    $('msimLayersLegend').innerHTML = legendHtml;
+    $('msimLayersFlood').hidden = !isFloodLevelsShown();
   }
 
   // While the layers sheet is open, everything behind it is inert.
   function setBackgroundInert(inert) {
-    ['msimTopbar', 'msimSheet', 'msimMapControls'].forEach(id => $(id)?.toggleAttribute('inert', inert));
+    ['msimTopbar', 'msimSheet', 'msimMapControls', 'msimMapLegend'].forEach(id => $(id)?.toggleAttribute('inert', inert));
     document.querySelector('.map-wrap')?.toggleAttribute('inert', inert);
   }
 
@@ -893,8 +1024,10 @@
   }
 
   function handleEscape() {
-    if (!isActive() || !state.layersOpen) return false;
-    closeLayers();
+    if (!isActive()) return false;
+    if (state.barangayMenuOpen) closeBarangayMenu();
+    else if (state.layersOpen) closeLayers();
+    else return false;
     return true;
   }
 
@@ -957,9 +1090,10 @@
       syncNow();
     } else {
       closeLayers({ restoreFocus: false });
+      closeBarangayMenu({ restoreFocus: false });
       state.height = 0;
       shell.style.removeProperty('--sheet-h');
-      shell.classList.remove('msim-controls-hidden', 'msim-map-covered', 'msim-dragging');
+      shell.classList.remove('msim-controls-hidden', 'msim-map-covered', 'msim-dragging', 'msim-legend-hidden');
       $('msimCenterPin').hidden = true;
     }
     syncRoutePinMarkers();
@@ -969,6 +1103,14 @@
   window.addEventListener('resize', () => {
     if (isActive()) scheduleSync();
   });
+  // script.js and earthquake.js rewrite the map legend (#mapLegend, hidden
+  // here) for each result, lens and pin change; the one on the map follows.
+  const desktopLegend = $('mapLegend');
+  if (desktopLegend) {
+    new MutationObserver(() => {
+      if (isActive()) scheduleSync();
+    }).observe(desktopLegend, { attributes: true, attributeFilter: ['style'], childList: true, subtree: true });
+  }
   document.fonts?.ready?.then(scheduleSync);
 
   $('msimDisclaimerText').textContent = SAFETY_DISCLAIMER_TEXT;
@@ -990,6 +1132,7 @@
   // index.html's inline handlers.
   Object.assign(window, {
     chooseMobileHazard: chooseHazard,
+    closeMobileBarangayMenu: () => closeBarangayMenu(),
     closeMobileLayers: () => closeLayers(),
     downloadMobileReport: downloadReport,
     editMobilePin: editPin,
@@ -1001,6 +1144,8 @@
     showMobileHazardPicker: showHazardPicker,
     showMobileResults: showResults,
     showMobileSetup: showSetup,
+    toggleMobileBarangayMenu: toggleBarangayMenu,
+    toggleMobileMapLegend: toggleMapLegend,
     toggleMobileMoreRoutes: toggleMoreRoutes,
     toggleMobileResultDetails: toggleResultDetails,
   });

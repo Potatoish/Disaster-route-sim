@@ -273,8 +273,8 @@
     const routeLegend = showRouteKeys && typeof window.buildRouteLegendRows === 'function'
       ? window.buildRouteLegendRows()
       : '';
-    const liquefactionRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.78rem;">Liquefaction Layer</span></div>`;
-    const groundShakingRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(194,65,12,1);height:4px;"></div><span style="font-size:.78rem;">Ground Shaking Layer</span></div>`;
+    const liquefactionRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(245,158,11,1);height:4px;"></div><span style="font-size:.78rem;">Liquefaction</span></div>`;
+    const groundShakingRow = `<div class="legend-row"><div class="legend-line" style="background:rgba(194,65,12,1);height:4px;"></div><span style="font-size:.78rem;">Ground shaking</span></div>`;
     const hazardLegend = !showHazardLayers
       ? ''
       : activeView === 'liquefaction'
@@ -283,11 +283,18 @@
           ? groundShakingRow
           : liquefactionRow + groundShakingRow;
 
+    // Pin icons match the markers (buildEvacMarkerIcon): after a run the
+    // chosen site is the green "BEST" one.
+    const pinRow = (fill, stroke, glyph, label) => (
+      `<div class="legend-row">${window.buildLegendPinSvg(fill, stroke, glyph)}<span style="font-size:.78rem;">${label}</span></div>`
+    );
+
     body.innerHTML = `
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
-        <div class="legend-row"><div class="legend-dot-sm" style="background:#06b6d4;"></div><span style="font-size:.78rem;">Your Location</span></div>
-        <div class="legend-row"><div class="legend-dot-sm" style="background:#f59e0b;"></div><span style="font-size:.78rem;">Evacuation Site</span></div>
+        ${window.buildPinLegendRow('start')}
+        ${showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Best evacuation site') : ''}
+        ${pinRow('#f59e0b', '#9a3412', 'house', 'Evacuation site')}
         ${hazardLegend}
       </div>`;
   }

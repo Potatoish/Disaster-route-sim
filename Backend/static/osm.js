@@ -5,7 +5,11 @@
 // eye finds first (px at zoom scale 1; the edge adds 1px per side).
 const ROUTE_BEST_WEIGHT = 5;
 const ROUTE_EDGE_EXTRA_WEIGHT = 2;
-const ROUTE_EDGE_COLORS = { '#22c55e': '#15803d', '#ef4444': '#991b1b' };
+// Sky blue, not green: red-green colour-blind viewers can't tell green from
+// the orange and red flood fills, and blue stays distinct from all three
+// (and on satellite imagery). Lists, legend, labels and the PDF use it too.
+const ROUTE_BEST_COLOR = '#0ea5e9';
+const ROUTE_EDGE_COLORS = { [ROUTE_BEST_COLOR]: '#0c4a6e', '#ef4444': '#991b1b' };
 const ROUTE_DASHED_WEIGHT = 3.5;
 const HAZARD_PANE = 'hazardPane';
 // Available and eliminated routes are drawn as capsule dashes, each ringed
@@ -87,7 +91,7 @@ function formatDistanceKm(distanceMeters) {
 }
 
 function getRouteColor(category) {
-  if (category === 'best') return '#22c55e';
+  if (category === 'best') return ROUTE_BEST_COLOR;
   if (category === 'available') return '#8b5cf6';
   return '#ef4444';
 }
@@ -362,7 +366,7 @@ async function renderRoutesOnRoads({
   mapLayers.routeGroups = [];
 
   const CFG = {
-    best: { color: '#22c55e', weight: ROUTE_BEST_WEIGHT, opacity: 1 },
+    best: { color: ROUTE_BEST_COLOR, weight: ROUTE_BEST_WEIGHT, opacity: 1 },
     available: { color: '#8b5cf6', weight: ROUTE_DASHED_WEIGHT, opacity: 1 },
     eliminated: { color: '#ef4444', weight: ROUTE_DASHED_WEIGHT, opacity: 0.9 },
   };

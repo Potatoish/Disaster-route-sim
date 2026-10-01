@@ -55,6 +55,10 @@
         </div>
       </div>
       <div class="panel-head-sub">Configure and run ACO route simulation</div>
+      <div class="panel-barangay">
+        <span class="panel-barangay-label" id="panelBarangayLabel">Barangay</span>
+        <div class="panel-barangay-seg" id="panelBarangaySwitch" role="group" aria-labelledby="panelBarangayLabel"></div>
+      </div>
       <span class="sr-only" id="statusTxt" role="status" aria-live="polite">Ready</span>
     </div>
 
@@ -259,14 +263,25 @@
         <button class="msim-icon-btn" type="button" onclick="goToHomepageForNewScope()" aria-label="Back to home">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
         </button>
-        <div class="msim-topbar-text">
-          <div class="msim-topbar-title" id="msimTitle">Simulator</div>
-          <div class="msim-topbar-sub" id="msimSubtitle">Location</div>
-        </div>
+        <button class="msim-topbar-text" id="msimBarangayBtn" type="button" onclick="toggleMobileBarangayMenu()" aria-haspopup="dialog" aria-expanded="false" aria-controls="msimBarangayMenu">
+          <span class="msim-topbar-title-row">
+            <span class="msim-topbar-title" id="msimTitle">Simulator</span>
+            <svg class="msim-topbar-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+          <span class="msim-topbar-sub" id="msimSubtitle">Location</span>
+        </button>
         <button class="msim-icon-btn msim-icon-btn--boxed" id="msimLayersBtn" type="button" onclick="openMobileLayers()" aria-label="Map layers" aria-haspopup="dialog" aria-expanded="false" aria-controls="msimLayers">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 3 8.5l9 4.5 9-4.5L12 4Z"/><path d="m3 12.5 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>
         </button>
       </header>
+
+      <!-- Barangay switcher, opened from the top bar's title. -->
+      <div class="msim-bgy-scrim" id="msimBarangayScrim" hidden onclick="closeMobileBarangayMenu()"></div>
+      <section class="msim-bgy-menu" id="msimBarangayMenu" role="dialog" aria-labelledby="msimBarangayMenuTitle" hidden>
+        <h2 class="msheet-label" id="msimBarangayMenuTitle">Barangay</h2>
+        <div class="msim-bgy-options" id="msimBarangayOptions"></div>
+        <p class="msim-bgy-note" id="msimBarangayNote" hidden>Switching clears your pins and routes.</p>
+      </section>
 
       <div class="msim-center-pin" id="msimCenterPin" hidden aria-hidden="true">
         <span class="msim-center-pin-dot"></span>
@@ -283,10 +298,22 @@
           </button>
         </div>
         <div class="msim-map-group">
+          <button type="button" class="msim-map-btn" id="msimRecenterBtn" onclick="recenterMap()" aria-label="Recenter map">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
           <button type="button" class="msim-map-btn" id="msimLocateBtn" onclick="locateMobileUser()" aria-label="Go to my location">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
           </button>
         </div>
+      </div>
+
+      <!-- The legend, bottom-left above the sheet; its header folds it. -->
+      <div class="msim-maplegend" id="msimMapLegend" hidden>
+        <button type="button" class="msim-maplegend-toggle" id="msimMapLegendToggle" onclick="toggleMobileMapLegend()" aria-expanded="true" aria-controls="msimMapLegendBody">
+          <span>Legend</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="msim-maplegend-body" id="msimMapLegendBody"></div>
       </div>
 
       <section class="msheet" id="msimSheet" aria-label="Simulation panel" data-snap="peek">
@@ -441,11 +468,6 @@
             <button type="button" data-flood-filter="moderate" onclick="setFloodHazardOverlayMode('moderate')"><span class="swatch" style="background:rgba(249,115,22,.90)"></span>Medium</button>
             <button type="button" data-flood-filter="high" onclick="setFloodHazardOverlayMode('high')"><span class="swatch" style="background:rgba(225,29,72,.94)"></span>High</button>
           </div>
-        </div>
-
-        <div id="msimLayersLegendWrap" hidden>
-          <h3 class="msheet-label">Legend</h3>
-          <div class="msim-legend" id="msimLayersLegend"></div>
         </div>
 
         <button class="mbtn mbtn--primary mbtn--block msim-layers-done" type="button" onclick="closeMobileLayers()">Done</button>

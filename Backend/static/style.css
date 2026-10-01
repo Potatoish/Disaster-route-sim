@@ -220,6 +220,66 @@ body.dark .left-panel {
   flex-shrink: 0;
 }
 
+/* Barangay toggle (syncBarangaySwitch in script.js). */
+/* The toggle drops under its label when the column is too narrow for both. */
+.panel-barangay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 12px;
+}
+
+.panel-barangay-label {
+  flex: none;
+  font-family: 'DM Mono', monospace;
+  font-size: .7rem;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.panel-barangay-seg {
+  display: flex;
+  flex: 1 1 190px;
+  gap: 3px;
+  min-width: 0;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.panel-barangay-seg button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 .8rem/1.2 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.panel-barangay-seg button:hover:not(:disabled):not([aria-pressed="true"]) {
+  color: var(--text);
+}
+
+.panel-barangay-seg button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .14);
+}
+
+.panel-barangay-seg button:disabled {
+  cursor: default;
+  opacity: .55;
+}
+
 .panel-body {
   flex: 1;
   overflow-y: auto;
@@ -933,11 +993,13 @@ body.dark .run-btn:hover {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='8'%3E%3Cg fill='none' stroke-linecap='round' stroke-dasharray='5 6'%3E%3Cpath d='M4 4H24' stroke='%231c1917' stroke-width='5.5'/%3E%3Cpath d='M4 4H24' stroke='%23ef4444' stroke-width='3'/%3E%3C/g%3E%3C/svg%3E");
 }
 
-.legend-dot-sm {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
+/* A small copy of the S/E pin or evacuation-site marker (buildLegendPinSvg),
+   centered under the 22px route lines above it. */
+.legend-pin {
+  flex: none;
+  width: 14px;
+  height: 17px;
+  margin: 0 4px;
 }
 
 /* Prompt shown over the map while a start/destination pin is being placed,
@@ -2039,7 +2101,7 @@ body.dark .emergency-modal {
   stroke-linejoin: round;
 }
 
-.route-eta--best svg { color: #16a34a; }
+.route-eta--best svg { color: #0284c7; }
 .route-eta--available svg { color: #7c3aed; }
 .route-eta--eliminated svg { color: #dc2626; }
 
@@ -2113,6 +2175,35 @@ body.dark .leaflet-popup-close-button {
 
 .leaflet-control-zoom a:hover {
   background: var(--map-ui-bg) !important;
+}
+
+/* Recenter (recenterMap in script.js), under the zoom buttons and drawn
+   like them. */
+.map-recenter-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--map-ui-bg-soft);
+  color: var(--map-ui-text);
+  cursor: pointer;
+}
+
+.map-recenter-btn:hover {
+  background: var(--map-ui-bg);
+}
+
+.map-recenter-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .leaflet-control-layers-expanded {
@@ -2238,6 +2329,16 @@ body.dark .leaflet-popup-close-button {
     line-height: 44px !important;
   }
 
+  .map-recenter-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .map-recenter-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
   .eqtab,
   .flood-filter-buttons button {
     padding: 7px 10px;
@@ -2248,7 +2349,8 @@ body.dark .leaflet-popup-close-button {
   .card-action-btn,
   .panel-back-btn,
   .pin-input,
-  .earthquake-evac-btn {
+  .earthquake-evac-btn,
+  .panel-barangay-seg button {
     min-height: 44px;
   }
 
@@ -2601,21 +2703,158 @@ body.dark .leaflet-popup-close-button {
   color: var(--map-ui-text);
 }
 
+/* The barangay name, which opens the barangay switcher. */
 .msim-topbar-text {
   flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msim-topbar-text:hover:not(:disabled),
+.msim-topbar-text[aria-expanded="true"] {
+  background: var(--map-ui-chip);
+}
+
+.msim-topbar-text:disabled {
+  cursor: default;
+}
+
+.msim-topbar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
 }
 
 .msim-topbar-title {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   font: 800 .94rem/1.2 var(--font-body);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+.msim .msim-topbar-chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--map-ui-muted);
+  transition: transform .18s ease;
+}
+
+.msim-topbar-text[aria-expanded="true"] .msim-topbar-chevron {
+  transform: rotate(180deg);
+}
+
+.msim-topbar-text:disabled .msim-topbar-chevron {
+  opacity: .4;
+}
+
 .msim-topbar-sub {
+  display: block;
   color: var(--map-ui-muted);
   font: 500 .74rem/1.25 var(--font-body);
+}
+
+/* Barangay switcher: a card dropped from the title, over a clear scrim that
+   closes it on an outside tap (without that tap also reaching the map). */
+.msim-bgy-scrim {
+  position: fixed;
+  z-index: 226;
+  inset: 0;
+}
+
+.msim-bgy-menu {
+  position: fixed;
+  z-index: 227;
+  top: calc(62px + env(safe-area-inset-top, 0px));
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  width: min(300px, calc(100% - 16px));
+  padding: 14px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 14px 32px rgba(2, 8, 23, .28);
+  color: var(--text);
+  font-family: var(--font-body);
+  animation: msimMenuIn .16s var(--msim-ease);
+}
+
+@keyframes msimMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.msim-bgy-menu .msheet-label {
+  margin: 0 4px 8px;
+}
+
+.msim-bgy-options {
+  display: grid;
+  gap: 6px;
+}
+
+.msim-bgy-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msim-bgy-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.msim-bgy-option .msim-bgy-pin {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+
+.msim-bgy-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 700 .94rem/1.25 var(--font-body);
+}
+
+.msim-bgy-name span {
+  display: block;
+  color: var(--muted);
+  font: 500 .74rem/1.3 var(--font-body);
+}
+
+.msim-bgy-option .msim-bgy-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+  stroke-width: 2.4;
+}
+
+.msim-bgy-note {
+  margin: 10px 4px 2px;
+  color: var(--muted);
+  font: 500 .78rem/1.4 var(--font-body);
 }
 
 .msim-icon-btn {
@@ -2763,6 +3002,131 @@ body.dark .leaflet-popup-close-button {
 
 @keyframes msimLocating {
   to { transform: rotate(360deg); }
+}
+
+/* The legend on the map: bottom-left, riding above the sheet like the
+   buttons opposite it. Small and see-through so it covers little of the
+   map; its header folds it down to just "Legend" (mobile-sim.js remembers
+   that per browser). */
+.msim-maplegend {
+  position: fixed;
+  z-index: 212;
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--sheet-h, 0px) + 24px);
+  max-width: min(210px, calc(100vw - 92px));
+  padding: 0 9px 7px;
+  border: 1px solid var(--map-ui-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--map-ui-bg) 74%, transparent);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .14);
+  backdrop-filter: blur(6px);
+  color: var(--map-ui-text);
+  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
+}
+
+.msim-maplegend.is-folded {
+  padding-bottom: 0;
+}
+
+#appShell.msim-legend-hidden .msim-maplegend {
+  opacity: 0;
+  visibility: hidden;
+  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
+}
+
+.msim-maplegend-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--map-ui-muted);
+  font: 800 .64rem/1 var(--font-body);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* 26px tall, tapped as 44. */
+.msim-maplegend-toggle::after {
+  content: "";
+  position: absolute;
+  inset: calc((44px - 100%) / -2) -9px;
+}
+
+.msim-maplegend-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform .18s ease;
+}
+
+.msim-maplegend.is-folded .msim-maplegend-toggle svg {
+  transform: rotate(180deg);
+}
+
+.msim-maplegend-body,
+.msim-maplegend-body > div:not(.legend-row) {
+  display: grid;
+  gap: 3px;
+  margin: 0 !important;
+}
+
+.msim-maplegend .legend-row {
+  gap: 6px;
+  margin: 0;
+  color: var(--map-ui-text);
+}
+
+.msim-maplegend .legend-row span {
+  font-size: .74rem !important;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.msim-maplegend .legend-line {
+  width: 20px;
+}
+
+.msim-maplegend .legend-line--available,
+.msim-maplegend .legend-line--eliminated {
+  width: 22px;
+  height: 7px;
+  margin-right: -2px;
+}
+
+.msim-maplegend .legend-pin {
+  margin: 0 3px;
+}
+
+/* Low / Medium / High on one line under a caption. */
+.msim-legend-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 9px;
+}
+
+.msim-legend-caption {
+  margin-top: 2px;
+  color: var(--map-ui-muted);
+  font: 800 .6rem/1.4 var(--font-body);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.msim-maplegend .msim-legend-levels .legend-row {
+  gap: 4px;
+}
+
+.msim-legend-swatch {
+  flex: none;
+  width: 12px;
+  height: 10px;
+  border-radius: 3px;
 }
 
 /* The bottom sheet. Its height is --sheet-h (peek, half, full, or wherever a
@@ -3365,13 +3729,15 @@ body.dark .leaflet-popup-close-button {
   width: 24px;
   height: 5px;
   border-radius: 3px;
-  background: #22c55e;
+  background: #0ea5e9;
+  box-shadow: 0 0 0 1px #0c4a6e;
 }
 
-.mroute-swatch--best-unsafe { background: #ef4444; }
-.mroute-swatch--available { background: #8b5cf6; }
+.mroute-swatch--best-unsafe { background: #ef4444; box-shadow: 0 0 0 1px #991b1b; }
+.mroute-swatch--available { background: #8b5cf6; box-shadow: none; }
 .mroute-swatch--eliminated {
   background: repeating-linear-gradient(90deg, #ef4444 0 6px, transparent 6px 10px);
+  box-shadow: none;
 }
 
 .mroute-text {
@@ -3596,46 +3962,6 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   background: linear-gradient(90deg, #facc15 0 34%, #f97316 34% 67%, #e11d48 67%);
 }
 
-/* The legend reuses the map legend's rows (script.js / earthquake.js), set
-   larger for reading on a phone. */
-.msim-legend {
-  display: grid;
-  gap: 10px;
-}
-
-.msim-legend > div:not(.legend-row) {
-  display: grid;
-  gap: 10px;
-  margin: 0 !important;
-}
-
-.msim-legend .legend-row {
-  gap: 12px;
-  margin: 0;
-  color: var(--text);
-}
-
-.msim-legend .legend-row span {
-  font-size: .94rem !important;
-}
-
-.msim-legend .legend-line {
-  width: 26px;
-}
-
-.msim-legend .legend-dot-sm {
-  width: 14px;
-  height: 14px;
-  margin: 0 6px;
-}
-
-.msim-legend-swatch {
-  flex: none;
-  width: 26px;
-  height: 14px;
-  border-radius: 4px;
-}
-
 .msim-layers-done {
   margin-top: 22px;
 }
@@ -3644,10 +3970,12 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 #appShell.msim-dragging .msheet,
 #appShell.msim-dragging .msim-center-pin,
 #appShell.msim-dragging .msim-map-controls,
+#appShell.msim-dragging .msim-maplegend,
 #appShell.msim-dragging .leaflet-bottom,
 #appShell.msim-instant .msheet,
 #appShell.msim-instant .msim-center-pin,
 #appShell.msim-instant .msim-map-controls,
+#appShell.msim-instant .msim-maplegend,
 #appShell.msim-instant .leaflet-bottom {
   transition: none !important;
 }
@@ -3674,6 +4002,10 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   .msim-center-pin-dot,
   .msim-map-controls,
   #appShell.msim-controls-hidden .msim-map-controls,
+  .msim-maplegend,
+  #appShell.msim-legend-hidden .msim-maplegend,
+  .msim-maplegend-toggle svg,
+  .msim .msim-topbar-chevron,
   .msim-scrim,
   .msim-layers,
   .maccordion summary svg {
@@ -3681,7 +4013,8 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   }
 
   .msim-center-pin.is-checking .msim-center-pin-img,
-  .msim-map-btn.is-busy svg {
+  .msim-map-btn.is-busy svg,
+  .msim-bgy-menu {
     animation: none;
   }
 }
@@ -3715,6 +4048,7 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   .earthquake-view-switcher,
   .map-legend,
   .leaflet-control-zoom,
+  .map-recenter-control,
   .leaflet-control-layers {
     display: none !important;
   }
