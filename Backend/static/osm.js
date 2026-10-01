@@ -5,11 +5,10 @@
 // eye finds first (px at zoom scale 1; the edge adds 1px per side).
 const ROUTE_BEST_WEIGHT = 5;
 const ROUTE_EDGE_EXTRA_WEIGHT = 2;
-// Sky blue, not green: red-green colour-blind viewers can't tell green from
-// the orange and red flood fills, and blue stays distinct from all three
-// (and on satellite imagery). Lists, legend, labels and the PDF use it too.
-const ROUTE_BEST_COLOR = '#0ea5e9';
-const ROUTE_EDGE_COLORS = { [ROUTE_BEST_COLOR]: '#0c4a6e', '#ef4444': '#991b1b' };
+// Green (the user tried sky blue and kept green). The legend and the PDF map
+// use it too.
+const ROUTE_BEST_COLOR = '#22c55e';
+const ROUTE_EDGE_COLORS = { [ROUTE_BEST_COLOR]: '#15803d', '#ef4444': '#991b1b' };
 const ROUTE_DASHED_WEIGHT = 3.5;
 const HAZARD_PANE = 'hazardPane';
 // Available and eliminated routes are drawn as capsule dashes, each ringed

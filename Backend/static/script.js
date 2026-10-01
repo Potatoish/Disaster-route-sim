@@ -2153,8 +2153,7 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
 // drawn solid red (createRouteGroup in osm.js), and the legend says so.
 function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   const row = (swatch, label) => `<div class="legend-row">${swatch}<span style="font-size:.78rem;">${label}</span></div>`;
-  // The solid best route keeps its darker edge here too (ROUTE_EDGE_COLORS).
-  const bestLine = color => `<div class="legend-line" style="background:${color};height:4px;box-shadow:0 0 0 1px ${getRouteEdgeColor(color)};"></div>`;
+  const bestLine = color => `<div class="legend-line" style="background:${color};height:4px;"></div>`;
   const eliminatedRow = row('<div class="legend-line legend-line--eliminated"></div>', 'Eliminated route');
   const noSafeRoute = routes.length > 0 && routes.every(route => route.category === 'eliminated');
 
@@ -3901,8 +3900,7 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
   ctx.lineCap = 'round';
 
   // Same slim line as the map (addRouteCasing in osm.js): a thin edge in a
-  // darker shade of the route color, not a wide band covering the road. The
-  // color comes from osm.js, not route.color (the backend still sends green).
+  // darker shade of the route color, not a wide band covering the road.
   const routeColor = route?.category === 'eliminated' ? '#ef4444' : ROUTE_BEST_COLOR;
   ctx.strokeStyle = getRouteEdgeColor(routeColor);
   ctx.lineWidth = 7;

@@ -2101,7 +2101,7 @@ body.dark .emergency-modal {
   stroke-linejoin: round;
 }
 
-.route-eta--best svg { color: #0284c7; }
+.route-eta--best svg { color: #16a34a; }
 .route-eta--available svg { color: #7c3aed; }
 .route-eta--eliminated svg { color: #dc2626; }
 
@@ -3729,15 +3729,13 @@ body.dark .leaflet-popup-close-button {
   width: 24px;
   height: 5px;
   border-radius: 3px;
-  background: #0ea5e9;
-  box-shadow: 0 0 0 1px #0c4a6e;
+  background: #22c55e;
 }
 
-.mroute-swatch--best-unsafe { background: #ef4444; box-shadow: 0 0 0 1px #991b1b; }
-.mroute-swatch--available { background: #8b5cf6; box-shadow: none; }
+.mroute-swatch--best-unsafe { background: #ef4444; }
+.mroute-swatch--available { background: #8b5cf6; }
 .mroute-swatch--eliminated {
   background: repeating-linear-gradient(90deg, #ef4444 0 6px, transparent 6px 10px);
-  box-shadow: none;
 }
 
 .mroute-text {
