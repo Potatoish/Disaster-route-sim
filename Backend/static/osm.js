@@ -1,32 +1,54 @@
-// The solid best route is a slim line with a thin edge in a darker shade of
-// its own color, like a navigation app's route: it sits inside the road
-// instead of covering it, and the edge keeps it readable over the hazard
-// fills. It is still heavier than the dashed routes, so it is the line the
-// eye finds first (px at zoom scale 1; the edge adds 1px per side).
+// The best and eliminated routes are solid slim lines with a thin edge in a
+// darker shade of their own color, like a navigation app's route: it sits
+// inside the road instead of covering it, and the edge keeps it readable over
+// the hazard fills. The best route is heavier than the others so it is the
+// line the eye finds first (px at zoom scale 1; the edge adds 1px per side).
 const ROUTE_BEST_WEIGHT = 5;
+const ROUTE_OTHER_WEIGHT = 3.5;
 const ROUTE_EDGE_EXTRA_WEIGHT = 2;
+// Available routes are dotted like the homepage's pheromone trails, but in
+// the best route's style (per the user): fully opaque gray dots, each ringed
+// in a darker edge (the edge stroke, dotted the same way). A picked one firms
+// up into the solid edged line (getFocusedRouteVisual in script.js). Dot +
+// gap in px at zoom scale 1; a near-zero dash with round caps draws a dot as
+// wide as the line.
+const ROUTE_TRAIL_WEIGHT = 4;
+const ROUTE_TRAIL_OPACITY = 1;
+const ROUTE_TRAIL_DOT = 0.1;
+const ROUTE_TRAIL_GAP = 7;
 // Green (the user tried sky blue and kept green). The legend and the PDF map
 // use it too.
 const ROUTE_BEST_COLOR = '#22c55e';
-const ROUTE_EDGE_COLORS = { [ROUTE_BEST_COLOR]: '#15803d', '#ef4444': '#991b1b' };
-const ROUTE_DASHED_WEIGHT = 3.5;
-const HAZARD_PANE = 'hazardPane';
-// Available and eliminated routes are drawn as capsule dashes, each ringed
-// in a dark casing sharing its dash pattern, so the solid
-// best route stands apart and the dashes still read over the flood fills.
-// Pixel lengths at zoom scale 1; eliminated dashes sit closer together.
-const ROUTE_DASHES = {
-  available: { length: 10, gap: 14 },
-  eliminated: { length: 12, gap: 10 },
+// Slate gray, like a map app's alternative routes, so the green best route
+// is the one that stands out and the map carries one color fewer (the user
+// found violet too loud next to it).
+const ROUTE_AVAILABLE_COLOR = '#64748b';
+// When no route is safe, the "Best" one is bright red and the other
+// eliminated routes a darker brick red, so the two read apart (per the user).
+const ROUTE_BEST_UNSAFE_COLOR = '#ef4444';
+const ROUTE_ELIMINATED_COLOR = '#991b1b';
+const ROUTE_EDGE_COLORS = {
+  [ROUTE_BEST_COLOR]: '#15803d',
+  [ROUTE_AVAILABLE_COLOR]: '#334155',
+  [ROUTE_BEST_UNSAFE_COLOR]: '#991b1b',
+  [ROUTE_ELIMINATED_COLOR]: '#450a0a',
 };
-const ROUTE_DASH_CASING_COLOR = '#1c1917';
-const ROUTE_DASH_CASING_OPACITY = 0.75;
-const ROUTE_DASH_CASING_EXTRA_WEIGHT = 2.5;
+// On the satellite base map the dark imagery swallows the slate-gray and
+// brick-red lines, so those two switch to light shades there, keeping a dark
+// edge; the picked route's marching dash (white elsewhere) turns dark on
+// them so it still shows.
+const ROUTE_SATELLITE_COLORS = {
+  [ROUTE_AVAILABLE_COLOR]: { line: '#e2e8f0', edge: '#334155', dash: '#334155' },
+  [ROUTE_ELIMINATED_COLOR]: { line: '#fca5a5', edge: '#7f1d1d', dash: '#7f1d1d' },
+};
+// Whether the satellite base map is on; set by script.js (onBaseMapChange).
+let isSatelliteBaseMap = false;
+const HAZARD_PANE = 'hazardPane';
 // The map shows only this many routes (best first); the others appear only
 // while picked from the results panel (setRouteGroupShown).
 const MAP_ROUTES_SHOWN = 3;
 // Width of the invisible stroke over each route that takes hovers and taps,
-// so a thin or dashed line (its gaps don't catch the pointer) is easy to hit.
+// so a thin line is easy to hit.
 const ROUTE_HIT_WEIGHT = 18;
 
 // Leaflet line widths are fixed in screen pixels, so zooming in leaves a
@@ -37,22 +59,97 @@ function getRouteZoomScale(map) {
   return Math.min(1.5, Math.max(1, 1 + (zoom - 15.5) * 0.2));
 }
 
-// null for the solid best route. Scales with getRouteZoomScale like the line
-// widths, so dashes don't merge as the strokes widen. Route strokes are drawn
-// with noClip: Leaflet otherwise trims a line to the visible area, so after
-// every pan it starts at a new edge and the dash pattern jumps along it.
-function getRouteDashArray(category, zoomScale = 1) {
-  const dash = ROUTE_DASHES[category];
-  return dash ? `${dash.length * zoomScale} ${dash.gap * zoomScale}` : null;
-}
-
 function getRouteEdgeColor(color) {
-  return ROUTE_EDGE_COLORS[String(color || '').toLowerCase()] || ROUTE_DASH_CASING_COLOR;
+  const key = String(color || '').toLowerCase();
+  return ROUTE_EDGE_COLORS[key] || key;
 }
 
-// Width the casing adds around a route's line, both sides together.
-function getRouteCasingExtraWeight(dashKey) {
-  return ROUTE_DASHES[dashKey] ? ROUTE_DASH_CASING_EXTRA_WEIGHT : ROUTE_EDGE_EXTRA_WEIGHT;
+// Dot pattern of a trail line, spaced out as the line widens with zoom.
+function getRouteTrailDashArray(zoomScale = 1) {
+  return `${ROUTE_TRAIL_DOT} ${ROUTE_TRAIL_GAP * zoomScale}`;
+}
+
+// ---- one line per shared road ----
+// Routes often run down the same streets. Drawn whole, they stack into a
+// tangle of overlapping lines; instead each route on the map draws only the
+// stretches no route ahead of it already draws -- the best route first, then
+// the safe alternatives, then the eliminated ones, each by route number -- so
+// a shared road shows one line, the best route's whenever it is one of them
+// (per the user). A picked route shows its whole path again
+// (showRouteGroupFullPath). Routes run along the same graph edges, so a
+// shared stretch has the same coordinates in every route.
+
+function routeSegmentKey(a, b) {
+  const first = `${a.lat.toFixed(6)},${a.lng.toFixed(6)}`;
+  const second = `${b.lat.toFixed(6)},${b.lng.toFixed(6)}`;
+  return first < second ? `${first}|${second}` : `${second}|${first}`;
+}
+
+function assignSharedRouteRuns(groups) {
+  const rank = group => (group.isBest ? 0 : group.category === 'available' ? 1 : 2);
+  const drawn = new Set();
+  [...groups]
+    .sort((left, right) => rank(left) - rank(right) || (left.routeNo ?? 99) - (right.routeNo ?? 99))
+    .forEach((group, order) => {
+      group.drawPriority = order;
+      const path = group.fullPath || [];
+      const keys = [];
+      const runs = [];
+      let run = null;
+      for (let index = 1; index < path.length; index += 1) {
+        const key = routeSegmentKey(path[index - 1], path[index]);
+        keys.push(key);
+        if (drawn.has(key)) {
+          run = null;
+          continue;
+        }
+        if (!run) {
+          run = [path[index - 1]];
+          runs.push(run);
+        }
+        run.push(path[index]);
+      }
+      keys.forEach(key => drawn.add(key));
+      group.ownRuns = runs;
+    });
+}
+
+// Stacks the routes so the one drawing a shared road also gets its clicks
+// and hovers there: lowest priority at the bottom, the best route on top.
+function stackRouteGroups(groups) {
+  [...groups]
+    .sort((left, right) => (right.drawPriority ?? 99) - (left.drawPriority ?? 99))
+    .forEach(group => {
+      group.casingLayer?.bringToFront();
+      group.mainLayer?.bringToFront();
+      group.hitLayer?.bringToFront();
+    });
+}
+
+// The whole path (a picked route) or only its own stretches (the default).
+function showRouteGroupFullPath(group, full) {
+  if (!group?.ownRuns || group.showingFullPath === full) return;
+  group.showingFullPath = full;
+  const latlngs = full ? group.fullPath : group.ownRuns;
+  group.casingLayer?.setLatLngs(latlngs);
+  group.mainLayer?.setLatLngs(latlngs);
+}
+
+// A route's line, edge and marching-dash colors on the current base map.
+function getRouteLineColors(color) {
+  const key = String(color || '').toLowerCase();
+  const satellite = isSatelliteBaseMap ? ROUTE_SATELLITE_COLORS[key] : null;
+  return satellite || { line: key, edge: getRouteEdgeColor(key), dash: '#ffffff' };
+}
+
+// Recolors the drawn routes after a base map switch.
+function syncRouteColorsToBaseMap(mapLayers) {
+  (mapLayers.routeGroups || []).forEach(group => {
+    const colors = getRouteLineColors(group.color);
+    group.casingLayer?.setStyle({ color: colors.edge });
+    group.mainLayer?.setStyle({ color: colors.line });
+    group.previewDotsLayer?.setStyle({ color: colors.dash });
+  });
 }
 
 // Hazard overlays get their own pane under Leaflet's overlayPane (z-index
@@ -65,6 +162,26 @@ function ensureHazardPane(map) {
     pane.style.pointerEvents = 'none';
   }
   return HAZARD_PANE;
+}
+
+const MAP_LAYER_FADE_MS = 360;
+
+// Re-runs a one-shot CSS animation on `el` by toggling `className` (the
+// class only ever lives for one run, so re-adding a layer later -- picking a
+// route, say -- never replays it).
+function replayClassAnimation(el, className) {
+  if (!el || prefersReducedMotion()) return;
+  el.classList.remove(className);
+  void el.offsetWidth;
+  el.classList.add(className);
+  window.clearTimeout(el[`_${className}Timer`]);
+  el[`_${className}Timer`] = window.setTimeout(() => el.classList.remove(className), MAP_LAYER_FADE_MS + 60);
+}
+
+// Hazard fills ease in whenever they are drawn (a result, a severity filter,
+// an earthquake lens) instead of popping in.
+function fadeInHazardPane(map) {
+  replayClassAnimation(map?.getPane(HAZARD_PANE), 'is-entering');
 }
 
 // Leaflet's motion is a few per-map options (zoom, fade, marker zoom) plus an
@@ -91,8 +208,8 @@ function formatDistanceKm(distanceMeters) {
 
 function getRouteColor(category) {
   if (category === 'best') return ROUTE_BEST_COLOR;
-  if (category === 'available') return '#8b5cf6';
-  return '#ef4444';
+  if (category === 'available') return ROUTE_AVAILABLE_COLOR;
+  return ROUTE_ELIMINATED_COLOR;
 }
 
 function dedupePath(path) {
@@ -169,15 +286,15 @@ function buildFallbackPath(route) {
   return routePoints.length >= 2 ? routePoints : [];
 }
 
-// dashKey picks the route's ROUTE_DASHES pattern: none for the best route,
-// drawn solid -- green, or red when no safe route exists and the least
-// risky eliminated one is the best -- so it is easy to find among the dashes.
-function createRouteGroup(route, isBest = false) {
+// isBest marks the heavier best route -- green, or red when no safe route
+// exists and the least risky eliminated one is the best. color is the
+// route's own color (getRouteLineColors adjusts it per base map).
+function createRouteGroup(route, isBest = false, color = '') {
   return {
     routeNo: route.display_route_no ?? null,
     category: route.category || '',
     isBest,
-    dashKey: isBest ? null : route.category || '',
+    color,
     route,
     casingLayer: null,
     mainLayer: null,
@@ -208,16 +325,14 @@ function trackRouteLayer(layer, routeGroup, mapLayers, kind) {
 // insertion order alone. Only the interactive focus/highlight state needs an
 // explicit re-stack, handled in script.js via bringToFront().
 //
-// The casing is a slightly wider stroke under the line: a darker shade of its
-// own color for the solid best route, or a dark casing around each dash
-// (ROUTE_DASHES) for the others.
+// The casing is a slightly wider stroke under the line in a darker shade of
+// the route's own color: the thin edge.
 function addRouteCasing(pathCoords, cfg, gMap, mapLayers, routeGroup) {
-  const dashArray = getRouteDashArray(routeGroup.dashKey);
   return trackRouteLayer(L.polyline(pathCoords, {
-    color: dashArray ? ROUTE_DASH_CASING_COLOR : getRouteEdgeColor(cfg.color),
-    opacity: cfg.opacity * (dashArray ? ROUTE_DASH_CASING_OPACITY : 1),
-    weight: cfg.weight + getRouteCasingExtraWeight(routeGroup.dashKey),
-    dashArray,
+    color: getRouteLineColors(cfg.color).edge,
+    opacity: cfg.opacity,
+    weight: cfg.weight + ROUTE_EDGE_EXTRA_WEIGHT,
+    dashArray: cfg.trail ? getRouteTrailDashArray() : null,
     noClip: true,
     lineCap: 'round',
     lineJoin: 'round',
@@ -228,10 +343,12 @@ function addRouteCasing(pathCoords, cfg, gMap, mapLayers, routeGroup) {
 
 function addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
   return trackRouteLayer(L.polyline(pathCoords, {
-    color: cfg.color,
+    color: getRouteLineColors(cfg.color).line,
     opacity: cfg.opacity,
     weight: cfg.weight,
-    dashArray: getRouteDashArray(routeGroup.dashKey),
+    dashArray: cfg.trail ? getRouteTrailDashArray() : null,
+    // Leaflet otherwise trims a line to the visible area, so after every pan
+    // it starts at a new edge and a trail's dots jump along it.
     noClip: true,
     lineCap: 'round',
     lineJoin: 'round',
@@ -256,6 +373,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, routeGroup) {
   if (pathCoords.length === 0) return null;
 
   route.render_path = pathCoords;
+  routeGroup.fullPath = pathCoords;
   addRouteCasing(pathCoords, cfg, gMap, mapLayers, routeGroup);
   addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup);
   return addRouteHitArea(pathCoords, gMap, mapLayers, routeGroup);
@@ -293,52 +411,25 @@ function bindRouteEtaLabel(hitLayer, content, permanent) {
   });
 }
 
-function attachRouteInfo(poly, route, cfg, infoPopup, activeInfoWindowRef, gMap) {
-  const statusLabel = String(route?.status || '').trim();
-  const label = statusLabel
-    ? `${statusLabel} Route`
-    : route.category === 'best'
-    ? 'Best Route'
-    : route.category === 'available'
-    ? 'Available Route'
-    : 'Eliminated Route';
-
-  poly.on('click', ev => {
-    if (typeof window.focusRouteSelection === 'function') {
-      window.focusRouteSelection(route.display_route_no, route.category);
-    }
-
-    const extraRows = Array.isArray(route.info_rows) ? route.info_rows : [];
-    const isEarthquakeRoute = route.simulation_mode === 'earthquake';
-    // One shared "how bad does this route get" row for both hazard types,
-    // plus a hazard-specific breakdown below it -- no raw internal scores.
-    const contextLabel = isEarthquakeRoute ? 'Hazards Crossed' : 'Flood Levels Crossed';
-    const contextValue = isEarthquakeRoute
-      ? (typeof window.formatEarthquakeHazardSummary === 'function' ? window.formatEarthquakeHazardSummary(route) : 'N/A')
-      : (route.display_flood_classes || 'None');
-    const peakRiskValue = typeof window.formatRoutePeakRiskLabel === 'function'
-      ? window.formatRoutePeakRiskLabel(route)
-      : null;
-    if (activeInfoWindowRef.current) activeInfoWindowRef.current.remove();
-    // Top padding keeps the popup clear of the flood filter / lens card and
-    // zoom controls overlaid on the map's top edge.
-    activeInfoWindowRef.current = L.popup({ autoPanPaddingTopLeft: [16, 130] })
-      .setLatLng(ev.latlng)
-      .setContent(infoPopup(label, [
-        ['Route No.', `#${route.display_route_no ?? 'N/A'}`],
-        ['Distance', route.display_distance || formatDistanceKm(route.distance)],
-        // Phones have no hover to show a route's time label, so a tap shows it here.
-        ...(route.display_duration ? [['Walking Time', route.display_duration]] : []),
-        ...(peakRiskValue ? [['Peak Risk', peakRiskValue, cfg.color]] : []),
-        ['Unsafe Distance', route.display_unsafe_distance || '0 m'],
-        ['Unsafe Road Sections', route.display_unsafe_segment_count ?? 0],
-        ['Roads Used', route.display_route_summary || route.path_label || 'N/A'],
-        ['Why This Route', route.display_reason || 'No explanation available'],
-        [contextLabel, contextValue],
-        ...extraRows,
-      ]))
-      .openOn(gMap);
+// Clicking a route line picks it, the same as picking it in the results
+// panel: the other routes dim and it gets the marching dash (createRoutePreview
+// in script.js). Clicking it again lets go. No info popup (per the user); the
+// time label still shows on hover/tap (bindRouteEtaLabel).
+function attachRouteClick(hitLayer, route) {
+  hitLayer.on('click', ev => {
+    // Not also a tap on the map underneath (which can drop a pin).
+    L.DomEvent.stopPropagation(ev);
+    window.toggleRouteFocus?.(route.display_route_no, route.category);
   });
+}
+
+// The routes past the first MAP_ROUTES_SHOWN (by route number, best first):
+// off the map until picked, and the only ones the results panel's "See N
+// more routes" list holds, since the rest can be picked on the map.
+function getRoutesOffMap(routes) {
+  return [...(routes || [])]
+    .sort((left, right) => (left.display_route_no ?? 99) - (right.display_route_no ?? 99))
+    .slice(MAP_ROUTES_SHOWN);
 }
 
 // Draws every route (eliminated -> available -> best, so "best" paints on
@@ -349,10 +440,11 @@ async function renderRoutesOnRoads({
   gMap,
   mapLayers,
   drawPins,
-  infoPopup,
-  activeInfoWindowRef,
   fitOptions = { padding: [36, 36] },
   fitPoints = [],
+  // false: the caller fits the map itself (earthquake mode fits once, to
+  // the route, the pin and the hazard extent together).
+  fit = true,
   buildEtaLabel = null,
   afterDrawPins = null,
 }) {
@@ -363,11 +455,13 @@ async function renderRoutesOnRoads({
   mapLayers.routes.forEach(l => l.remove());
   mapLayers.routes = [];
   mapLayers.routeGroups = [];
+  // The new lines (and their labels) fade in together; they stay still.
+  replayClassAnimation(gMap.getContainer(), 'routes-entering');
 
   const CFG = {
     best: { color: ROUTE_BEST_COLOR, weight: ROUTE_BEST_WEIGHT, opacity: 1 },
-    available: { color: '#8b5cf6', weight: ROUTE_DASHED_WEIGHT, opacity: 1 },
-    eliminated: { color: '#ef4444', weight: ROUTE_DASHED_WEIGHT, opacity: 0.9 },
+    available: { color: ROUTE_AVAILABLE_COLOR, weight: ROUTE_TRAIL_WEIGHT, opacity: ROUTE_TRAIL_OPACITY, trail: true },
+    eliminated: { color: ROUTE_ELIMINATED_COLOR, weight: ROUTE_OTHER_WEIGHT, opacity: 0.9 },
   };
   const bestRoute = routes.find(route => route.category === 'best') || routes[0] || null;
   // The best route paints last, on top -- also when no route is safe and it
@@ -377,8 +471,16 @@ async function renderRoutesOnRoads({
 
   for (const route of orderedRoutes) {
     const baseCfg = CFG[route.category] || CFG.eliminated;
-    const cfg = route === bestRoute ? { ...baseCfg, weight: ROUTE_BEST_WEIGHT, opacity: 1 } : baseCfg;
-    const routeGroup = createRouteGroup(route, route === bestRoute);
+    const cfg = route !== bestRoute
+      ? baseCfg
+      : {
+          ...baseCfg,
+          color: route.category === 'eliminated' ? ROUTE_BEST_UNSAFE_COLOR : baseCfg.color,
+          weight: ROUTE_BEST_WEIGHT,
+          opacity: 1,
+          trail: false,
+        };
+    const routeGroup = createRouteGroup(route, route === bestRoute, cfg.color);
 
     const poly = drawFallbackPolyline(
       route,
@@ -390,20 +492,13 @@ async function renderRoutesOnRoads({
 
     if (poly) {
       mapLayers.routeGroups.push(routeGroup);
-      attachRouteInfo(
-        poly,
-        route,
-        cfg,
-        infoPopup,
-        activeInfoWindowRef,
-        gMap
-      );
+      attachRouteClick(poly, route);
     }
   }
 
   const defaultCoords = getRoutePoints(bestRoute);
 
-  if (defaultCoords.length) {
+  if (fit && defaultCoords.length) {
     // A pin off the street stands apart from the line, so the fit takes in
     // the pins (fitPoints) and the destination as well as the route.
     const pinCoords = normalizePathCoordinates([
@@ -413,14 +508,23 @@ async function renderRoutesOnRoads({
     gMap.fitBounds(L.latLngBounds([...defaultCoords, ...pinCoords]), mapMoveOptions(fitOptions));
   }
 
-  // Only the first MAP_ROUTES_SHOWN routes (display order, best first) stay
-  // on the map; script.js shows another only while it is picked.
-  [...mapLayers.routeGroups]
-    .sort((left, right) => (left.routeNo ?? 99) - (right.routeNo ?? 99))
-    .forEach((group, index) => {
-      group.hiddenByDefault = index >= MAP_ROUTES_SHOWN;
-      if (group.hiddenByDefault) setRouteGroupShown(group, gMap, false);
-    });
+  // Only the first MAP_ROUTES_SHOWN routes stay on the map; script.js shows
+  // another only while it is picked.
+  const offMapRoutes = new Set(getRoutesOffMap(routes));
+  mapLayers.routeGroups.forEach(group => {
+    group.hiddenByDefault = offMapRoutes.has(group.route);
+    if (group.hiddenByDefault) setRouteGroupShown(group, gMap, false);
+  });
+
+  // Routes on the map draw one line per shared road (assignSharedRouteRuns);
+  // the ones off it appear whole when picked.
+  const shownGroups = mapLayers.routeGroups.filter(group => !group.hiddenByDefault);
+  assignSharedRouteRuns(shownGroups);
+  shownGroups.forEach(group => {
+    group.showingFullPath = true;
+    showRouteGroupFullPath(group, false);
+  });
+  stackRouteGroups(shownGroups);
 
   // After the fit: a permanent label opens where the line's middle is then.
   if (typeof buildEtaLabel === 'function') {

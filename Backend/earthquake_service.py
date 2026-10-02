@@ -1,3 +1,4 @@
+import random
 from threading import RLock
 import time
 
@@ -10,9 +11,11 @@ from earthquake_data import (
     is_supported_earthquake_barangay,
 )
 from osm_routing import (
+    FINAL_ROUTES_TO_SHOW,
     HAZARD_THRESHOLD,
     NUM_ITERATIONS,
     UNKNOWN_HAZARD_LEVEL,
+    add_alternative_routes,
     add_road_access_nodes,
     build_elimination_reason,
     build_hazard_coverage_area,
@@ -34,13 +37,19 @@ from osm_routing import (
     path_to_coords,
     resolve_route_edge_records,
     restrict_graph_to_hazard_coverage,
-    route_path_signature,
     route_pheromone_score,
-    run_aco,
+    route_search_seed,
+    safety_sort_key,
+    finish_candidate_pool,
+    start_aco,
     summarize_hazard_data_coverage,
     warm_static_caches,
 )
-from simulation_progress import reset_progress
+from simulation_progress import bump_progress, reset_progress
+
+# Each site's main colony is compared on its few safest routes, evaluated the
+# earthquake way, to pick the site; only that site gets alternative colonies.
+SITE_PICK_ROUTES_PER_SITE = 5
 
 _EARTHQUAKE_GRAPH_CACHE = {}
 _EARTHQUAKE_GRAPH_LOCK = RLock()
@@ -232,10 +241,26 @@ def _build_route_maxima(resolved_edges):
     return maxima
 
 
-def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
+def _resolve_route_edges(base_graph, route):
     resolved_edges = hydrate_route_edge_records(base_graph, route.get("path_edges"))
     if not resolved_edges:
         resolved_edges = resolve_route_edge_records(base_graph, route.get("path", []))
+    return resolved_edges
+
+
+def _add_route_geometry(base_graph, route):
+    """The line, street list and turn steps -- only for routes that will be
+    shown, since a colony's candidate pool can hold over a hundred routes."""
+    resolved_edges = _resolve_route_edges(base_graph, route)
+    path = route.get("path", [])
+    route["path_coordinates"] = path_to_coords(base_graph, path, resolved_edges=resolved_edges)
+    route["street_path"] = extract_route_street_path(base_graph, path, resolved_edges=resolved_edges)
+    route["turn_steps"] = extract_route_turn_steps(base_graph, path, resolved_edges=resolved_edges)
+    return route
+
+
+def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
+    resolved_edges = _resolve_route_edges(base_graph, route)
 
     total_distance = 0.0
     risk_distance = 0.0
@@ -295,21 +320,10 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
     return {
         "path": list(route.get("path", [])),
         "path_edges": list(route.get("path_edges", [])),
-        "path_coordinates": path_to_coords(
-            base_graph,
-            route.get("path", []),
-            resolved_edges=resolved_edges,
-        ),
-        "street_path": extract_route_street_path(
-            base_graph,
-            route.get("path", []),
-            resolved_edges=resolved_edges,
-        ),
-        "turn_steps": extract_route_turn_steps(
-            base_graph,
-            route.get("path", []),
-            resolved_edges=resolved_edges,
-        ),
+        "path_coordinates": [],
+        "street_path": [],
+        "turn_steps": [],
+        "found_by": route.get("found_by", "aco"),
         "distance": round(total_distance, 2),
         "risk_distance": round(risk_distance, 2),
         "unsafe_distance": round(unsafe_distance, 2),
@@ -382,18 +396,10 @@ def _build_view_summary(view_key, routes, evacuation_sites):
     }
 
 
-def _restrict_to_best_site(candidates):
-    if not candidates:
-        return candidates
-
-    best = min(candidates, key=display_sort_key)
-    best_site_id = best["destination_id"]
-    return [route for route in candidates if route["destination_id"] == best_site_id]
-
-
-def _finalize_earthquake_view_routes(start_name, routes, evacuation_sites, view_key):
+def _finalize_earthquake_view_routes(base_graph, start_name, routes, evacuation_sites, view_key, aco_stats):
     final_routes = label_display_routes(sorted(routes, key=display_sort_key))
     for route in final_routes:
+        _add_route_geometry(base_graph, route)
         route["path_label"] = f"{start_name} -> {route['destination_name']}"
         route["segments"] = max(1, len(route.get("path", [])) - 1)
 
@@ -403,35 +409,62 @@ def _finalize_earthquake_view_routes(start_name, routes, evacuation_sites, view_
         "view_label": EARTHQUAKE_VIEW_CONFIG[view_key]["label"],
         "routes": final_routes,
         "summary": summary,
+        "aco": aco_stats,
     }
 
 
-def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_nodes, view_key):
+def _evaluate_colony_routes(base_graph, routes, evacuation_site, view_key, edge_pheromone):
+    evaluated = []
+    for route in routes:
+        route_copy = route.copy()
+        route_copy["final_pheromone"] = route_pheromone_score(route_copy.get("path", []), edge_pheromone)
+        evaluated.append(_evaluate_earthquake_route(base_graph, route_copy, evacuation_site, view_key))
+    return evaluated
+
+
+def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_nodes, view_key, seed_parts):
+    """A main ant colony to every reachable site (NUM_ITERATIONS progress
+    steps each). The site whose best route ranks first is the result; only
+    its colony goes on to alternative colonies (one step each) and the full
+    candidate pool. Returns (that site's evaluated candidates, ACO stats)."""
     view_graph = _clone_graph_for_view(base_graph, view_key)
 
-    collected = {}
+    best_pick = None
+    ants_sent = ants_arrived = 0
     for evacuation_site in evacuation_sites:
-        end_node = site_nodes[evacuation_site["id"]]
-        candidate_routes, edge_pheromone = run_aco(view_graph, start_node, end_node)
+        rng = random.Random(route_search_seed(*seed_parts, view_key, evacuation_site["id"]))
+        colony = start_aco(view_graph, start_node, site_nodes[evacuation_site["id"]], rng)
+        ants_sent += colony["stats"]["ants_sent"]
+        ants_arrived += colony["stats"]["ants_arrived"]
+        if not colony["routes"] and colony["baseline"] is None:
+            continue
 
-        for route in candidate_routes:
-            route_key = (evacuation_site["id"], route_path_signature(route))
-            if route_key in collected:
-                continue
+        # Rank this site by its few safest routes (or its shortest path when
+        # no ant got there), evaluated the earthquake way.
+        shortlist = sorted(colony["routes"].values(), key=safety_sort_key)[:SITE_PICK_ROUTES_PER_SITE]
+        if not shortlist:
+            shortlist = [colony["baseline"]]
+        site_best = min(
+            _evaluate_colony_routes(base_graph, shortlist, evacuation_site, view_key, colony["pheromone"]),
+            key=display_sort_key,
+        )
+        if best_pick is None or display_sort_key(site_best) < display_sort_key(best_pick[2]):
+            best_pick = (evacuation_site, colony, site_best)
 
-            route_copy = route.copy()
-            route_copy["final_pheromone"] = route_pheromone_score(
-                route_copy.get("path", []),
-                edge_pheromone,
-            )
-            collected[route_key] = _evaluate_earthquake_route(
-                base_graph,
-                route_copy,
-                evacuation_site,
-                view_key,
-            )
+    alternatives = FINAL_ROUTES_TO_SHOW - 1
+    if best_pick is None:
+        bump_progress(alternatives)
+        return [], None
 
-    return list(collected.values())
+    evacuation_site, colony, _ = best_pick
+    main_sent, main_arrived = colony["stats"]["ants_sent"], colony["stats"]["ants_arrived"]
+    add_alternative_routes(colony, alternatives)
+    candidates = finish_candidate_pool(colony)
+    stats = dict(colony["stats"])
+    stats["sites_searched"] = len(evacuation_sites)
+    stats["ants_sent_all_sites"] = ants_sent + colony["stats"]["ants_sent"] - main_sent
+    stats["ants_arrived_all_sites"] = ants_arrived + colony["stats"]["ants_arrived"] - main_arrived
+    return _evaluate_colony_routes(base_graph, candidates, evacuation_site, view_key, colony["pheromone"]), stats
 
 
 def _collect_road_reachable_evacuation_sites(base_graph, start_node, evacuation_sites, site_nodes):
@@ -605,30 +638,44 @@ def simulate_earthquake(start, barangay_name):
         views = {}
         phase_started = now
         debug_print("[EQ] Phase 2/3: evaluating earthquake views")
-        reset_progress(len(evaluated_sites) * len(EARTHQUAKE_VIEW_CONFIG) * NUM_ITERATIONS)
+        # Progress: per lens, a main colony per site (one step per round) and
+        # the chosen site's alternative colonies; one step to package.
+        reset_progress(
+            len(EARTHQUAKE_VIEW_CONFIG) * (len(evaluated_sites) * NUM_ITERATIONS + FINAL_ROUTES_TO_SHOW - 1) + 1
+        )
+        # Same start (and barangay) -> same ant walks -> same routes.
+        seed_parts = (
+            "earthquake",
+            dataset["canonical_barangay"],
+            float(start_location["lat"]),
+            float(start_location["lng"]),
+        )
         for view_key in EARTHQUAKE_VIEW_CONFIG:
             view_started = time.perf_counter()
             view_label = EARTHQUAKE_VIEW_CONFIG[view_key]["label"]
             debug_print(f"[EQ]   View start: {view_label}")
-            candidates = _collect_view_candidates(
+            candidates, aco_stats = _collect_view_candidates(
                 routing_graph,
                 start_node,
                 evaluated_sites,
                 site_nodes,
                 view_key,
+                seed_parts,
             )
-            candidates = _restrict_to_best_site(candidates)
             views[view_key] = _finalize_earthquake_view_routes(
+                routing_graph,
                 start_location["name"],
                 candidates,
                 evaluated_sites,
                 view_key,
+                aco_stats,
             )
             debug_print(
                 f"[EQ]   View complete: {view_label} in {time.perf_counter() - view_started:.2f}s "
                 f"(routes={len(views[view_key]['routes'])})"
             )
 
+        bump_progress()
         now = time.perf_counter()
         debug_print(f"[EQ] Phase 2/3 complete in {now - phase_started:.2f}s")
         phase_started = now

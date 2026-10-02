@@ -65,6 +65,8 @@
     const varsKey = Array.isArray(vars) ? vars.join(',') : '';
     const cacheKey = `${scope}::${barangay || ''}::${varsKey}`;
 
+    // The promise is what's cached, so a prefetch started during a run (see
+    // runSimulation) and the draw after it share one download.
     if (state.hazardCache.has(cacheKey)) {
       return state.hazardCache.get(cacheKey);
     }
@@ -74,18 +76,22 @@
     if (barangay) query.set('barangay', barangay);
     if (varsKey) query.set('vars', varsKey);
 
-    const response = await fetch(
-      `${getBackendBase()}/flood-hazard-layers?${query.toString()}`
-    );
-    const data = await response.json();
+    const request = (async () => {
+      const response = await fetch(
+        `${getBackendBase()}/flood-hazard-layers?${query.toString()}`
+      );
+      const data = await response.json();
 
-    if (!response.ok || data?.error) {
-      throw new Error(data?.message || 'Failed to load flood hazard layers.');
-    }
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || 'Failed to load flood hazard layers.');
+      }
 
-    const payload = data?.hazard_layers || { type: 'FeatureCollection', features: [] };
-    state.hazardCache.set(cacheKey, payload);
-    return payload;
+      return data?.hazard_layers || { type: 'FeatureCollection', features: [] };
+    })();
+    state.hazardCache.set(cacheKey, request);
+    // A failed download can be tried again next time.
+    request.catch(() => state.hazardCache.delete(cacheKey));
+    return request;
   }
 
   function renderHazardLayers({ map, hazardLayers, visibleVars = null, highlightVar = null }) {
@@ -110,6 +116,7 @@
       { ...hazardLayers, features: sortedFeatures },
       { style: styleForFeature, pane: ensureHazardPane(map) }
     ).addTo(map);
+    fadeInHazardPane(map);
   }
 
   function reset() {

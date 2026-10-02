@@ -16,9 +16,6 @@ let activeInfoWindow = null;
 let selectedRouteFocus = null;
 let workflowFocusSection = null;
 let simulationInProgress = false;
-let backendSimulationBusy = false;
-let backendSimulationStatus = null;
-let backendBusyPollTimer = null;
 let floodHazardOverlayMode = 'all';
 // Barangay is now picked on the homepage (see home.js's quick-start card)
 // and handed off via ?barangay=... -- must match the data-barangay values
@@ -31,13 +28,10 @@ const loaderState = {
   frameId: null,
 };
 const LOADER_FADE_OUT_MS = 260;
-const LOADER_PROGRESS_POLL_MS = 900;
+// style.css's .app grid-template-columns transition (the docked panels).
+const PANEL_SLIDE_MS = 220;
 const LOADER_ROUTE_STAGE_RANGE = [22, 76];
-let loaderProgressPollTimer = null;
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
-// Matches gunicorn's --timeout; simulations legitimately take minutes.
-const SIMULATION_REQUEST_TIMEOUT_MS = 300000;
-const BACKEND_SIMULATION_STATUS_POLL_MS = 2500;
 const HAZARD_SELECTION_CLASSES = ['flood', 'earthquake'];
 const EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE = 'Pinagbuhatan and Sta. Lucia';
 const EARTHQUAKE_SUPPORTED_BARANGAY_PROMPT = 'Pinagbuhatan or Sta. Lucia';
@@ -331,6 +325,20 @@ let pinHintTimer = null;
 // check before asking the backend about a tapped point.
 let barangayBoundaryRings = [];
 
+// Runs `update` inside a same-page view transition (a quick cross-fade of
+// what it changes) where supported and motion is welcome; otherwise as is.
+function withViewTransition(update) {
+  if (typeof document.startViewTransition !== 'function' || prefersReducedMotion()) {
+    update();
+    return;
+  }
+  try {
+    document.startViewTransition(update);
+  } catch (err) {
+    update();
+  }
+}
+
 function applyHazardTheme() {
   const modeKey = document.body.classList.contains('dark') ? 'dark' : 'light';
   const hazardKey = String(selectedHazard || '').trim().toLowerCase();
@@ -351,22 +359,65 @@ function applyHazardTheme() {
   document.body.dataset.hazardTheme = hazardKey;
 }
 
-function getBarangayBoundaryStrokeColor() {
-  const hazardKey = String(selectedHazard || '').trim().toLowerCase();
+// The barangay outline is drawn like the best route (osm.js): a slim line
+// with a thin edge in a darker shade of its own color, a size smaller than
+// the route so the route still reads first (px; the edge adds 1px per side).
+const BARANGAY_BOUNDARY_WEIGHT = 3;
+const BARANGAY_BOUNDARY_EDGE_EXTRA_WEIGHT = 2;
 
-  if (hazardKey === 'earthquake') {
-    return '#f97316';
-  }
+// Line and edge color: one dark navy for every hazard (per the user), so the
+// outline never competes with the orange evacuation pins and hazard fills or
+// adds another color to the map.
+// Navy disappears into the dark satellite imagery, so on that base map the
+// line turns light blue and keeps the navy as its edge.
+const BARANGAY_BOUNDARY_COLORS = { line: '#1e3a8a', edge: '#172554' };
+const BARANGAY_BOUNDARY_SATELLITE_COLORS = { line: '#93c5fd', edge: '#1e3a8a' };
 
-  if (hazardKey === 'flood') {
-    return '#0ea5e9';
-  }
-
-  return '#2563eb';
+// isSatelliteBaseMap (osm.js) says which base map is on.
+function getBarangayBoundaryColors() {
+  return isSatelliteBaseMap ? BARANGAY_BOUNDARY_SATELLITE_COLORS : BARANGAY_BOUNDARY_COLORS;
 }
 
-function getBarangayBoundaryHaloColor() {
-  return '#0f172a';
+// Inline style of a legend route swatch, matching its line on the current
+// base map: solid with a darker edge (the best route a little heavier), or
+// for an available route a row of dots ringed in the edge color, like its
+// trail.
+function routeLegendSwatchStyle(color, kind = '') {
+  const colors = getRouteLineColors(color);
+  if (kind === 'available') {
+    const dot = `${colors.line} 1.4px, ${colors.edge} 1.6px, ${colors.edge} 2.3px, transparent 2.6px`;
+    return `background:radial-gradient(circle, ${dot}) 1px 50% / 7px 100% repeat-x;height:5px;box-shadow:none;`;
+  }
+  return `background:${colors.line};height:${kind ? 3 : 4}px;box-shadow:0 0 0 1px ${colors.edge};`;
+}
+
+function paintLegendSwatch(swatch, colors) {
+  swatch.style.background = colors.line;
+  swatch.style.boxShadow = `0 0 0 1px ${colors.edge}`;
+}
+
+// Recolors the outline, the routes (getRouteLineColors in osm.js) and their
+// legend swatches for the new base map.
+function onBaseMapChange(event) {
+  isSatelliteBaseMap = event.layer === mapBaseLayers?.satellite;
+  const colors = getBarangayBoundaryColors();
+  mapLayers.boundaries.forEach(layer => {
+    if (layer.boundaryRole === 'edge') layer.setStyle({ color: colors.edge });
+    else if (layer.boundaryRole === 'main') layer.setStyle({ color: colors.line });
+  });
+  syncRouteColorsToBaseMap(mapLayers);
+  // Trails gain or lose their satellite rim.
+  syncRouteFocusStyles();
+
+  document.querySelectorAll('.legend-boundary').forEach(swatch => paintLegendSwatch(swatch, colors));
+  document.querySelectorAll('.legend-line--available').forEach(swatch => {
+    swatch.style.cssText = routeLegendSwatchStyle(ROUTE_AVAILABLE_COLOR, 'available');
+  });
+  document.querySelectorAll('.legend-line--eliminated').forEach(swatch => {
+    swatch.style.cssText = routeLegendSwatchStyle(ROUTE_ELIMINATED_COLOR, 'eliminated');
+  });
+  // The phone legend is a copy of the desktop one.
+  window.mobileSim?.scheduleSync?.();
 }
 
 // A single world-spanning ring with each boundary ring punched into it as a
@@ -417,17 +468,46 @@ function openEmergencyContactModal(event) {
     ? event.currentTarget
     : document.activeElement;
 
+  modal.classList.remove('is-closing');
   modal.hidden = false;
   window.requestAnimationFrame(() => {
     modal.querySelector('.emergency-modal-close')?.focus({ preventScroll: true });
   });
 }
 
+// Hides a dialog after its exit animation (style.css: .is-closing on the
+// backdrop), or at once when it has none or motion is reduced. Reopening
+// mid-exit just drops .is-closing.
+function closeModalAnimated(modal, panelSelector) {
+  if (!modal || modal.hidden || modal.classList.contains('is-closing')) return;
+  const panel = modal.querySelector(panelSelector) || modal;
+  const finish = () => {
+    if (!modal.classList.contains('is-closing')) return;
+    modal.classList.remove('is-closing');
+    modal.hidden = true;
+  };
+  modal.classList.add('is-closing');
+  if (prefersReducedMotion() || getComputedStyle(panel).animationName === 'none') {
+    finish();
+    return;
+  }
+  const onEnd = event => {
+    if (event.target !== panel) return;
+    panel.removeEventListener('animationend', onEnd);
+    finish();
+  };
+  panel.addEventListener('animationend', onEnd);
+  window.setTimeout(() => {
+    panel.removeEventListener('animationend', onEnd);
+    finish();
+  }, 320);
+}
+
 function closeEmergencyContactModal() {
   const modal = document.getElementById('emergencyContactModal');
   if (!modal || modal.hidden) return;
 
-  modal.hidden = true;
+  closeModalAnimated(modal, '.about-modal');
 
   const focusTarget = emergencyContactReturnFocusEl;
   emergencyContactReturnFocusEl = null;
@@ -690,7 +770,7 @@ function syncSimulationConfigLock() {
       }
 
       if (id === 'runBtn') {
-        el.disabled = backendSimulationBusy || !canRunCurrentSimulation();
+        el.disabled = !canRunCurrentSimulation();
       }
     });
 
@@ -870,6 +950,129 @@ function resetLoaderState() {
   updateLoaderProgress(0, { immediate: true });
 }
 
+// Rows of tiles Leaflet keeps loaded past each edge of the view (its default
+// is 2), so panning or a panel closing reveals tiles that are already there.
+const MAP_TILE_KEEP_BUFFER = 4;
+const MAP_TILE_MAX_RETRIES = 3;
+
+// Leaflet never re-requests a tile that failed (a dropped connection or the
+// tile server throttling a burst of requests), so it stays a blank square
+// for the rest of the visit. Retry it a few times with a growing delay; the
+// query string makes the browser actually send a new request.
+function retryFailedTiles(layer) {
+  layer.on('tileerror', ({ tile, coords }) => {
+    const attempt = Number(tile.dataset.retries || 0) + 1;
+    if (attempt > MAP_TILE_MAX_RETRIES) return;
+    tile.dataset.retries = String(attempt);
+    window.setTimeout(() => {
+      // Panned out of view meanwhile: Leaflet already dropped this tile.
+      if (!tile.isConnected) return;
+      tile.src = `${layer.getTileUrl(coords)}?retry=${attempt}`;
+    }, 600 * attempt);
+  });
+  return layer;
+}
+
+// How many zoom levels coarser than the view the low-detail copy under each
+// base map is (makeBaseMapLayer): 2 levels = 1/16 as many tiles, 4x enlarged.
+const BASEMAP_UNDERLAY_LEVELS = 2;
+// The base map currently on screen ({ street, satellite } groups).
+let mapBaseLayers = null;
+
+// A tile layer that always draws its tiles BASEMAP_UNDERLAY_LEVELS zoom
+// levels below the view, enlarged to fit: Leaflet's maxNativeZoom, moved
+// along with the zoom the map is at or animating to. GridLayer's _update
+// hands an already-coarsened zoom back to _setView when it finds its tiles
+// more than a level off, so that call must not coarsen it again (or the two
+// keep calling each other until the stack overflows).
+const CoarseTileLayer = L.TileLayer.extend({
+  initialize(url, options) {
+    L.TileLayer.prototype.initialize.call(this, url, options);
+    this._finestNativeZoom = this.options.maxNativeZoom ?? Infinity;
+  },
+
+  _setView(center, zoom, noPrune, noUpdate) {
+    if (!this._inUpdate) {
+      this.options.maxNativeZoom = Math.min(
+        this._finestNativeZoom,
+        Math.max(0, Math.round(zoom) - BASEMAP_UNDERLAY_LEVELS),
+      );
+    }
+    return L.TileLayer.prototype._setView.call(this, center, zoom, noPrune, noUpdate);
+  },
+
+  _update(center) {
+    const wasInUpdate = this._inUpdate;
+    this._inUpdate = true;
+    try {
+      return L.TileLayer.prototype._update.call(this, center);
+    } finally {
+      this._inUpdate = wasInUpdate;
+    }
+  },
+});
+
+// A base map as two copies of the same tiles: a low-detail one underneath the
+// full-detail one. The few low-detail tiles arrive first and fill the whole
+// view, so on a slow connection the map sharpens in place instead of filling
+// in square by square over empty grey, and a flight between barangays always
+// has a map under it. The full-detail tiles load only once a zoom/flight
+// ends (updateWhenZooming: false) instead of for every level passed on the
+// way, which they rarely arrive in time for anyway.
+function makeBaseMapLayer(url, { maxZoom, maxNativeZoom, attribution }) {
+  const underlay = retryFailedTiles(new CoarseTileLayer(url, {
+    maxZoom,
+    maxNativeZoom,
+    keepBuffer: MAP_TILE_KEEP_BUFFER,
+    zIndex: 0,
+  }));
+  const detail = retryFailedTiles(L.tileLayer(url, {
+    maxZoom,
+    maxNativeZoom,
+    keepBuffer: MAP_TILE_KEEP_BUFFER,
+    updateWhenZooming: false,
+    zIndex: 1,
+    attribution,
+  }));
+  const group = L.layerGroup([underlay, detail]);
+  group.underlay = underlay;
+  return group;
+}
+
+function getActiveBaseMapLayer() {
+  if (!gMap || !mapBaseLayers) return null;
+  return Object.values(mapBaseLayers).find(layer => gMap.hasLayer(layer)) || null;
+}
+
+// Fades out the "Loading map…" cover once the low-detail map is in, so the
+// first thing seen is a whole (if soft) map, not tiles popping in one by one.
+// Gives up waiting after a couple of seconds on a very slow connection.
+function revealMapWhenBaseReady() {
+  const cover = document.getElementById('emptyMap');
+  if (!cover || cover.hidden || cover.classList.contains('is-leaving')) return;
+
+  const underlay = getActiveBaseMapLayer()?.underlay;
+  let revealed = false;
+  const reveal = () => {
+    if (revealed) return;
+    revealed = true;
+    underlay?.off('load', reveal);
+    window.clearTimeout(fallbackTimer);
+    cover.classList.add('is-leaving');
+    window.setTimeout(() => {
+      cover.hidden = true;
+      cover.classList.remove('is-leaving');
+    }, prefersReducedMotion() ? 0 : 320);
+  };
+  const fallbackTimer = window.setTimeout(reveal, 2500);
+
+  if (!underlay || !underlay.isLoading()) {
+    reveal();
+  } else {
+    underlay.on('load', reveal);
+  }
+}
+
 function initMap() {
   // Leaflet's touch handling already lets one finger drag/pinch the map on
   // every device (no "page becomes scrollable" quirk to work around here),
@@ -892,12 +1095,12 @@ function initMap() {
     markerZoomAnimation: !prefersReducedMotion(),
   });
 
-  const streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const streetLayer = makeBaseMapLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(gMap);
 
-  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  const satelliteLayer = makeBaseMapLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     // Esri has imagery here only up to zoom 19; its zoom-20 tiles are a
     // grey "Map data not yet available" placeholder. Past 19, Leaflet
     // enlarges the zoom-19 tiles instead of requesting those.
@@ -905,6 +1108,7 @@ function initMap() {
     maxZoom: 20,
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
   });
+  mapBaseLayers = { street: streetLayer, satellite: satelliteLayer };
 
   L.control.zoom({ position: 'topright' }).addTo(gMap);
   // Recenter (recenterMap), under the zoom buttons. Phones and tablets hide
@@ -932,6 +1136,7 @@ function initMap() {
   // layers glyph that doesn't render here since this page never loads
   // Leaflet's marker/layers image sprites, only its CSS/JS).
   L.control.layers({ 'Map': streetLayer, 'Satellite': satelliteLayer }, null, { position: 'topright', collapsed: false }).addTo(gMap);
+  gMap.on('baselayerchange', onBaseMapChange);
   // The phone layout swaps these from its own Map layers sheet.
   window.mobileSim?.attachMap(gMap, { street: streetLayer, satellite: satelliteLayer });
 
@@ -955,20 +1160,50 @@ function initMap() {
   // instead catches all of those in one place, debounced so a CSS
   // transition's many intermediate sizes collapse into one
   // invalidateSize() once it settles.
+  // Leaflet caches its container size, so any of the above (also rotating
+  // the phone or toggling the browser's mobile address bar) needs
+  // invalidateSize() or the map keeps the old dimensions. That runs once
+  // per frame while the box changes, so tiles fill newly revealed space as
+  // it opens instead of leaving a blank strip until the transition ends;
+  // only the route refit waits for the size to settle.
+  // The map's content stays still on screen while its box changes (a panel
+  // sliding open or shut beside it): only the moving edge covers or reveals
+  // it. invalidateSize() on its own keeps the center instead, which slid the
+  // whole map by half of every change, frame after frame. And the refit
+  // after only happens if the route ended up out of view (per the user, one
+  // motion rather than a slide followed by a re-zoom).
+  const resizedMapEl = document.getElementById('map');
+  let lastMapRect = resizedMapEl.getBoundingClientRect();
+  // Scrolling the page (short phones; keepMapInPlace) moves the box on
+  // screen with its content, so it only resets the reference point.
+  window.addEventListener('scroll', () => {
+    lastMapRect = resizedMapEl.getBoundingClientRect();
+  }, { passive: true });
   let mapResizeDebounceTimer = null;
+  let mapResizeFrame = 0;
+  const keepMapContentInPlace = () => {
+    if (!gMap) return;
+    const rect = resizedMapEl.getBoundingClientRect();
+    const dx = rect.left - lastMapRect.left;
+    const dy = rect.top - lastMapRect.top;
+    lastMapRect = rect;
+    gMap.invalidateSize({ pan: false, debounceMoveend: true });
+    if (dx || dy) gMap.panBy([dx, dy], { animate: false });
+  };
   const mapResizeObserver = new ResizeObserver(() => {
+    if (!mapResizeFrame) {
+      mapResizeFrame = window.requestAnimationFrame(() => {
+        mapResizeFrame = 0;
+        keepMapContentInPlace();
+      });
+    }
     clearTimeout(mapResizeDebounceTimer);
     mapResizeDebounceTimer = window.setTimeout(() => {
-      if (!gMap) return;
-      // Leaflet caches its container size, so any of the above (also
-      // rotating the phone or toggling the browser's mobile address bar)
-      // needs this explicit nudge or the map keeps the old dimensions and
-      // shows blank/cropped tiles.
-      gMap.invalidateSize();
-      refitMapToCurrentRoute();
+      keepMapContentInPlace();
+      refitMapToCurrentRoute({ onlyIfOutOfView: true });
     }, 150);
   });
-  mapResizeObserver.observe(document.getElementById('map'));
+  mapResizeObserver.observe(resizedMapEl);
 
   window.addEventListener('resize', syncMapOverlayLayout);
   startApp();
@@ -979,7 +1214,9 @@ function initMap() {
 // after invalidateSize() so a panel/drawer/sheet opening or closing, or a
 // breakpoint change, doesn't leave the route sitting under the setup panel,
 // the results panel, or the map's own overlay chips.
-function refitMapToCurrentRoute() {
+// onlyIfOutOfView: leave the map alone while the route and pins are all
+// still inside the padded view.
+function refitMapToCurrentRoute({ onlyIfOutOfView = false } = {}) {
   if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return false;
 
   const bestRoute = getBestRoute(simData.routes);
@@ -993,8 +1230,21 @@ function refitMapToCurrentRoute() {
     { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
   ].filter(Boolean));
 
-  gMap.fitBounds(L.latLngBounds([...routeCoords, ...pinCoords]), mapMoveOptions(getMapFitPadding()));
+  const bounds = L.latLngBounds([...routeCoords, ...pinCoords]);
+  const padding = getMapFitPadding();
+  if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return true;
+  gMap.fitBounds(bounds, mapMoveOptions(padding));
   return true;
+}
+
+// Whether `bounds` lies inside the map's view minus fitBounds-style padding.
+function boundsFitInView(bounds, padding) {
+  const size = gMap.getSize();
+  const [left, top] = padding.paddingTopLeft || padding.padding || [0, 0];
+  const [right, bottom] = padding.paddingBottomRight || padding.padding || [0, 0];
+  const nw = gMap.latLngToContainerPoint(bounds.getNorthWest());
+  const se = gMap.latLngToContainerPoint(bounds.getSouthEast());
+  return nw.x >= left && nw.y >= top && se.x <= size.x - right && se.y <= size.y - bottom;
 }
 
 // The recenter button. Leaflet's map never rotates, so this stands in for a
@@ -1015,21 +1265,45 @@ function recenterMap() {
   }
 }
 
-async function startApp() {
-  await checkBackend();
+const BACKEND_CHECK_ATTEMPTS = 6;
 
-  if (!isBackendLive) {
+function setEmptyMapStatus(text, { spinner = true, retry = false } = {}) {
+  const icon = document.getElementById('emptyMapIcon');
+  const txt = document.getElementById('emptyMapTxt');
+  const retryBtn = document.getElementById('emptyMapRetry');
+  if (icon) icon.innerHTML = spinner ? '<span class="empty-map-spinner" aria-hidden="true"></span>' : '&#128506;';
+  if (txt) txt.textContent = text;
+  if (retryBtn) retryBtn.hidden = !retry;
+}
+
+// A server that is asleep or restarting (a fresh deploy) can take a while to
+// answer, so the first check is retried with a growing pause before the page
+// gives up -- and then it offers a Try again button instead of an alert.
+async function waitForBackend() {
+  for (let attempt = 1; attempt <= BACKEND_CHECK_ATTEMPTS; attempt += 1) {
+    if (await checkBackend()) return true;
+    if (attempt === BACKEND_CHECK_ATTEMPTS) break;
+    setEmptyMapStatus('Waking up the server…');
+    document.getElementById('statusTxt').textContent = 'Connecting…';
+    await waitMs(Math.min(2000 * attempt, 8000));
+  }
+  return false;
+}
+
+async function startApp() {
+  if (!(await waitForBackend())) {
     document.getElementById('statusTxt').textContent = 'Backend Offline';
-    const emptyMapTxt = document.getElementById('emptyMapTxt');
-    if (emptyMapTxt) {
-      document.getElementById('emptyMapIcon').innerHTML = '&#128506;';
-      emptyMapTxt.textContent = 'Backend offline — reload once it is running.';
-    }
-    alert('Backend is not connected. Run the Flask backend first.');
+    setEmptyMapStatus('Could not reach the server.', { spinner: false, retry: true });
     return;
   }
 
+  setEmptyMapStatus('Loading map…');
   await bootstrapBarangayFromUrl();
+}
+
+function retryBackendConnection() {
+  setEmptyMapStatus('Connecting…');
+  startApp();
 }
 
 // The homepage's quick-start card sends the barangay via ?barangay=... and
@@ -1046,7 +1320,10 @@ async function bootstrapBarangayFromUrl() {
     return;
   }
 
+  // Read before loading the barangay, which clears the stored copy.
+  const session = readSimulationSession();
   await selectBarangay(requested);
+  await restoreSimulationSession(session);
 }
 
 function clearRoutePreview(group) {
@@ -1068,11 +1345,13 @@ function clearBoundaryLayers() {
   mapLayers.boundaries = [];
 }
 
-function clearLayers() {
+// keepBoundary: a hazard switch keeps the barangay's outline and mask.
+function clearLayers({ keepBoundary = false } = {}) {
   clearRouteAnimation();
-  clearBoundaryLayers();
+  const boundaries = keepBoundary ? mapLayers.boundaries : [];
+  if (!keepBoundary) clearBoundaryLayers();
   mapLayers.routes.forEach(layer => layer.remove());
-  mapLayers = { boundaries: [], routes: [], routeGroups: [] };
+  mapLayers = { boundaries, routes: [], routeGroups: [] };
   selectedRouteFocus = null;
 
   if (activeInfoWindow) {
@@ -1153,15 +1432,25 @@ function formatWalkingDuration(distanceMeters, fallback = 'N/A') {
   return minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`;
 }
 
-// The map label on a route line (see bindRouteEtaLabel in osm.js): walking
-// time over distance, like a map app's route bubble.
+// The map label on a route line (see bindRouteEtaLabel in osm.js): which
+// route option it is (the same "Route N" as the results panel, so a line is
+// never a guess, per the user), then walking time over distance, like a map
+// app's route bubble.
 function buildRouteEtaLabel(route) {
   const duration = route?.display_duration || formatWalkingDuration(route?.distance, '');
   if (!duration) return '';
   const category = ['best', 'available', 'eliminated'].includes(route?.category) ? route.category : 'eliminated';
+  const isBest = route === getBestRoute(Array.isArray(simData?.routes) ? simData.routes : []);
+  const tag = isBest ? 'Best' : category === 'eliminated' ? 'Unsafe' : '';
+  const name = route?.display_route_no != null
+    ? `Route ${route.display_route_no}${tag ? ` · ${tag}` : ''}`
+    : tag;
   return `<div class="route-eta route-eta--${category}">
     ${safetyIcon('walk')}
-    <div class="route-eta-text"><strong>${escapeHtml(duration)}</strong><span>${escapeHtml(route?.display_distance || '')}</span></div>
+    <div class="route-eta-text">
+      ${name ? `<em class="route-eta-name">${escapeHtml(name)}</em>` : ''}
+      <strong>${escapeHtml(duration)}</strong><span>${escapeHtml(route?.display_distance || '')}</span>
+    </div>
   </div>`;
 }
 
@@ -1325,6 +1614,60 @@ function getUserFriendlyRankingExplanation() {
   return 'The safest routes are shown first. If two routes have similar risk, the system checks which one it prefers, then looks at distance.';
 }
 
+// The ant colony's numbers for a result (flood: result.aco; earthquake: the
+// active lens's, copied there by hydrateActiveEarthquakeView).
+function getAcoStats(result = simData) {
+  return result?.aco && Number(result.aco.ants_sent) > 0 ? result.aco : null;
+}
+
+function formatCount(value) {
+  return Number(value || 0).toLocaleString('en-US');
+}
+
+// Plain-language line for the results (residents read it, so no "ACO"):
+// the ant search is how the routes were found -- shown on purpose, since it
+// is the heart of the system.
+function buildAntSearchNote(result = simData) {
+  const aco = getAcoStats(result);
+  if (!aco) return '';
+  const ants = formatCount(aco.ants_sent_all_sites ?? aco.ants_sent);
+  const best = getBestRoute(Array.isArray(result?.routes) ? result.routes : []);
+  if (best?.found_by === 'shortest_path') {
+    return `${ants} virtual ants searched the streets; a standard map check found a slightly safer way, so it is shown first.`;
+  }
+  return `${ants} virtual ants searched the streets, and the safest route they found is shown first.`;
+}
+
+const ACO_BASELINE_COMPARISON_TEXT = {
+  same_route: 'the ants found the same route as the shortest-path check',
+  equally_safe: 'as safe as the shortest-path check, on different streets',
+  aco_safer: 'safer than the shortest-path check',
+  baseline_safer: 'the shortest-path check was safer, so its route is shown first',
+  aco_found_nothing: 'no ant reached the destination, so the shortest-path check is shown',
+};
+
+const ROUTE_FOUND_BY_TEXT = {
+  aco: 'Ant colony',
+  shortest_path: 'Shortest-path check',
+  backup_search: 'Backup search',
+};
+
+// The PDF's fuller account of the search (the report can be technical).
+function buildAcoReportSummary(result = simData) {
+  const aco = getAcoStats(result);
+  if (!aco) return '';
+  const parts = [
+    `${formatCount(aco.ants_arrived)} of ${formatCount(aco.ants_sent)} ants reached the destination over ${aco.rounds} rounds`
+      + (aco.alternative_colonies ? `, plus ${aco.alternative_colonies} colonies searching for alternatives` : ''),
+  ];
+  if (aco.sites_searched > 1) {
+    parts.push(`${formatCount(aco.ants_sent_all_sites)} ants across ${aco.sites_searched} evacuation sites`);
+  }
+  const comparison = ACO_BASELINE_COMPARISON_TEXT[aco.best_vs_shortest_path];
+  if (comparison) parts.push(`best route: ${comparison}`);
+  return `${parts.join('; ')}.`;
+}
+
 // Display strings used by the map popups, the route safety panel, the route
 // list and the PDF report.
 function decorateRouteForDisplay(route) {
@@ -1369,30 +1712,35 @@ async function parseBackendJsonResponse(res) {
   );
 }
 
-async function postJsonWithTimeout(endpoint, payload, timeoutMs) {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+// ---- Simulation jobs (app.py's queue) ----
+// A run is submitted once and then polled: the backend runs one simulation at
+// a time and queues the rest, so a run may wait its turn (the loader says how
+// many are ahead). Polling instead of one long request also lets a reload
+// pick the run back up (see saveSimulationSession), and a dropped poll is
+// simply retried -- the run itself is never started over.
+const SIMULATION_JOB_POLL_MS = 700;
+const SIMULATION_SUBMIT_TIMEOUT_MS = 30000;
+// Generous: a line of earthquake runs ahead of this one can take minutes.
+const SIMULATION_JOB_MAX_WAIT_MS = 20 * 60 * 1000;
+const SIMULATION_JOB_MAX_POLL_FAILURES = 10;
 
+function buildBackendRequestError(response, data, fallbackMessage) {
+  const error = new Error(data?.message || fallbackMessage);
+  error.statusCode = response?.status || 0;
+  error.backendCode = data?.code || '';
+  return error;
+}
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = SIMULATION_SUBMIT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(window.BACKEND_BASE + endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    const response = await fetch(url, { ...options, signal: controller.signal });
     const data = await parseBackendJsonResponse(response);
     return { response, data };
   } catch (error) {
-    if (timedOut || controller.signal.aborted) {
-      const timeoutError = new Error(`Request timed out after ${Math.ceil(timeoutMs / 1000)} seconds.`);
-      timeoutError.name = 'RequestTimeoutError';
-      timeoutError.timeoutMs = timeoutMs;
-      timeoutError.endpoint = endpoint;
-      throw timeoutError;
+    if (controller.signal.aborted) {
+      throw new Error(`The server did not answer within ${Math.round(timeoutMs / 1000)} seconds.`);
     }
     throw error;
   } finally {
@@ -1400,202 +1748,58 @@ async function postJsonWithTimeout(endpoint, payload, timeoutMs) {
   }
 }
 
-function isRequestTimeoutError(error) {
-  return error?.name === 'RequestTimeoutError'
-    || error?.name === 'AbortError'
-    || /signal is aborted without reason/i.test(error?.message || '');
-}
-
-function buildBackendRequestError(response, data, fallbackMessage) {
-  const error = new Error(data?.message || fallbackMessage);
-  error.statusCode = response?.status || 0;
-  error.backendCode = data?.code || '';
-  error.backendStatus = data?.status || null;
-  return error;
-}
-
-function isBackendSimulationBusyError(error) {
-  return error?.backendCode === 'simulation_busy' || error?.statusCode === 429;
-}
-
-function stopBackendSimulationBusyPolling() {
-  if (backendBusyPollTimer) {
-    window.clearInterval(backendBusyPollTimer);
-    backendBusyPollTimer = null;
+async function submitSimulationJob(endpoint, payload) {
+  const { response, data } = await fetchJsonWithTimeout(window.BACKEND_BASE + endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, async: true }),
+  });
+  if (!response.ok || data?.error === true || !data?.job_id) {
+    throw buildBackendRequestError(response, data, 'Could not start the simulation.');
   }
+  return data;
 }
 
-function setBackendSimulationBusyState(busy, status = null) {
-  backendSimulationBusy = !!busy;
-  backendSimulationStatus = backendSimulationBusy ? (status || backendSimulationStatus || {}) : null;
-
-  if (!backendSimulationBusy) {
-    stopBackendSimulationBusyPolling();
-  }
-
-  const statusTxt = document.getElementById('statusTxt');
-  if (statusTxt && !simulationInProgress) {
-    if (backendSimulationBusy) {
-      statusTxt.textContent = 'Backend Busy';
-    } else if (isBackendLive) {
-      statusTxt.textContent = 'Backend Connected';
-    }
-  }
-
-  syncSimulationConfigLock();
-  syncWorkflowSummaries();
-  syncRouteInfoBox();
-}
-
-async function fetchBackendSimulationStatus() {
-  const response = await fetch(window.BACKEND_BASE + '/simulation-status');
-  const data = await parseBackendJsonResponse(response);
-
+async function fetchSimulationJob(jobId) {
+  const { response, data } = await fetchJsonWithTimeout(
+    `${window.BACKEND_BASE}/simulation-jobs/${encodeURIComponent(jobId)}`,
+    {},
+    15000
+  );
   if (!response.ok || data?.error === true) {
-    throw buildBackendRequestError(
-      response,
-      data,
-      'Failed to read backend simulation status.'
-    );
+    throw buildBackendRequestError(response, data, 'Could not read the simulation status.');
   }
-
-  return data?.status || { busy: false };
+  return data;
 }
 
-async function refreshBackendSimulationStatus() {
-  if (!isBackendLive) {
-    setBackendSimulationBusyState(false);
-    return null;
-  }
+const waitMs = ms => new Promise(resolve => window.setTimeout(resolve, ms));
 
-  try {
-    const status = await fetchBackendSimulationStatus();
-    setBackendSimulationBusyState(!!status?.busy, status);
-    return status;
-  } catch (error) {
-    return null;
-  }
-}
+// Polls a job until it finishes, handing every status (queued / running) to
+// onUpdate. Returns the result, or throws the run's own error message.
+async function waitForSimulationJob(job, onUpdate) {
+  const deadline = Date.now() + SIMULATION_JOB_MAX_WAIT_MS;
+  let view = job;
+  let failures = 0;
 
-function stopLoaderProgressPolling() {
-  if (loaderProgressPollTimer) {
-    window.clearInterval(loaderProgressPollTimer);
-    loaderProgressPollTimer = null;
-  }
-}
+  for (;;) {
+    onUpdate?.(view);
+    if (view.state === 'done') return view.result;
+    if (view.state === 'failed') {
+      throw buildBackendRequestError({ status: view.status_code }, view.result, 'The simulation failed.');
+    }
+    if (Date.now() > deadline) {
+      throw new Error('The simulation is taking unusually long. Try again in a few minutes.');
+    }
 
-function startLoaderProgressPolling() {
-  stopLoaderProgressPolling();
-
-  loaderProgressPollTimer = window.setInterval(async () => {
-    if (!isBackendLive) return;
-
+    await waitMs(SIMULATION_JOB_POLL_MS);
     try {
-      const status = await fetchBackendSimulationStatus();
-      const percent = status?.progress?.percent;
-      if (status?.busy && typeof percent === 'number') {
-        const [lo, hi] = LOADER_ROUTE_STAGE_RANGE;
-        const clamped = Math.max(0, Math.min(100, percent));
-        updateLoaderProgress(lo + (clamped / 100) * (hi - lo));
-      }
-    } catch (err) {
-      // Transient poll failure - leave the loader at its last known value.
-    }
-  }, LOADER_PROGRESS_POLL_MS);
-}
-
-function startBackendSimulationBusyPolling() {
-  if (backendBusyPollTimer) {
-    return;
-  }
-
-  backendBusyPollTimer = window.setInterval(async () => {
-    const status = await refreshBackendSimulationStatus();
-    if (status && !status.busy) {
-      stopBackendSimulationBusyPolling();
-    }
-  }, BACKEND_SIMULATION_STATUS_POLL_MS);
-}
-
-async function syncBackendBusyStateAfterRequestError(error) {
-  if (isBackendSimulationBusyError(error)) {
-    setBackendSimulationBusyState(true, error.backendStatus || backendSimulationStatus);
-    startBackendSimulationBusyPolling();
-    return;
-  }
-
-  if (isRequestTimeoutError(error)) {
-    const status = await refreshBackendSimulationStatus();
-    if (status?.busy) {
-      startBackendSimulationBusyPolling();
-    }
-  }
-}
-
-function formatTimeoutForHumans(timeoutMs) {
-  const totalSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
-  if (totalSeconds < 60) {
-    return `${totalSeconds} second${totalSeconds === 1 ? '' : 's'}`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (!seconds) {
-    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
-  }
-
-  return `${minutes}m ${seconds}s`;
-}
-
-function shouldRetrySimulationRequest(error, statusCode) {
-  if (statusCode >= 500) return true;
-  if (!error) return false;
-  if (isRequestTimeoutError(error)) return false;
-
-  return /Failed to fetch/i.test(error.message || '')
-    || /NetworkError/i.test(error.message || '')
-    || /Unexpected server response/i.test(error.message || '');
-}
-
-// POSTs one simulation (flood: /simulate, earthquake: /earthquake/simulate),
-// retrying once on a network hiccup or 5xx. `label` names the run in errors.
-async function sendRoutingRequest(endpoint, payload, label) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    let statusCode = 0;
-
-    try {
-      const { response, data } = await postJsonWithTimeout(
-        endpoint,
-        payload,
-        SIMULATION_REQUEST_TIMEOUT_MS
-      );
-      statusCode = response.status;
-
-      if (!response.ok || data?.error === true) {
-        throw buildBackendRequestError(response, data, `${label} failed`);
-      }
-
-      return data;
+      view = await fetchSimulationJob(job.job_id);
+      failures = 0;
     } catch (error) {
-      lastError = error;
-
-      if (attempt === 1 || !shouldRetrySimulationRequest(error, statusCode)) {
-        break;
-      }
-
-      await new Promise(resolve => window.setTimeout(resolve, 450));
+      failures += 1;
+      if (error.backendCode === 'job_not_found' || failures >= SIMULATION_JOB_MAX_POLL_FAILURES) throw error;
     }
   }
-
-  if (isRequestTimeoutError(lastError)) {
-    throw new Error(
-      `${label} took longer than ${formatTimeoutForHumans(SIMULATION_REQUEST_TIMEOUT_MS)} in the browser and was stopped. The backend may still be finishing that run, so wait until it clears before starting another one.`
-    );
-  }
-
-  throw lastError || new Error(`${label} failed`);
 }
 
 function isEarthquakeMode(hazard = selectedHazard) {
@@ -1903,6 +2107,44 @@ function buildPinPopupContent(role) {
 
 // Creates, moves, or removes each role's map marker to match routePins.
 // Markers stay draggable except while a simulation is running.
+const PIN_GLIDE_MS = 240;
+
+// Moves a pin's marker to `latlng`: a short glide when it can be seen (a tap
+// moving the pin, or a rejected spot sending it back where it was), a jump
+// otherwise.
+function glideMarkerTo(marker, latlng) {
+  const target = L.latLng(latlng);
+  if (marker.dragging?._draggable?._moving) return; // under the visitor's finger
+  if (marker._glideTarget && marker._glideTarget.equals(target)) return; // already on its way
+  window.cancelAnimationFrame(marker._glideFrame);
+  marker._glideTarget = null;
+
+  const from = marker.getLatLng();
+  const onScreen = gMap.hasLayer(marker) && gMap.getBounds().pad(0.2).contains(from);
+  const travel = onScreen ? gMap.latLngToContainerPoint(from).distanceTo(gMap.latLngToContainerPoint(target)) : 0;
+  if (travel < 2 || prefersReducedMotion()) {
+    marker.setLatLng(target);
+    return;
+  }
+
+  marker._glideTarget = target;
+  const startedAt = performance.now();
+  const step = now => {
+    const t = Math.min(1, (now - startedAt) / PIN_GLIDE_MS);
+    const eased = 1 - (1 - t) ** 3;
+    marker.setLatLng(L.latLng(
+      from.lat + (target.lat - from.lat) * eased,
+      from.lng + (target.lng - from.lng) * eased,
+    ));
+    if (t < 1) {
+      marker._glideFrame = window.requestAnimationFrame(step);
+    } else {
+      marker._glideTarget = null;
+    }
+  };
+  marker._glideFrame = window.requestAnimationFrame(step);
+}
+
 function syncRoutePinMarkers() {
   if (!gMap) return;
 
@@ -1918,6 +2160,7 @@ function syncRoutePinMarkers() {
       return;
     }
 
+    const isNewMarker = !marker;
     if (!marker) {
       marker = L.marker({ lat: pin.lat, lng: pin.lng }, {
         zIndexOffset: role === 'start' ? 3600 : 3500,
@@ -1947,14 +2190,20 @@ function syncRoutePinMarkers() {
       routePinMarkers[role] = marker;
     }
 
-    marker.setLatLng({ lat: pin.lat, lng: pin.lng });
     // Phone layout: while this pin is being moved, the fixed center pin
     // (mobile-sim.js) stands in for its marker.
     if (window.mobileSim?.isCenterPinRole(role)) {
+      marker.setLatLng({ lat: pin.lat, lng: pin.lng });
       marker.remove();
       return;
     }
-    if (!gMap.hasLayer(marker)) marker.addTo(gMap);
+    if (isNewMarker) marker.setLatLng({ lat: pin.lat, lng: pin.lng });
+    else glideMarkerTo(marker, { lat: pin.lat, lng: pin.lng });
+    if (!gMap.hasLayer(marker)) {
+      marker.addTo(gMap);
+      // A new pin drops onto the map.
+      if (isNewMarker) replayClassAnimation(marker.getElement(), 'route-pin-drop');
+    }
     marker.getElement()?.classList.toggle('route-pin-checking', pin.status === 'checking');
     marker.getElement()?.setAttribute('title', pin.label || PIN_ROLE_COPY[role].fallbackLabel);
     if (draggable) marker.dragging?.enable();
@@ -2145,6 +2394,7 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
   simData.routes = Array.isArray(nextView.routes) ? nextView.routes : [];
   simData.active_summary = nextView.summary || null;
   simData.active_view_label = nextView.view_label || 'Overall';
+  simData.aco = nextView.aco || null;
   return nextView;
 }
 
@@ -2153,16 +2403,25 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
 // drawn solid red (createRouteGroup in osm.js), and the legend says so.
 function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   const row = (swatch, label) => `<div class="legend-row">${swatch}<span style="font-size:.78rem;">${label}</span></div>`;
-  const bestLine = color => `<div class="legend-line" style="background:${color};height:4px;"></div>`;
-  const eliminatedRow = row('<div class="legend-line legend-line--eliminated"></div>', 'Eliminated route');
+  // Like the lines on the map (osm.js): solid, with a thin darker edge, and
+  // the best route the heavier one. The kind class lets the phone legend
+  // (mobile-sim.js) drop the rows for routes not on the map.
+  const line = (color, kind = '') => `<div class="legend-line${kind ? ` legend-line--${kind}` : ''}" style="${routeLegendSwatchStyle(color, kind)}"></div>`;
+  const eliminatedRow = row(line(ROUTE_ELIMINATED_COLOR, 'eliminated'), 'Eliminated route');
   const noSafeRoute = routes.length > 0 && routes.every(route => route.category === 'eliminated');
 
   if (noSafeRoute) {
-    return row(bestLine('#ef4444'), 'Best route') + eliminatedRow;
+    return row(line(ROUTE_BEST_UNSAFE_COLOR), 'Best route') + eliminatedRow;
   }
-  return row(bestLine(ROUTE_BEST_COLOR), 'Best route')
-    + row('<div class="legend-line legend-line--available"></div>', 'Available route')
+  return row(line(ROUTE_BEST_COLOR), 'Best route')
+    + row(line(ROUTE_AVAILABLE_COLOR, 'available'), 'Available route')
     + eliminatedRow;
+}
+
+// Legend row for the barangay outline, in its current (hazard) colors.
+function buildBoundaryLegendRow() {
+  const colors = getBarangayBoundaryColors();
+  return `<div class="legend-row"><span class="legend-boundary" style="background:${colors.line};box-shadow:0 0 0 1px ${colors.edge};"></span><span style="font-size:.78rem;">Barangay boundary</span></div>`;
 }
 
 // A small copy of a map marker for the legend: a teardrop in the marker's
@@ -2193,6 +2452,7 @@ function setFloodLegendContent() {
     <div style="margin-top:5px;">
       ${buildPinLegendRow('start')}
       ${buildPinLegendRow('end')}
+      ${buildBoundaryLegendRow()}
     </div>`;
 }
 
@@ -2207,6 +2467,7 @@ function hasFloodSimulationResult() {
 // (earthquake), setup panel open with its Run button.
 function clearSimulationOutput() {
   if (!simData) return;
+  clearSimulationSession();
 
   const wasEarthquakeResult = isEarthquakeSimulationResult(simData);
   clearRenderedRoutesOnly();
@@ -2243,14 +2504,15 @@ function clearHazardSelectionState() {
 
 // Back to an empty setup for the selected barangay: no result, no pins, no
 // map layers (loadBarangayMapOnly() redraws the barangay after this).
-function clearBarangaySelections() {
+function clearBarangaySelections({ keepBoundary = false } = {}) {
+  clearSimulationSession();
   floodHazardOverlayMode = 'none';
   resetEarthquakeState();
   simData = null;
   selectedRouteFocus = null;
   resetRouteSafetyPanel();
   setResultsSidebarActionsVisible(false);
-  clearLayers();
+  clearLayers({ keepBoundary });
   clearPinHintError();
   setPinPlacementRole(null);
   resetRoutePins();
@@ -2270,7 +2532,11 @@ function infoPopup(title, rows) {
   </div>`;
 }
 
-function fitMapToBoundaryPaths(paths, padding = 42) {
+// How long the barangay-switch flight takes (zoom out from the old barangay,
+// then in on the new one).
+const BARANGAY_FLY_SECONDS = 1.1;
+
+function fitMapToBoundaryPaths(paths, padding = 42, { fly = false } = {}) {
   const bounds = L.latLngBounds();
   let hasPoints = false;
 
@@ -2293,7 +2559,13 @@ function fitMapToBoundaryPaths(paths, padding = 42) {
   const fitOptions = covered
     ? { paddingTopLeft: [padding, covered.top + padding], paddingBottomRight: [padding, covered.bottom + padding] }
     : { padding: [padding, padding] };
-  gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
+  if (fly) {
+    // fitBounds can only pan short hops; between barangays it jumps
+    // straight there. flyToBounds arcs out and back in instead.
+    gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration: BARANGAY_FLY_SECONDS }));
+  } else {
+    gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
+  }
   return true;
 }
 
@@ -2412,76 +2684,136 @@ function fitEarthquakeMapScope(options = {}) {
     return false;
   }
 
-  gMap.fitBounds(bounds, mapMoveOptions(getMapFitPadding(52)));
-  gMap.once('moveend', () => {
-    if (gMap.getZoom() < EARTHQUAKE_MIN_FOCUS_ZOOM) {
-      gMap.setZoom(EARTHQUAKE_MIN_FOCUS_ZOOM);
-    }
-  });
+  // One move, with the minimum zoom folded in (it used to fit, then zoom
+  // again once the fit landed: two motions in a row).
+  const padding = getMapFitPadding(52);
+  const target = gMap._getBoundsCenterZoom(bounds, padding);
+  gMap.setView(target.center, Math.max(target.zoom, EARTHQUAKE_MIN_FOCUS_ZOOM), mapMoveOptions({ animate: true }));
   return true;
 }
 
-// Outline + outside-mask for barangayBoundaryRings. A run's results take the
-// outline off the map; clearSimulationOutput() puts it back for pinning.
+// Outline + outside-mask for barangayBoundaryRings, drawing whichever of the
+// two is missing. Both stay on through a run's results (per the user): the
+// mask also dims the hazard fills outside the barangay.
 function drawBarangayBoundary() {
-  if (!gMap || mapLayers.boundaries.length || !barangayBoundaryRings.length) return;
+  if (!gMap || !barangayBoundaryRings.length) return;
+  const hasRole = role => mapLayers.boundaries.some(layer => layer.boundaryRole === role);
 
-  const scopeMask = buildBarangayScopeMask(barangayBoundaryRings);
-  if (scopeMask) {
-    scopeMask.addTo(gMap);
-    scopeMask.boundaryRole = 'mask';
-    mapLayers.boundaries.push(scopeMask);
+  if (!hasRole('mask')) {
+    const scopeMask = buildBarangayScopeMask(barangayBoundaryRings);
+    if (scopeMask) {
+      scopeMask.addTo(gMap);
+      // Under the outline and any routes, also when it returns after them.
+      scopeMask.bringToBack();
+      scopeMask.boundaryRole = 'mask';
+      mapLayers.boundaries.push(scopeMask);
+    }
   }
 
+  if (hasRole('main')) return;
+  const colors = getBarangayBoundaryColors();
   barangayBoundaryRings.forEach(ring => {
-    const halo = L.polyline(ring, {
-      color: getBarangayBoundaryHaloColor(),
-      opacity: 0.92,
-      weight: 10,
+    const lineOptions = {
+      opacity: 1,
+      lineCap: 'round',
+      lineJoin: 'round',
       interactive: false,
+      className: 'barangay-boundary-line',
+    };
+    const edge = L.polyline(ring, {
+      ...lineOptions,
+      color: colors.edge,
+      weight: BARANGAY_BOUNDARY_WEIGHT + BARANGAY_BOUNDARY_EDGE_EXTRA_WEIGHT,
     }).addTo(gMap);
-    halo.boundaryRole = 'halo';
-    mapLayers.boundaries.push(halo);
+    edge.boundaryRole = 'edge';
+    mapLayers.boundaries.push(edge);
 
     const outline = L.polyline(ring, {
-      color: getBarangayBoundaryStrokeColor(),
-      opacity: 1,
-      weight: 5,
-      interactive: false,
+      ...lineOptions,
+      color: colors.line,
+      weight: BARANGAY_BOUNDARY_WEIGHT,
     }).addTo(gMap);
     outline.boundaryRole = 'main';
     mapLayers.boundaries.push(outline);
   });
 }
 
+// Boundary rings per barangay, so switching back and forth doesn't wait on
+// the server again.
+const barangayBoundaryCache = new Map();
+// The barangay currently drawn, to tell a switch (fly over) from a redraw of
+// the same one (e.g. after changing hazard).
+let shownBarangayMap = null;
+let barangayMapLoadToken = 0;
+
+async function fetchBarangayBoundaryRings(bgyName) {
+  if (barangayBoundaryCache.has(bgyName)) return barangayBoundaryCache.get(bgyName);
+
+  const res = await fetch(window.BACKEND_BASE + '/barangay-boundary/' + encodeURIComponent(bgyName));
+  const data = await res.json();
+
+  if (!res.ok || data.error === true) {
+    throw new Error(data.message || 'Failed to load barangay boundary');
+  }
+
+  const paths = Array.isArray(data.boundary?.paths) ? data.boundary.paths : [];
+  const rings = paths
+    .map(path => (path || [])
+      .filter(point => point && point.lat != null && point.lng != null)
+      .map(point => ({
+        lat: Number(point.lat),
+        lng: Number(point.lng),
+      })))
+    .filter(path => path.length >= 3);
+  barangayBoundaryCache.set(bgyName, rings);
+  return rings;
+}
+
 async function loadBarangayMapOnly(bgyName) {
-  clearLayers();
-  barangayBoundaryRings = [];
+  const loadToken = ++barangayMapLoadToken;
   setMapLegendVisible(false);
 
+  // Fetched before clearing, so the old barangay stays on screen until the
+  // new one can replace it instead of leaving an empty map in between.
+  let rings = [];
   try {
-    const res = await fetch(window.BACKEND_BASE + '/barangay-boundary/' + encodeURIComponent(bgyName));
-    const data = await res.json();
-
-    if (!res.ok || data.error === true) {
-      throw new Error(data.message || 'Failed to load barangay boundary');
-    }
-
-    const paths = Array.isArray(data.boundary?.paths) ? data.boundary.paths : [];
-    barangayBoundaryRings = paths
-      .map(path => (path || [])
-        .filter(point => point && point.lat != null && point.lng != null)
-        .map(point => ({
-          lat: Number(point.lat),
-          lng: Number(point.lng),
-        })))
-      .filter(path => path.length >= 3);
-
-    drawBarangayBoundary();
-    fitMapToBoundaryPaths(barangayBoundaryRings, 42);
+    rings = await fetchBarangayBoundaryRings(bgyName);
   } catch (err) {
     console.error('Failed to load barangay boundary:', err);
   }
+  // A quicker later switch already took over.
+  if (loadToken !== barangayMapLoadToken) return;
+
+  clearLayers();
+  barangayBoundaryRings = rings;
+  if (!rings.length) {
+    shownBarangayMap = null;
+    return;
+  }
+
+  const isSwitch = shownBarangayMap !== null && shownBarangayMap !== bgyName;
+  shownBarangayMap = bgyName;
+  if (!isSwitch) {
+    drawBarangayBoundary();
+    fitMapToBoundaryPaths(barangayBoundaryRings, 42);
+    return;
+  }
+
+  // The outline and outside mask wait for the flight to land and then fade
+  // in: drawn mid-flight, Leaflet only repaints them at the end, so they
+  // trail behind the map as cut-off grey slabs.
+  let drawn = false;
+  const drawOnLanding = () => {
+    if (drawn) return;
+    drawn = true;
+    gMap.off('moveend', drawOnLanding);
+    window.clearTimeout(fallbackTimer);
+    if (loadToken === barangayMapLoadToken) drawBarangayBoundary();
+  };
+  // In case the flight is cut short without a moveend (a drag takes over).
+  const fallbackTimer = window.setTimeout(drawOnLanding, BARANGAY_FLY_SECONDS * 1000 + 400);
+  gMap.on('moveend', drawOnLanding);
+  fitMapToBoundaryPaths(barangayBoundaryRings, 42, { fly: true });
 }
 
 function makeRouteEndpointPinIcon(kind = 'start') {
@@ -2547,9 +2879,9 @@ async function selectBarangay(name) {
   syncBarangaySwitch();
   clearBarangaySelections();
   if (selectedHazard === 'Flood') floodHazardOverlayMode = 'all';
-  document.getElementById('emptyMap').style.display = 'none';
 
   await loadBarangayMapOnly(name);
+  revealMapWhenBaseReady();
   await syncFloodHazardOverlay(name);
   showPinningLegend();
   advanceStep(selectedHazard ? 3 : 2);
@@ -2645,9 +2977,6 @@ function buildRouteInfoHtml() {
     ? `Tap the map to pin ${target}.`
     : `Pin ${target}: click <strong>${PIN_ROLE_COPY[role].empty}</strong>, then <strong>Choose on Map</strong>.`;
 
-  if (backendSimulationBusy) {
-    return 'The backend is still finishing a <strong>previous simulation</strong>. Wait until it clears before starting a new one.';
-  }
   if (!selectedHazard) {
     return `<strong>Brgy. ${escapeHtml(selectedBarangay)}</strong> loaded. Choose a <strong>disaster type</strong> to continue.`;
   }
@@ -2692,11 +3021,16 @@ async function selectHazard(name, el) {
     .map(role => [role, getReadyPin(role)])
     .filter(([, pin]) => pin);
 
-  clearHazardSelectionState();
-  el.classList.add('selected', name.toLowerCase());
-  el.setAttribute('aria-pressed', 'true');
   selectedHazard = name;
-  applyHazardTheme();
+  // The panel's colours change with the hazard: cross-fade them rather
+  // than snap (where the browser can). The callback may run a frame later,
+  // so only the visuals go in it.
+  withViewTransition(() => {
+    clearHazardSelectionState();
+    el.classList.add('selected', name.toLowerCase());
+    el.setAttribute('aria-pressed', 'true');
+    applyHazardTheme();
+  });
   workflowFocusSection = null;
 
   if (!selectedBarangay) {
@@ -2707,10 +3041,13 @@ async function selectHazard(name, el) {
     return;
   }
 
-  clearBarangaySelections();
+  // Same barangay: its outline, mask and the current view stay put (they
+  // used to be redrawn and refitted on every hazard switch).
+  const keepBoundary = shownBarangayMap === selectedBarangay && mapLayers.boundaries.length > 0;
+  clearBarangaySelections({ keepBoundary });
   floodHazardOverlayMode = name === 'Flood' ? 'all' : 'none';
-  document.getElementById('emptyMap').style.display = 'none';
-  await loadBarangayMapOnly(selectedBarangay);
+  if (!keepBoundary) await loadBarangayMapOnly(selectedBarangay);
+  revealMapWhenBaseReady();
   // Flood areas and the severity filter only show with a result, so for
   // either hazard this just clears them.
   await syncFloodHazardOverlay(selectedBarangay);
@@ -2819,8 +3156,6 @@ function syncWorkflowSummaries() {
     summaryRun.hidden = simulationInProgress;
     summaryRun.textContent = simulationInProgress
       ? ''
-      : backendSimulationBusy
-      ? 'The backend is still finishing a previous simulation. Wait until it clears before starting another run.'
       : isEarthquakeMode()
       ? canRun
         ? 'Everything is ready. Launch the simulation when you are set.'
@@ -2981,10 +3316,10 @@ async function renderActiveSimulationRoutes() {
     gMap,
     mapLayers,
     drawPins: syncRoutePinMarkers,
-    infoPopup,
-    activeInfoWindowRef,
     fitOptions: getMapFitPadding(),
     fitPoints: [getReadyPin('start'), isEarthquakeResult ? null : getReadyPin('end')].filter(Boolean),
+    // Earthquake results fit once below, around the hazard extent too.
+    fit: !isEarthquakeResult,
     buildEtaLabel: buildRouteEtaLabel,
     afterDrawPins: isEarthquakeResult
       ? () => {
@@ -3072,6 +3407,45 @@ async function switchEarthquakeView(viewKey) {
   applyRouteFocusState(null);
 }
 
+// ---- The last run survives a reload (per tab, sessionStorage) ----
+// The barangay, hazard and pins of the last run, plus its result -- or, while
+// it is still computing, its job id, so a reload picks the run back up.
+// Dropped when the results are (a pin moved, the hazard or barangay changed,
+// New simulation).
+const SIM_SESSION_KEY = 'agnas-sim-session';
+
+function saveSimulationSession(session) {
+  try {
+    sessionStorage.setItem(SIM_SESSION_KEY, JSON.stringify(session));
+    return true;
+  } catch (err) {
+    return false; // full or blocked: a reload just starts fresh
+  }
+}
+
+function readSimulationSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem(SIM_SESSION_KEY) || 'null');
+  } catch (err) {
+    return null;
+  }
+}
+
+function clearSimulationSession() {
+  try {
+    sessionStorage.removeItem(SIM_SESSION_KEY);
+  } catch (err) {}
+}
+
+function buildSimulationSessionBase(isEarthquakeRun) {
+  return {
+    barangay: selectedBarangay,
+    hazard: selectedHazard,
+    isEarthquake: isEarthquakeRun,
+    pins: Object.fromEntries(PIN_ROLES.map(role => [role, getReadyPin(role)])),
+  };
+}
+
 async function runSimulation() {
   if (isSimulationInteractionLocked()) return;
 
@@ -3084,11 +3458,53 @@ async function runSimulation() {
   }
 
   const isEarthquakeRun = isEarthquakeMode();
-  const pinsKey = getRoutePinsKey();
-  const request = isEarthquakeRun
+  // The flood areas download while the ants work, so they appear with the
+  // routes instead of a beat after them (flood.js caches the download).
+  if (!isEarthquakeRun) {
+    window.floodHazardUI?.loadHazardLayers({
+      scope: 'barangay_buffer',
+      barangay: selectedBarangay,
+      vars: getFloodOverlayConfig().vars,
+    }).catch(() => {});
+  }
+  const [endpoint, payload, label] = isEarthquakeRun
     ? ['/earthquake/simulate', { start: buildPinRequestPoint('start'), barangay: selectedBarangay }, 'Earthquake simulation']
     : ['/simulate', { start: buildPinRequestPoint('start'), end: buildPinRequestPoint('end'), hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation'];
 
+  await followSimulationJob(() => submitSimulationJob(endpoint, payload), {
+    label,
+    isEarthquakeRun,
+    pinsKey: getRoutePinsKey(),
+    session: buildSimulationSessionBase(isEarthquakeRun),
+  });
+}
+
+// The loader's title and bar while the backend works on the run: its place
+// in line, then the ant colony's progress.
+function syncLoaderWithJob(view) {
+  const statusTxt = document.getElementById('statusTxt');
+  if (view.state === 'queued') {
+    const ahead = Number(view.queued_ahead) || 0;
+    setLoaderTitle(ahead > 0
+      ? `Waiting for ${ahead} simulation${ahead === 1 ? '' : 's'} ahead of yours`
+      : 'Starting your simulation');
+    if (statusTxt) statusTxt.textContent = ahead > 0 ? 'Waiting in line…' : 'Simulating…';
+    return;
+  }
+  if (view.state === 'running') {
+    setLoaderTitle(getLoaderStageCopy('route').title);
+    if (statusTxt) statusTxt.textContent = 'Simulating…';
+    const percent = Number(view.progress?.percent);
+    if (Number.isFinite(percent)) {
+      const [lo, hi] = LOADER_ROUTE_STAGE_RANGE;
+      updateLoaderProgress(lo + (Math.max(0, Math.min(100, percent)) / 100) * (hi - lo));
+    }
+  }
+}
+
+// Shows the loader for a run -- a new one, or one picked back up after a
+// reload (startJob submits it or fetches its status) -- then its results.
+async function followSimulationJob(startJob, context) {
   const loader = document.getElementById('loader');
   const statusTxt = document.getElementById('statusTxt');
   let loaderHideDelay = 420;
@@ -3126,71 +3542,137 @@ async function runSimulation() {
 
   try {
     setLoaderStep('route', 22);
-    startLoaderProgressPolling();
-    const result = await sendRoutingRequest(...request);
-    stopLoaderProgressPolling();
-    setBackendSimulationBusyState(false);
+    const job = await startJob();
+    saveSimulationSession({ ...context.session, jobId: job.job_id });
+    const result = await waitForSimulationJob(job, syncLoaderWithJob);
     setLoaderStep('review', 76);
+    // With the result if it fits; otherwise the job id stays, and the
+    // backend keeps the result for a while.
+    saveSimulationSession({ ...context.session, jobId: job.job_id, result });
 
-    if (isEarthquakeRun) {
-      result.hazard_layers = result.hazard_layers || {};
-      Object.values(result.views || {}).forEach(viewData => {
-        viewData.routes = decorateRoutesForDisplay(normalizeRoutes(viewData.routes || []));
-      });
-    } else {
-      result.routes = decorateRoutesForDisplay(normalizeRoutes(result.routes || []));
-    }
-
-    result.pins_key = pinsKey;
-    simData = result;
-    selectedRouteFocus = null;
-    if (isEarthquakeRun) {
-      hydrateActiveEarthquakeView(result.active_view || 'overall');
-      earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
-      earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
-    } else {
-      setFloodLegendContent();
-    }
-
-    setLoaderStep('draw', 92);
-    statusTxt.textContent = 'Opening results…';
-    renderRouteSafetyPanel(simData);
-    syncMobilePanelBarLabel();
-    window.mobileSim?.showResults();
-    // The setup panel folds away to give the results room -- before drawing,
-    // so the route is fitted around the map overlays as they will end up.
-    applySetupSidebarState(true);
-    clearBoundaryLayers();
-    await renderActiveSimulationRoutes();
-    applyRouteFocusState(null);
-    setResultsSidebarActionsVisible(true);
-
-    setLoaderStep('complete', 100);
-    statusTxt.textContent = 'Simulation Complete';
+    await showSimulationResult(result, context);
     // Only hide once the bar has actually eased up to 100 (previously this fired
     // right after the 'draw' step, so the bar visibly jumped to results mid-animation).
     hideLoader(650);
   } catch (err) {
-    await syncBackendBusyStateAfterRequestError(err);
     console.error(err);
-    statusTxt.textContent = backendSimulationBusy ? 'Backend Busy' : 'Error';
+    statusTxt.textContent = 'Error';
     setLoaderStep('stopped', 100);
     loaderHideDelay = 320;
+    if (err.backendCode === 'job_not_found' || err.statusCode) clearSimulationSession();
     // A failed re-run leaves the previous result on the map; bring its panel back.
     if (simData) {
       renderRouteSafetyPanel(simData);
       syncMobilePanelBarLabel();
       window.mobileSim?.showResults();
     }
-    alert(isBackendSimulationBusyError(err) ? err.message : `${request[2]} failed: ${err.message}`);
+    if (!(context.quietIfGone && err.backendCode === 'job_not_found')) {
+      alert(`${context.label} failed: ${err.message}`);
+    }
   } finally {
-    stopLoaderProgressPolling();
     setSimulationInProgress(false);
     if (!loaderHidden) {
       hideLoader(loaderHideDelay);
     }
     syncRouteInfoBox();
   }
+}
+
+// Puts a finished run's result on the map and in the panels.
+async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
+  const statusTxt = document.getElementById('statusTxt');
+
+  if (isEarthquakeRun) {
+    result.hazard_layers = result.hazard_layers || {};
+    Object.values(result.views || {}).forEach(viewData => {
+      viewData.routes = decorateRoutesForDisplay(normalizeRoutes(viewData.routes || []));
+    });
+  } else {
+    result.routes = decorateRoutesForDisplay(normalizeRoutes(result.routes || []));
+  }
+
+  result.pins_key = pinsKey;
+  simData = result;
+  selectedRouteFocus = null;
+  if (isEarthquakeRun) {
+    hydrateActiveEarthquakeView(result.active_view || 'overall');
+    earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
+    earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
+  } else {
+    setFloodLegendContent();
+  }
+
+  setLoaderStep('draw', 92);
+  statusTxt.textContent = 'Opening results…';
+  const shell = document.getElementById('appShell');
+  const layoutBefore = shell?.className;
+  renderRouteSafetyPanel(simData);
+  syncMobilePanelBarLabel();
+  window.mobileSim?.showResults();
+  // The setup panel folds away to give the results room -- before drawing,
+  // so the route is fitted around the map overlays as they will end up.
+  applySetupSidebarState(true);
+  // And the panels finish sliding first, so the route is fitted once, to
+  // the map's final size (behind the loader, which is still up).
+  if (shell && shell.className !== layoutBefore && !prefersReducedMotion()) {
+    await waitMs(PANEL_SLIDE_MS + 40);
+  }
+  await renderActiveSimulationRoutes();
+  applyRouteFocusState(null);
+  setResultsSidebarActionsVisible(true);
+
+  setLoaderStep('complete', 100);
+  statusTxt.textContent = 'Simulation Complete';
+}
+
+// After a reload: the same hazard and pins as the last run, then its result
+// -- or the run itself, if it was still computing. `session` is read before
+// the barangay loads, since loading it clears the stored copy.
+async function restoreSimulationSession(session) {
+  if (!session || session.barangay !== selectedBarangay || !session.hazard) return;
+  const card = document.getElementById(session.hazard === 'Earthquake' ? 'hEarthquake' : 'hFlood');
+  if (!card) return;
+
+  await selectHazard(session.hazard, card);
+  // Pins from a finished run were already checked; they go back as they were.
+  PIN_ROLES.forEach(role => {
+    pinCheckSeq[role] += 1;
+    const pin = session.pins?.[role];
+    routePins[role] = pin ? { ...pin, status: 'ready' } : null;
+  });
+  setPinPlacementRole(getNextUnpinnedRole());
+  onRoutePinsChange();
+
+  const context = {
+    label: session.isEarthquake ? 'Earthquake simulation' : 'Simulation',
+    isEarthquakeRun: !!session.isEarthquake,
+    pinsKey: getRoutePinsKey(),
+    session: buildSimulationSessionBase(!!session.isEarthquake),
+    quietIfGone: true,
+  };
+  if (session.result) {
+    saveSimulationSession(session);
+    await showSimulationResult(session.result, context);
+  } else if (session.jobId) {
+    await followSimulationJob(() => fetchSimulationJob(session.jobId), context);
+  }
+}
+
+// "New simulation": an empty setup on the same barangay and hazard, without
+// leaving the page (per the user; it used to reload the homepage).
+function startNewSimulation() {
+  if (simulationInProgress) return;
+  clearSimulationSession();
+  closeRouteListModal();
+  if (simData) clearSimulationOutput();
+  resetRoutePins();
+  clearPinHintError();
+  setPinPlacementRole(selectedHazard ? getNextUnpinnedRole() : null);
+  onRoutePinsChange();
+  reopenSetupSidebar();
+  window.mobileSim?.showSetup();
+  if (barangayBoundaryRings.length) fitMapToBoundaryPaths(barangayBoundaryRings);
+  document.getElementById('statusTxt').textContent = 'Ready';
 }
 
 function safetyIcon(name) {
@@ -3338,19 +3820,24 @@ function renderRouteSafetyPanel(result) {
   // Danger/red once it's actually High; amber/warning for Moderate; neutral for Low.
   const peakClass = peakScore >= 5 ? 'danger' : peakScore >= 3 ? 'warning' : '';
   const verdict = safeRouteFound ? 'Safe route found' : 'No safe route';
+  // The list button covers only the routes not already on the map (per the
+  // user); none off the map, no button.
+  const offMapCount = getRoutesOffMap(routes).length;
 
   // Plain, non-technical wording -- this panel is read by barangay residents,
   // not engineers, so it should make sense with no background on how the
   // system works (no "ACO", "evaluated", "hazard lens", etc.). Kept short.
   const routeCountLabel = `${routes.length} route${routes.length === 1 ? '' : 's'}`;
+  const antSearchNote = buildAntSearchNote(result);
   const notes = [
     safeRouteFound
       ? `We checked ${routeCountLabel} — ${safe.length} ${safe.length === 1 ? 'is' : 'are'} completely safe.`
       : `We checked ${routeCountLabel} — none are completely safe.`,
     safeRouteFound
-      ? 'The safest route is always shown first.'
+      ? (antSearchNote || 'The safest route is always shown first.')
       : `Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'} — be extra careful.`,
   ];
+  if (!safeRouteFound && antSearchNote) notes.push(antSearchNote);
   if (isEarthquake) {
     if (result.active_view_label) {
       notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
@@ -3416,7 +3903,7 @@ function renderRouteSafetyPanel(result) {
         <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Click here for emergency contact information</button>
       </div>
     </div>
-    <button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See all ${Math.max(routes.length - 1, 0)} alternative route${Math.max(routes.length - 1, 0) === 1 ? '' : 's'}</button>`;
+    ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}`;
   window.mobileSim?.renderResults(result);
 }
 
@@ -3454,24 +3941,24 @@ function openRouteListModal() {
   const routes = Array.isArray(simData?.routes) ? simData.routes : [];
   if (!modal || !body || !routes.length) return;
 
-  const best = getBestRoute(routes);
-  // The best route is already shown in the route safety panel, so this
-  // modal only needs to list the other candidates.
-  const alternativeRoutes = routes.filter(route => route !== best);
-  const safeAlternatives = alternativeRoutes.filter(route => route.category !== 'eliminated');
+  // Only the routes not already on the map: the best route and the next
+  // ones can be picked straight from their lines.
+  const moreRoutes = getRoutesOffMap(routes);
+  const safeMoreRoutes = moreRoutes.filter(route => route.category !== 'eliminated');
   const overallSafeFound = routes.some(route => route.category !== 'eliminated');
   const caution = overallSafeFound
     ? ''
     : `<div class="route-modal-caution">${safetyIcon('alert')}<span>No fully safe route was found. Every route below still passes through a risky area, so treat them as backup options and review each one carefully.</span></div>`;
 
-  body.innerHTML = caution + (alternativeRoutes.length
-    ? alternativeRoutes.map((route, index) => buildRouteModalCard(route, index)).join('')
-    : '<div class="route-modal-empty">No other alternative routes were found for this trip.</div>');
+  body.innerHTML = caution + (moreRoutes.length
+    ? moreRoutes.map((route, index) => buildRouteModalCard(route, index)).join('')
+    : '<div class="route-modal-empty">No other routes were found for this trip.</div>');
   if (count) {
-    count.textContent = `${alternativeRoutes.length} alternative${alternativeRoutes.length === 1 ? '' : 's'} · ${safeAlternatives.length} safe`;
+    count.textContent = `${moreRoutes.length} more route${moreRoutes.length === 1 ? '' : 's'} · ${safeMoreRoutes.length} safe`;
   }
 
   routeListModalReturnFocus = document.activeElement;
+  modal.classList.remove('is-closing');
   modal.hidden = false;
   modal.querySelector('.modal-close-btn')?.focus({ preventScroll: true });
 }
@@ -3479,7 +3966,7 @@ function openRouteListModal() {
 function closeRouteListModal() {
   const modal = document.getElementById('routeListModal');
   if (!modal || modal.hidden) return;
-  modal.hidden = true;
+  closeModalAnimated(modal, '.route-list-modal');
 
   if (routeListModalReturnFocus && document.contains(routeListModalReturnFocus)) {
     routeListModalReturnFocus.focus({ preventScroll: true });
@@ -3521,20 +4008,24 @@ function getDefaultRouteVisual(group) {
     return { mainWeight: ROUTE_BEST_WEIGHT, mainOpacity: 1, casingOpacity: 1 };
   }
 
+  // Available routes: the gray dotted "fading trail" (ROUTE_TRAIL_* in osm.js).
   if (group?.category === 'available') {
-    return { mainWeight: ROUTE_DASHED_WEIGHT, mainOpacity: 1, casingOpacity: 1 };
+    return { mainWeight: ROUTE_TRAIL_WEIGHT, mainOpacity: ROUTE_TRAIL_OPACITY, casingOpacity: ROUTE_TRAIL_OPACITY, trail: true };
   }
 
-  // Eliminated routes: red dashes, set apart from the violet ones by their
-  // color and tighter dash spacing (ROUTE_DASHES in osm.js).
-  return { mainWeight: ROUTE_DASHED_WEIGHT, mainOpacity: 0.9, casingOpacity: 1 };
+  // Eliminated routes: red, set apart from the gray ones by color.
+  return { mainWeight: ROUTE_OTHER_WEIGHT, mainOpacity: 0.9, casingOpacity: 1 };
 }
 
 // The focused route keeps its normal look (it must stay the clearest thing on
 // the map) -- the flowing dash overlay added by createRoutePreview below is
-// what signals "this one is selected".
+// what signals "this one is selected". A picked trail firms up into a solid
+// edged line, so the dash runs along a clear line.
 function getFocusedRouteVisual(group) {
-  return { ...getDefaultRouteVisual(group), mainOpacity: 1, casingOpacity: 1 };
+  const base = getDefaultRouteVisual(group);
+  return base.trail
+    ? { mainWeight: ROUTE_OTHER_WEIGHT, mainOpacity: 1, casingOpacity: 1, trail: false }
+    : { ...base, mainOpacity: 1, casingOpacity: 1 };
 }
 
 function getDimmedRouteVisual(group) {
@@ -3568,12 +4059,12 @@ function createRoutePreview(group) {
   clearRoutePreview(group);
 
   // The focused route's own solid line stays fully visible underneath -- see
-  // getFocusedRouteVisual -- so this is just a thin white dash marching along
-  // its middle toward the destination. Animated by style.css
-  // (route-flow--focus), not a JS timer, so it moves smoothly. Dash + gap =
-  // the 24px CSS loop.
+  // getFocusedRouteVisual -- so this is just a thin dash (white, or dark on
+  // the light satellite shades; getRouteLineColors) marching along its middle
+  // toward the destination. Animated by style.css (route-flow--focus), not a
+  // JS timer, so it moves smoothly. Dash + gap = the 24px CSS loop.
   group.previewDotsLayer = L.polyline(path, {
-    color: '#ffffff',
+    color: getRouteLineColors(group.color).dash,
     weight: 2 * getRouteZoomScale(gMap),
     opacity: 0.95,
     dashArray: '13 11',
@@ -3589,9 +4080,9 @@ function createRoutePreview(group) {
 function syncRoutePreview(group, enabled) {
   if (!group) return;
 
-  // Dashed routes (available/eliminated) stay static even when picked --
-  // a marching dash over their dashes reads as moving dots.
-  if (!enabled || group.dashKey) {
+  // Whichever route is picked (a click on its line or in the results) gets
+  // the marching dash; nothing moves otherwise (both per the user).
+  if (!enabled) {
     clearRoutePreview(group);
     return;
   }
@@ -3605,12 +4096,12 @@ function applyRouteGroupVisual(group, visual) {
   if (!group) return;
 
   const zoomScale = getRouteZoomScale(gMap);
-  const dashArray = getRouteDashArray(group.dashKey, zoomScale);
+  const dashArray = visual.trail ? getRouteTrailDashArray(zoomScale) : null;
 
   if (group.casingLayer) {
     group.casingLayer.setStyle({
-      opacity: visual.casingOpacity * (dashArray ? ROUTE_DASH_CASING_OPACITY : 1),
-      weight: (visual.mainWeight + getRouteCasingExtraWeight(group.dashKey)) * zoomScale,
+      opacity: visual.casingOpacity,
+      weight: (visual.mainWeight + ROUTE_EDGE_EXTRA_WEIGHT) * zoomScale,
       dashArray,
     });
   }
@@ -3656,12 +4147,17 @@ function applyRouteFocusState(routeNo) {
     // while picked.
     if (group.hiddenByDefault) setRouteGroupShown(group, gMap, isFocused);
     syncBestRouteEtaLabel(group, !hasFocus || isFocused);
+    // A picked route shows its whole path, shared roads included.
+    showRouteGroupFullPath(group, isFocused);
     applyRouteGroupVisual(group, visual);
     if (isFocused) {
       bringRouteGroupToFront(group);
     }
     syncRoutePreview(group, isFocused);
   });
+  // With nothing picked, the routes go back to their usual stacking, best on
+  // top: a route picked and then let go would otherwise stay over the rest.
+  if (!hasFocus) stackRouteGroups(groups.filter(group => gMap.hasLayer(group.mainLayer)));
   window.mobileSim?.syncRouteRows();
 }
 
@@ -3901,7 +4397,7 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
 
   // Same slim line as the map (addRouteCasing in osm.js): a thin edge in a
   // darker shade of the route color, not a wide band covering the road.
-  const routeColor = route?.category === 'eliminated' ? '#ef4444' : ROUTE_BEST_COLOR;
+  const routeColor = route?.category === 'eliminated' ? ROUTE_BEST_UNSAFE_COLOR : ROUTE_BEST_COLOR;
   ctx.strokeStyle = getRouteEdgeColor(routeColor);
   ctx.lineWidth = 7;
   tracePath();
@@ -4022,7 +4518,10 @@ async function downloadSimulationReport() {
       ['Estimated time to destination', best?.display_duration || 'Unavailable'],
       [peakLabel, peakValue],
       ['Routes checked', `${routes.length} (${safe.length} safe, ${eliminated.length} not recommended)`],
+      ['Best route found by', ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
     ];
+    const acoSummary = buildAcoReportSummary(simData);
+    if (acoSummary) rows.push(['Ant colony search', acoSummary]);
 
     doc.setFontSize(10.5);
     const valueWidth = pageWidth - margin * 2 - labelColWidth;
@@ -4114,25 +4613,20 @@ document.getElementById('panelBarangaySwitch')?.addEventListener('click', event 
   switchBarangay(name);
 });
 
+// One /health check (waitForBackend retries it).
 async function checkBackend() {
-  // Generous: on a slow phone connection (or a just-woken server) a couple of
-  // seconds is not enough, and failing here strands the page as "offline".
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
     const r = await fetch(window.BACKEND_BASE + '/health', { signal: controller.signal });
-
-    if (r.ok) {
-      isBackendLive = true;
-      document.getElementById('statusTxt').textContent = 'Backend Connected';
-      await refreshBackendSimulationStatus();
-    }
+    isBackendLive = r.ok;
   } catch (err) {
     isBackendLive = false;
-    setBackendSimulationBusyState(false);
   } finally {
     clearTimeout(timeoutId);
   }
+  if (isBackendLive) document.getElementById('statusTxt').textContent = 'Backend Connected';
+  return isBackendLive;
 }
 
 // Route focus, shared by the route safety panel, the route list and the map

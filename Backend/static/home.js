@@ -46,8 +46,25 @@ function initHomeTheme() {
   syncQuickStartLink();
 }
 
+// The page cross-fades into the other theme instead of flipping (where the
+// browser has view transitions); the switch itself stays live, so its thumb
+// slides across without a ghost of the old one fading out.
 function setHomeTheme(theme) {
-  applyHomeTheme(theme);
+  const unchanged = document.body.classList.contains('dark') === (theme === 'dark');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (unchanged || reduced || typeof document.startViewTransition !== 'function') {
+    applyHomeTheme(theme);
+    return;
+  }
+  const root = document.documentElement;
+  root.classList.add('theme-transition');
+  try {
+    document.startViewTransition(() => applyHomeTheme(theme))
+      .finished.finally(() => root.classList.remove('theme-transition'));
+  } catch (err) {
+    root.classList.remove('theme-transition');
+    applyHomeTheme(theme);
+  }
 }
 
 // ---- feedback widget (UI only for now — no backend to send to yet) ----
@@ -161,8 +178,9 @@ const SCOPE_BARANGAYS = [
   { name: 'Pinagbuhatan', color: '#2563eb' },
   { name: 'Sta. Lucia', color: '#2563eb' },
 ];
-const LEAFLET_CSS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-const LEAFLET_JS_URL = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+// Leaflet 1.9.4, served by this app (static/vendor/leaflet), not a CDN.
+const LEAFLET_CSS_URL = '/static/vendor/leaflet/leaflet.css';
+const LEAFLET_JS_URL = '/static/vendor/leaflet/leaflet.js';
 
 let scopeMapInstance = null;
 let scopeLeafletPromise = null;
@@ -177,15 +195,11 @@ function loadScopeLeaflet() {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = LEAFLET_CSS_URL;
-      link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
-      link.crossOrigin = '';
       document.head.appendChild(link);
     }
 
     const script = document.createElement('script');
     script.src = LEAFLET_JS_URL;
-    script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
-    script.crossOrigin = '';
     script.onload = () => resolve();
     script.onerror = () => reject(new Error('Could not load the map library.'));
     document.body.appendChild(script);

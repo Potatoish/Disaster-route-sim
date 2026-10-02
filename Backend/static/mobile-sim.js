@@ -65,6 +65,9 @@
     mapTapTimer: null,
     legendFolded: readLegendFolded(),
     legendHtml: null,
+    box: 0, // the sheet's laid-out height (--sheet-box-h), px; >= height while moving
+    settleTimer: null,
+    dragFrame: null,
   };
 
   function isActive() {
@@ -145,25 +148,56 @@
     }
   }
 
-  // Sets the sheet's visible height. While the center pin shows, the map
-  // pans by as much as the pin moves, so the spot under it stays put.
+  // Changes made with transitions off, so nothing on screen moves.
+  function withoutTransitions(change) {
+    shell.classList.add('msim-instant');
+    change();
+    void sheet.offsetHeight; // apply them before transitions return
+    shell.classList.remove('msim-instant');
+  }
+
+  function setSheetBox(height) {
+    state.box = Math.max(0, Math.round(height));
+    shell.style.setProperty('--sheet-box-h', `${state.box}px`);
+  }
+
+  // Sets the sheet's visible height. The sheet moves by transform only --
+  // its box (--sheet-box-h) is held at the tallest height in play and slid
+  // down out of sight (style.css), so a drag or a snap never re-lays out
+  // its content frame by frame (that made it lag on low-end phones). The box
+  // shrinks to fit once the sheet has stopped. While the center pin shows,
+  // the map pans by as much as the pin moves, so the spot under it stays put.
   function applyHeight(height, { animate = true } = {}) {
     const previous = state.height;
     const next = Math.max(0, Math.round(height));
     const pinWasShown = previous > 0 && isCenterPinShown(previous);
+    const slides = animate && next !== previous && !prefersReducedMotion();
     state.height = next;
+    window.clearTimeout(state.settleTimer);
 
-    if (!animate) shell.classList.add('msim-instant');
-    shell.style.setProperty('--sheet-h', `${next}px`);
-    syncChrome();
-    if (!animate) {
-      void sheet.offsetHeight; // apply the new height before transitions return
-      shell.classList.remove('msim-instant');
+    if (state.drag) {
+      // Mid-drag the box already holds the full height (onPointerMove).
+      if (state.box < next) withoutTransitions(() => setSheetBox(next));
+      shell.style.setProperty('--sheet-h', `${next}px`);
+    } else if (slides) {
+      if (state.box < Math.max(previous, next)) {
+        withoutTransitions(() => setSheetBox(Math.max(previous, next)));
+      }
+      shell.style.setProperty('--sheet-h', `${next}px`);
+      state.settleTimer = window.setTimeout(() => {
+        if (state.height === next && !state.drag) withoutTransitions(() => setSheetBox(next));
+      }, SNAP_MS + 40);
+    } else {
+      withoutTransitions(() => {
+        setSheetBox(next);
+        shell.style.setProperty('--sheet-h', `${next}px`);
+      });
     }
+    syncChrome();
 
     if (pinWasShown && next !== previous && gMap) {
       const shift = getPinY(previous) - getPinY(next);
-      gMap.panBy([0, shift], animate && !prefersReducedMotion()
+      gMap.panBy([0, shift], slides
         ? { duration: SNAP_MS / 1000, easeLinearity: 0.5 }
         : { animate: false });
     }
@@ -256,6 +290,10 @@
       drag.moved = true;
       drag.zone.setPointerCapture?.(drag.id);
       shell.classList.add('msim-dragging');
+      // The box takes the full height for the whole drag (nothing visible
+      // changes), so each move below is a transform.
+      window.clearTimeout(state.settleTimer);
+      withoutTransitions(() => setSheetBox(Math.max(state.snaps.full, state.box)));
     }
 
     const elapsed = event.timeStamp - drag.lastTime;
@@ -264,7 +302,14 @@
     drag.lastTime = event.timeStamp;
 
     const min = state.snaps.peek * 0.7;
-    applyHeight(Math.min(state.snaps.full, Math.max(min, drag.startHeight + travel)), { animate: false });
+    drag.target = Math.min(state.snaps.full, Math.max(min, drag.startHeight + travel));
+    // At most once a frame, however fast the pointer reports.
+    if (!state.dragFrame) {
+      state.dragFrame = window.requestAnimationFrame(() => {
+        state.dragFrame = null;
+        if (state.drag?.target != null) applyHeight(state.drag.target, { animate: false });
+      });
+    }
     event.preventDefault();
   }
 
@@ -274,6 +319,12 @@
     state.drag = null;
     if (!drag.moved) return;
 
+    if (state.dragFrame) {
+      window.cancelAnimationFrame(state.dragFrame);
+      state.dragFrame = null;
+    }
+    if (drag.target != null) state.height = Math.round(drag.target);
+    shell.style.setProperty('--sheet-h', `${state.height}px`);
     shell.classList.remove('msim-dragging');
     if (drag.zone === handle) {
       // The click that may follow this pointerup is the end of a drag.
@@ -285,9 +336,12 @@
   }
 
   sheet.addEventListener('pointerdown', onPointerDown);
-  sheet.addEventListener('pointermove', onPointerMove);
-  sheet.addEventListener('pointerup', onPointerEnd);
-  sheet.addEventListener('pointercancel', onPointerEnd);
+  // On the window: until the drag has moved far enough to capture the
+  // pointer, a quick move (or a mouse) can leave the sheet, and the drag
+  // would stall -- or hang, if the release lands outside it.
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerEnd);
+  window.addEventListener('pointercancel', onPointerEnd);
 
   handle.addEventListener('click', () => {
     if (state.suppressHandleClick) {
@@ -461,7 +515,7 @@
     $('msimSeeResultsBtn').hidden = !!role || !simData;
 
     const runBtn = $('msimRunBtn');
-    runBtn.disabled = locked || backendSimulationBusy || checking || !canRunCurrentSimulation();
+    runBtn.disabled = locked || checking || !canRunCurrentSimulation();
     runBtn.classList.toggle('mbtn--primary', !role);
 
     $('msimSetupHelp').textContent = buildSetupHelp(role, checking);
@@ -524,9 +578,6 @@
 
   function buildSetupHelp(role, checking) {
     if (!selectedHazard) return '';
-    if (backendSimulationBusy) {
-      return 'The backend is still finishing a previous simulation. Wait until it clears before starting a new one.';
-    }
     if (isEarthquakeMode() && !isEarthquakeBarangaySupported()) {
       return `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
     }
@@ -655,9 +706,10 @@
     $('msimRouteList').innerHTML = ordered.map((route, index) => buildRouteRow(route, index, best)).join('');
     syncRouteRows();
 
-    $('msimSource').textContent = isEarthquake
+    const source = isEarthquake
       ? 'These hazard levels are based on Hazard Hunter PH data.'
       : 'These hazard levels are based on Project NOAH flood historical data.';
+    $('msimSource').textContent = [buildAntSearchNote(result), source].filter(Boolean).join(' ');
     scheduleSync();
   }
 
@@ -1092,7 +1144,10 @@
       closeLayers({ restoreFocus: false });
       closeBarangayMenu({ restoreFocus: false });
       state.height = 0;
+      state.box = 0;
+      window.clearTimeout(state.settleTimer);
       shell.style.removeProperty('--sheet-h');
+      shell.style.removeProperty('--sheet-box-h');
       shell.classList.remove('msim-controls-hidden', 'msim-map-covered', 'msim-dragging', 'msim-legend-hidden');
       $('msimCenterPin').hidden = true;
     }
@@ -1126,6 +1181,7 @@
     renderResults,
     scheduleSync,
     showResults,
+    showSetup,
     syncRouteRows,
   };
 

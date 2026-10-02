@@ -257,6 +257,7 @@
     Object.values(state.hazardOverlays).flat().forEach(layer => {
       if (layer._isHazardLine) layer.bringToFront();
     });
+    fadeInHazardPane(map);
   }
 
   // showRouteKeys / showHazardLayers: whether a result's routes and hazard
@@ -295,6 +296,7 @@
         ${window.buildPinLegendRow('start')}
         ${showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Best evacuation site') : ''}
         ${pinRow('#f59e0b', '#9a3412', 'house', 'Evacuation site')}
+        ${typeof window.buildBoundaryLegendRow === 'function' ? window.buildBoundaryLegendRow() : ''}
         ${hazardLegend}
       </div>`;
   }

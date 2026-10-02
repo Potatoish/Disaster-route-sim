@@ -145,7 +145,7 @@
         <div class="hz-stack">
           <div class="hz-scene">
             <svg viewBox="0 0 520 230" role="img" aria-labelledby="hzFloodSceneLabel">
-              <title id="hzFloodSceneLabel">Street drawn to scale: a 162 cm adult and a 130 cm child standing in flood water in front of houses</title>
+              <title id="hzFloodSceneLabel">Street drawn to scale: a 163 cm adult and a 130 cm child standing in flood water in front of houses</title>
               <defs>
                 <linearGradient id="hzFloodSky" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0" style="stop-color: var(--sky-top)"/>
@@ -175,8 +175,8 @@
                 <path d="M386 62 H476 M386 74 H476 M386 86 H476 M386 98 H476 M386 110 H476 M386 122 H476 M386 134 H476 M386 146 H476 M386 158 H476 M386 170 H476 M386 182 H476" stroke-width="1" opacity=".35" style="stroke: var(--house)"/>
                 <rect x="490" y="86" width="24" height="42" rx="2" style="fill: var(--window)"/>
               </g>
-              <!-- 162 cm adult and 130 cm child at 60 units per metre -->
-              <use href="#hzPerson" transform="translate(41.725 78.5) scale(.6075)"/>
+              <!-- 163 cm adult and 130 cm child at 60 units per metre -->
+              <use href="#hzPerson" transform="translate(41.0875 77.75) scale(.61125)"/>
               <use href="#hzPerson" transform="translate(112.125 102.5) scale(.4875)"/>
               <g class="hz-water" id="hzWater" style="transform: translateY(200px)" aria-hidden="true">
                 <g class="hz-wave">
@@ -186,7 +186,7 @@
               </g>
               <rect y="200" width="520" height="30" style="fill: var(--street)"/>
               <g class="hz-svg-street" font-family="DM Mono, monospace" font-size="9" text-anchor="middle" style="fill: var(--street-text)">
-                <text x="145" y="213">Adult</text><text x="145" y="226">162 cm</text>
+                <text x="145" y="213">Adult</text><text x="145" y="226">163 cm</text>
                 <text x="197" y="213">Child</text><text x="197" y="226">130 cm</text>
               </g>
               <g aria-hidden="true">
@@ -204,19 +204,19 @@
               <g class="hz-depth-marker" id="hzDepthMarker" style="transform: translateY(200px)" aria-hidden="true">
                 <path d="M61 0 L67 -5 V5 Z" style="fill: var(--lvl, var(--low))"/>
                 <rect x="67" y="-9" width="62" height="18" rx="9" style="fill: var(--lvl, var(--low))"/>
-                <text class="hz-svg-marker" id="hzDepthMarkerText" x="98" y="0" dominant-baseline="central" text-anchor="middle" font-family="DM Mono, monospace" font-size="10.5" font-weight="500" style="fill: var(--lvl-on, #1c1917)">0.75 m</text>
+                <text class="hz-svg-marker" id="hzDepthMarkerText" x="98" y="0" dominant-baseline="central" text-anchor="middle" font-family="DM Mono, monospace" font-size="10.5" font-weight="500" style="fill: var(--lvl-on, #1c1917)">0.30 m</text>
               </g>
             </svg>
           </div>
-          <p class="hz-scene-note">Adult: 162 cm, standard Filipino height (DOST-FNRI). Child: 10 years old and below, 130 cm.</p>
+          <p class="hz-scene-note">Adult: 163 cm (5'4"), standard Filipino height (DOST-FNRI). Child: 10 years old and below, 130 cm.</p>
         </div>
 
         <div class="hz-depth">
           <div class="hz-depth-row">
             <label for="hzDepth">Water depth</label>
-            <output class="hz-depth-value" id="hzDepthOut" for="hzDepth">0.75 m</output>
+            <output class="hz-depth-value" id="hzDepthOut" for="hzDepth">0.30 m</output>
           </div>
-          <input type="range" id="hzDepth" min="0.1" max="1.5" step="0.05" value="0.75">
+          <input type="range" id="hzDepth" min="0.1" max="1.5" step="0.05" value="0.3">
           <div class="hz-depth-bands" aria-hidden="true"><span></span><span></span><span></span></div>
           <div class="hz-depth-ticks" aria-hidden="true"><span>0.1</span><span>0.5</span><span><span>1.0</span><span>1.5 m</span></span></div>
         </div>

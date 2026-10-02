@@ -4,18 +4,26 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>AGNAS</title>
+  <!-- Home <-> simulator cross-fade, the same opt-in as site_base.html
+       (style.css styles it). Inline and first: from a stylesheet, Chrome
+       sometimes read the opt-in as off and skipped it. -->
+  <style>
+    @view-transition{ navigation:auto; }
+    @media (prefers-reduced-motion: reduce){ @view-transition{ navigation:none; } }
+  </style>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='agnas-logo.png') }}">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin="" />
+  <!-- Leaflet 1.9.4, served from here (static/vendor/leaflet, unmodified,
+       BSD-2 licence alongside) so the map never depends on a CDN. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body onload="initTheme(); initMap();">
+<body>
 <script>
   (function () {
     try {
@@ -222,6 +230,7 @@
       <div class="empty-map" id="emptyMap">
         <div class="empty-map-icon" id="emptyMapIcon">&#128506;</div>
         <div class="empty-map-txt" id="emptyMapTxt">Select a barangay to load the map</div>
+        <button type="button" class="empty-map-retry" id="emptyMapRetry" onclick="retryBackendConnection()" hidden>Try again</button>
       </div>
       <script>
         // Runs synchronously at parse time, before initMap()/startApp() get a
@@ -437,7 +446,7 @@
                 <p id="msimDisclaimerText"></p>
               </details>
 
-              <button class="mbtn mbtn--primary mbtn--block" id="msimNewSimBtn" type="button" onclick="goToHomepageForNewScope()">New simulation</button>
+              <button class="mbtn mbtn--primary mbtn--block" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
               <button class="mbtn-link" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download report (PDF)</button>
             </div>
           </div>
@@ -547,7 +556,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
       Download Report (PDF)
     </button>
-    <button class="reset-btn" id="resetBtn" type="button" onclick="goToHomepageForNewScope()">
+    <button class="reset-btn" id="resetBtn" type="button" onclick="startNewSimulation()">
       New Simulation
     </button>
   </aside>
@@ -555,7 +564,7 @@
 
 
 <div class="route-modal-backdrop" id="routeListModal" hidden>
-  <section class="route-list-modal" role="dialog" aria-modal="true" aria-label="Alternative routes">
+  <section class="route-list-modal" role="dialog" aria-modal="true" aria-label="More routes">
     <header class="route-list-modal-head">
       <div>
         <div class="safety-eyebrow">AGNAS</div>
@@ -586,14 +595,12 @@
 
 {% include "_tutorial_modal.html" %}
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-  crossorigin=""></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 
 <!-- Used only by downloadSimulationReport() (script.js) to build the PDF
-     report -- loaded from CDN like Leaflet above, no bundler in this
-     project. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+     report -- loaded from a CDN (only the report needs it, and it fails
+     softly), no bundler in this project. -->
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
@@ -601,6 +608,9 @@
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 <script src="{{ url_for('static', filename='mobile-sim.js') }}"></script>
+<!-- Started here rather than on <body onload>, which waits for every font,
+     image and CDN script first, so the map tiles began loading late. -->
+<script>initTheme(); initMap();</script>
 
 </body>
 </html>

@@ -382,7 +382,7 @@ body.dark .workflow-card {
   font-family: 'DM Mono', monospace;
   font-size: .77rem;
   cursor: pointer;
-  transition: all .2s ease;
+  transition: border-color .2s ease, color .2s ease, background-color .2s ease, transform .2s ease;
 }
 
 .card-action-btn:hover:not(:disabled) {
@@ -540,7 +540,7 @@ body.dark .earthquake-route-copy strong {
   border-radius: 10px;
   padding: 10px;
   cursor: pointer;
-  transition: all .2s;
+  transition: border-color .2s ease, background-color .2s ease, color .2s ease;
   background: var(--panel);
   display: flex;
   align-items: center;
@@ -829,7 +829,7 @@ body.dark .info-box {
   font-weight: 700;
   letter-spacing: 1px;
   cursor: pointer;
-  transition: all .2s;
+  transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
   box-shadow: 0 4px 20px var(--hazard-button-shadow);
   display: flex;
   align-items: center;
@@ -872,7 +872,7 @@ body.dark .run-btn:hover {
   font-family: 'DM Mono', monospace;
   font-size: .82rem;
   cursor: pointer;
-  transition: all .2s;
+  transition: border-color .2s ease, color .2s ease;
   display: none;
 }
 
@@ -906,7 +906,9 @@ body.dark .run-btn:hover {
   width: 100%;
   height: 100%;
   min-height: 100%;
-  background: #ffffff;
+  /* OpenStreetMap's land color, so a tile still loading blends into the map
+     instead of showing as a stark white (grey under the outside mask) box. */
+  background: #f2efe9;
   /* Leaflet's own CSS never gives .leaflet-container a z-index, so without
      this its internal panes (tiles/markers sit at z-index 200-700 in
      Leaflet's stylesheet) compare directly against sibling overlays like
@@ -975,22 +977,13 @@ body.dark .run-btn:hover {
   flex-shrink: 0;
 }
 
-/* Match the dark-cased dashes of available / eliminated routes on the map
-   (ROUTE_DASHES in osm.js). */
-.legend-line--available,
-.legend-line--eliminated {
-  width: 26px;
-  height: 8px;
-  border-radius: 0;
-  background: center / contain no-repeat;
-}
-
-.legend-line--available {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='8'%3E%3Cg fill='none' stroke-linecap='round' stroke-dasharray='4 8'%3E%3Cpath d='M4 4H24' stroke='%231c1917' stroke-width='5.5'/%3E%3Cpath d='M4 4H24' stroke='%238b5cf6' stroke-width='3'/%3E%3C/g%3E%3C/svg%3E");
-}
-
-.legend-line--eliminated {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='8'%3E%3Cg fill='none' stroke-linecap='round' stroke-dasharray='5 6'%3E%3Cpath d='M4 4H24' stroke='%231c1917' stroke-width='5.5'/%3E%3Cpath d='M4 4H24' stroke='%23ef4444' stroke-width='3'/%3E%3C/g%3E%3C/svg%3E");
+/* The barangay outline (buildBoundaryLegendRow): a slim line with a thin
+   darker edge, colored inline like the outline on the map. */
+.legend-boundary {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 /* A small copy of the S/E pin or evacuation-site marker (buildLegendPinSvg),
@@ -1104,6 +1097,61 @@ body.dark .run-btn:hover {
   pointer-events: none;
   z-index: 4;
   background: rgba(255, 255, 255, .64);
+  transition: opacity .3s ease;
+}
+
+.empty-map[hidden] {
+  display: none;
+}
+
+/* revealMapWhenBaseReady(): fades out once the base map is in. */
+.empty-map.is-leaving {
+  opacity: 0;
+}
+
+/* The barangay outline and outside mask ease in when drawn (after the map
+   loads, and once a flight to another barangay lands) instead of popping. */
+@media (prefers-reduced-motion: no-preference) {
+  .barangay-scope-mask,
+  .barangay-boundary-line {
+    animation: barangayBoundaryIn .4s ease-out both;
+  }
+}
+
+@keyframes barangayBoundaryIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* A result's lines and labels, and the hazard fills whenever they are drawn,
+   fade in (osm.js replayClassAnimation; the lines never move). */
+.leaflet-container.routes-entering path.route-line,
+.leaflet-container.routes-entering .route-eta-tooltip,
+.leaflet-pane.is-entering {
+  animation: mapLayerFadeIn .36s ease-out both;
+}
+
+@keyframes mapLayerFadeIn {
+  from { opacity: 0; }
+}
+
+/* A new pin drops in. `translate` stacks on Leaflet's own transform, which
+   positions the marker. */
+.leaflet-marker-icon.route-pin-drop {
+  animation: routePinDrop .34s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@keyframes routePinDrop {
+  from { translate: 0 -16px; opacity: 0; }
+}
+
+/* Home <-> simulator cross-fade (opt-in: index.html's inline style); the
+   homepage nav leaving with it fades out on the same beat. */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(site-nav) {
+  animation-duration: .28s;
+  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
 }
 
 body.dark .empty-map {
@@ -1134,6 +1182,24 @@ body.dark .empty-map {
 
 @keyframes emptyMapSpin {
   to { transform: rotate(360deg); }
+}
+
+/* waitForBackend() gave up: the cover is click-through, its button isn't. */
+.empty-map-retry {
+  pointer-events: auto;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--border2);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: 600 .86rem var(--font-body);
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease;
+}
+
+.empty-map-retry:hover {
+  border-color: var(--accent);
 }
 
 #loader {
@@ -1399,7 +1465,8 @@ body.dark .empty-map {
   border-radius: 999px;
   width: 0;
   overflow: visible;
-  transition: width .42s cubic-bezier(.2, .8, .2, 1);
+  /* No CSS transition: script.js eases the bar every frame already
+     (stepLoaderProgress); a transition on top made it trail and wobble. */
   box-shadow: 0 0 16px color-mix(in srgb, var(--accent2) 26%, transparent);
   animation: loaderBarShift 2.4s linear infinite, loaderBarGlow 1.7s ease-in-out infinite;
 }
@@ -1726,8 +1793,16 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .flood-filter-buttons button { border: 1px solid var(--map-ui-border); border-radius: 5px; padding: 4px 6px; background: transparent; color: var(--map-ui-text); font: 700 .59rem var(--font-body); cursor: pointer; }
 .flood-filter-buttons button.active { background: var(--map-ui-accent); border-color: var(--map-ui-accent); color: #fff; }
 
-.route-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(2, 8, 23, .56); backdrop-filter: blur(3px); }
-.route-list-modal { width: min(700px, 100%); max-height: min(76vh, 720px); max-height: min(76dvh, 720px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border2); border-radius: 15px; background: var(--surface); box-shadow: 0 28px 70px rgba(0,0,0,.35); }
+.route-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(2, 8, 23, .56); backdrop-filter: blur(3px); animation: modalBackdropIn .2s ease both; }
+.route-list-modal { width: min(700px, 100%); max-height: min(76vh, 720px); max-height: min(76dvh, 720px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border2); border-radius: 15px; background: var(--surface); box-shadow: 0 28px 70px rgba(0,0,0,.35); animation: aboutModalIn .26s cubic-bezier(.22, 1, .36, 1) both; }
+/* Dialogs leave the way they came (closeModalAnimated in script.js). */
+.route-modal-backdrop.is-closing,
+.about-modal-backdrop.is-closing { animation: modalBackdropOut .18s ease both; }
+.route-modal-backdrop.is-closing .route-list-modal,
+.about-modal-backdrop.is-closing .about-modal { animation: modalCardOut .18s cubic-bezier(.4, 0, 1, 1) both; }
+@keyframes modalBackdropIn { from { opacity: 0; } }
+@keyframes modalBackdropOut { to { opacity: 0; } }
+@keyframes modalCardOut { to { opacity: 0; transform: translateY(8px) scale(.98); } }
 .route-list-modal-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 17px 19px; border-bottom: 1px solid var(--border); }
 .modal-close-btn { width: 30px; height: 30px; border: 1px solid var(--border2); border-radius: 7px; background: var(--panel); color: var(--text); font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .route-list-modal-body { overflow: auto; overscroll-behavior: contain; padding: 13px; display: grid; gap: 8px; }
@@ -1930,6 +2005,11 @@ body.dark .tutorial-tile-shot .shot-dark { display: block; }
 .tutorial-btn:disabled { opacity: .4; }
 .tutorial-btn.primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
 body.tutorial-modal-open { overflow: hidden; }
+/* tutorial.js waits for this exit before hiding the modal. */
+.tutorial-modal.is-closing { animation: tutorialModalOut .2s ease both; }
+.tutorial-modal.is-closing .tutorial-modal-panel { animation: tutorialPanelOut .2s cubic-bezier(.4, 0, 1, 1) both; }
+@keyframes tutorialModalOut { to { opacity: 0; } }
+@keyframes tutorialPanelOut { to { opacity: 0; transform: translateY(8px) scale(.98); } }
 
 .emergency-modal {
   border-color: color-mix(in srgb, var(--red) 40%, var(--border));
@@ -2048,6 +2128,13 @@ body.dark .emergency-modal {
   transition: stroke-width .3s ease, stroke-opacity .3s ease;
 }
 
+/* Chrome focuses a clicked map line and draws its focus ring as a black box
+   around the line's whole extent. Lines are picked by click (the results
+   panel's route cards are the keyboard way in), so the ring goes. */
+.leaflet-container path.leaflet-interactive:focus {
+  outline: none;
+}
+
 /* Marching dash on the selected route only (createRoutePreview in script.js);
    route lines themselves are static. The 24px offset is one full dash + gap
    cycle of that dash, so the loop is seamless; 2.4s keeps the original pace. */
@@ -2102,7 +2189,7 @@ body.dark .emergency-modal {
 }
 
 .route-eta--best svg { color: #16a34a; }
-.route-eta--available svg { color: #7c3aed; }
+.route-eta--available svg { color: #475569; }
 .route-eta--eliminated svg { color: #dc2626; }
 
 .route-eta-text {
@@ -2120,6 +2207,21 @@ body.dark .emergency-modal {
   color: var(--map-ui-muted);
   font-size: .7rem;
 }
+
+/* "Route 2" / "Route 1 · Best" over the time (buildRouteEtaLabel). */
+.route-eta-text .route-eta-name {
+  font-style: normal;
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--map-ui-muted);
+}
+
+.route-eta--best .route-eta-name { color: #15803d; }
+.route-eta--eliminated .route-eta-name { color: #b91c1c; }
+body.dark .route-eta--best .route-eta-name { color: #4ade80; }
+body.dark .route-eta--eliminated .route-eta-name { color: #f87171; }
 
 .leaflet-popup-content-wrapper {
   background: var(--map-ui-bg) !important;
@@ -2584,7 +2686,19 @@ body.dark .leaflet-popup-close-button {
   .about-modal-backdrop,
   .about-modal,
   .tutorial-modal,
-  .tutorial-modal-panel {
+  .tutorial-modal-panel,
+  .tutorial-modal.is-closing,
+  .tutorial-modal.is-closing .tutorial-modal-panel,
+  .route-modal-backdrop,
+  .route-list-modal,
+  .route-modal-backdrop.is-closing,
+  .about-modal-backdrop.is-closing,
+  .route-modal-backdrop.is-closing .route-list-modal,
+  .about-modal-backdrop.is-closing .about-modal,
+  .leaflet-container.routes-entering path.route-line,
+  .leaflet-container.routes-entering .route-eta-tooltip,
+  .leaflet-pane.is-entering,
+  .leaflet-marker-icon.route-pin-drop {
     animation: none;
   }
 }
@@ -2938,21 +3052,24 @@ body.dark .leaflet-popup-close-button {
 
 /* Zoom and locate, bottom-right, riding just above the sheet (and the map
    attribution under them). Hidden when the sheet leaves too little map. */
+/* Like the sheet, everything riding above it moves by transform (no
+   relayout per frame): --sheet-h lifts it off a fixed bottom. */
 .msim-map-controls {
   position: fixed;
   z-index: 212;
   right: calc(12px + env(safe-area-inset-right, 0px));
-  bottom: calc(var(--sheet-h, 0px) + 24px);
+  bottom: 24px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
+  transform: translateY(calc(-1 * var(--sheet-h, 0px)));
+  transition: transform .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
 }
 
 #appShell.msim-controls-hidden .msim-map-controls {
   opacity: 0;
   visibility: hidden;
-  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
+  transition: transform .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
 }
 
 .msim-map-group {
@@ -3012,7 +3129,8 @@ body.dark .leaflet-popup-close-button {
   position: fixed;
   z-index: 212;
   left: calc(12px + env(safe-area-inset-left, 0px));
-  bottom: calc(var(--sheet-h, 0px) + 24px);
+  bottom: 24px;
+  transform: translateY(calc(-1 * var(--sheet-h, 0px)));
   max-width: min(210px, calc(100vw - 92px));
   padding: 0 9px 7px;
   border: 1px solid var(--map-ui-border);
@@ -3021,7 +3139,7 @@ body.dark .leaflet-popup-close-button {
   box-shadow: 0 6px 16px rgba(15, 23, 42, .14);
   backdrop-filter: blur(6px);
   color: var(--map-ui-text);
-  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
+  transition: transform .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
 }
 
 .msim-maplegend.is-folded {
@@ -3031,7 +3149,7 @@ body.dark .leaflet-popup-close-button {
 #appShell.msim-legend-hidden .msim-maplegend {
   opacity: 0;
   visibility: hidden;
-  transition: bottom .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
+  transition: transform .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
 }
 
 .msim-maplegend-toggle {
@@ -3088,15 +3206,9 @@ body.dark .leaflet-popup-close-button {
   white-space: nowrap;
 }
 
-.msim-maplegend .legend-line {
+.msim-maplegend .legend-line,
+.msim-maplegend .legend-boundary {
   width: 20px;
-}
-
-.msim-maplegend .legend-line--available,
-.msim-maplegend .legend-line--eliminated {
-  width: 22px;
-  height: 7px;
-  margin-right: -2px;
 }
 
 .msim-maplegend .legend-pin {
@@ -3129,15 +3241,19 @@ body.dark .leaflet-popup-close-button {
   border-radius: 3px;
 }
 
-/* The bottom sheet. Its height is --sheet-h (peek, half, full, or wherever a
-   drag has it); only the inner scroller scrolls, and only at half or full. */
+/* The bottom sheet. Its visible height is --sheet-h (peek, half, full, or
+   wherever a drag has it); only the inner scroller scrolls, and only at half
+   or full. It moves by transform: its box is --sheet-box-h (the tallest
+   height in play while it moves, then --sheet-h again; mobile-sim.js), slid
+   down by the difference, so a drag or snap never re-lays out its content. */
 .msheet {
   position: fixed;
   z-index: 220;
   left: 0;
   right: 0;
   bottom: 0;
-  height: var(--sheet-h, 0px);
+  height: var(--sheet-box-h, var(--sheet-h, 0px));
+  transform: translateY(calc(var(--sheet-box-h, var(--sheet-h, 0px)) - var(--sheet-h, 0px)));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3149,7 +3265,7 @@ body.dark .leaflet-popup-close-button {
   box-shadow: 0 -12px 32px rgba(2, 8, 23, .28);
   color: var(--text);
   font-family: var(--font-body);
-  transition: height .28s var(--msim-ease);
+  transition: transform .28s var(--msim-ease);
 }
 
 /* 24px tall; the band below brings the tap area to 44px without adding
@@ -3732,11 +3848,19 @@ body.dark .leaflet-popup-close-button {
   background: #22c55e;
 }
 
-.mroute-swatch--best-unsafe { background: #ef4444; }
-.mroute-swatch--available { background: #8b5cf6; }
-.mroute-swatch--eliminated {
-  background: repeating-linear-gradient(90deg, #ef4444 0 6px, transparent 6px 10px);
+/* Solid with a thin darker edge, the best route heavier, like the map. */
+.mroute-swatch { box-shadow: 0 0 0 1px #15803d; }
+.mroute-swatch--best-unsafe { background: #ef4444; box-shadow: 0 0 0 1px #991b1b; }
+.mroute-swatch--available,
+.mroute-swatch--eliminated { height: 3px; }
+/* Available routes are dotted on the map, each dot ringed in a darker edge
+   (ROUTE_TRAIL_* in osm.js). */
+.mroute-swatch--available {
+  height: 5px;
+  background: radial-gradient(circle, #64748b 1.4px, #334155 1.6px, #334155 2.3px, transparent 2.6px) 1px 50% / 7px 100% repeat-x;
+  box-shadow: none;
 }
+.mroute-swatch--eliminated { background: #991b1b; box-shadow: 0 0 0 1px #450a0a; }
 
 .mroute-text {
   flex: 1 1 auto;
@@ -4073,8 +4197,8 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   /* The map attribution stays readable just above the sheet -- and steps
      away only when a full-height sheet leaves no map to credit. */
   .leaflet-bottom {
-    bottom: var(--sheet-h, 0px);
-    transition: bottom .28s var(--msim-ease);
+    transform: translateY(calc(-1 * var(--sheet-h, 0px)));
+    transition: transform .28s var(--msim-ease);
   }
 
   #appShell.msim-map-covered .leaflet-bottom {
@@ -4101,6 +4225,10 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 
   .route-eta-text span {
     font-size: .66rem;
+  }
+
+  .route-eta-text .route-eta-name {
+    font-size: .6rem;
   }
 }
 

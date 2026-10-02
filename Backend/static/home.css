@@ -131,19 +131,39 @@ body.dark .nav-row{ box-shadow:0 12px 30px rgba(0,0,0,.32); }
 .nav-btn:hover{ color:var(--text); background:var(--panel-strong); }
 .nav-btn:active{ color:var(--accent-ink); background:linear-gradient(180deg,var(--accent2),var(--accent)); }
 .nav-btn.is-active{ color:var(--accent-ink); background:linear-gradient(180deg,var(--accent2),var(--accent)); }
+/* The highlight slides between the links (static/nav-pill.js; per the user,
+   who found the nav too static): one gradient layer with white copies of the
+   labels, clipped to the pill's shape and click-through. With it the links
+   lose their own fill; without JS the active link keeps it. */
+.nav-links{ position:relative; }
+.nav-pill{
+  position:absolute; top:0; left:0; z-index:1; pointer-events:none;
+  background-image:linear-gradient(180deg,var(--accent2),var(--accent)); background-repeat:no-repeat;
+}
+.nav-pill .nav-pill-label{ position:absolute; margin:0; color:var(--accent-ink); background:none; transition:none; }
+.nav-links.has-pill .nav-btn.is-active{ color:var(--muted); background-color:transparent; background-image:none; }
+.nav-links.has-pill .nav-btn:active{ color:var(--text); background-color:var(--panel-strong); background-image:none; }
 .nav-actions{display:flex; align-items:center; gap:8px;}
 
 /* Both theme states sit side by side instead of one icon swapping in
    place, matching the app's other segmented-choice controls (see
    .qs-segmented) rather than introducing a new interaction pattern. */
-.theme-switch{ display:flex; align-items:center; gap:2px; padding:3px; border-radius:999px; border:1px solid var(--border); background:var(--panel); }
+.theme-switch{ position:relative; display:flex; align-items:center; gap:2px; padding:3px; border-radius:999px; border:1px solid var(--border); background:var(--panel); }
+/* The raised thumb under the active theme's icon slides across with the
+   theme, like the nav's pill (a gap plus a button over in dark mode). */
+.theme-switch::before{
+  content:""; position:absolute; top:3px; left:3px; width:28px; height:28px; border-radius:50%;
+  background:var(--surface); box-shadow:var(--shadow-sm); transition:transform .4s cubic-bezier(.22,1,.36,1);
+}
+body.dark .theme-switch::before{ transform:translateX(30px); }
 .theme-switch-btn{
+  position:relative; z-index:1;
   width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;
-  border:none; background:transparent; border-radius:50%; color:var(--muted); transition:color .16s ease, background .16s ease;
+  border:none; background:transparent; border-radius:50%; color:var(--muted); transition:color .25s ease, background .16s ease;
 }
 .theme-switch-btn svg{ width:15px; height:15px; }
 .theme-switch-btn:hover{ color:var(--text); }
-.theme-switch-btn.is-active{ background:var(--surface); color:var(--accent); box-shadow:var(--shadow-sm); }
+.theme-switch-btn.is-active{ color:var(--accent); }
 .cta{
   border:none; border-radius:9px; padding:9px 16px; font-weight:700; font-size:14px;
   background:linear-gradient(180deg,var(--accent2),var(--accent)); color:var(--accent-ink);
@@ -499,6 +519,36 @@ body.scope-modal-open{ overflow:hidden; }
 .tutorial-btn:disabled{ opacity:.4; }
 .tutorial-btn.primary{ border-color:transparent; background:var(--accent); color:var(--accent-ink); }
 body.tutorial-modal-open{ overflow:hidden; }
+/* Opens and closes with a fade and a short rise, timed with the nav pill
+   sliding to "How to use" and back; tutorial.js waits for the exit. */
+.tutorial-modal-backdrop{ animation:tutorialFadeIn .24s ease both; }
+.tutorial-modal-panel{ animation:tutorialPanelIn .34s cubic-bezier(.22,1,.36,1) both; }
+.tutorial-modal.is-closing .tutorial-modal-backdrop{ animation:tutorialFadeOut .2s ease both; }
+.tutorial-modal.is-closing .tutorial-modal-panel{ animation:tutorialPanelOut .2s cubic-bezier(.4,0,1,1) both; }
+@keyframes tutorialFadeIn{ from{ opacity:0; } }
+@keyframes tutorialFadeOut{ to{ opacity:0; } }
+@keyframes tutorialPanelIn{ from{ opacity:0; transform:translateY(14px) scale(.97); } }
+@keyframes tutorialPanelOut{ to{ opacity:0; transform:translateY(8px) scale(.98); } }
+
+/* ---------- PAGE TRANSITIONS ----------
+   Home <-> About cross-fade instead of cutting (browsers with cross-document
+   view transitions; the rest just cut). The opt-in is an inline style in
+   site_base.html. The nav is lifted out of the fade and shown live, so its
+   pill keeps sliding across the change. */
+.nav-row{ view-transition-name:site-nav; }
+::view-transition-old(site-nav){ display:none; }
+::view-transition-new(site-nav){ animation:none; }
+/* Coming from the simulator (no nav there to carry over), the nav fades in
+   with the page. */
+::view-transition-new(site-nav):only-child{ animation:pageFadeIn .28s cubic-bezier(.4,0,.2,1) both; }
+::view-transition-old(root), ::view-transition-new(root){ animation-duration:.28s; animation-timing-function:cubic-bezier(.4,0,.2,1); }
+@keyframes pageFadeIn{ from{ opacity:0; } }
+/* A theme switch cross-fades the whole page, nav included (home.js) --
+   except the switch, which stays live so its thumb slides. */
+html.theme-transition .nav-row{ view-transition-name:none; }
+html.theme-transition .theme-switch{ view-transition-name:theme-switch; }
+::view-transition-old(theme-switch){ display:none; }
+::view-transition-new(theme-switch){ animation:none; }
 
 /* ---------- HAZARD SHOWCASE (flood depth + earthquake layers) ----------
    Illustrative, not live data: the flood scene is drawn to scale (1 m = 60
@@ -894,8 +944,15 @@ body.dark .hz-section{
 @media (min-width:640px) and (max-width:1023px){
   .brand, .nav-btn{ min-height:44px; }
   .theme-switch-btn{ width:44px; height:44px; }
+  .theme-switch::before{ width:44px; height:44px; }
+  body.dark .theme-switch::before{ transform:translateX(46px); }
 }
-@media (prefers-reduced-motion: reduce){ .hero canvas{ display:none; } }
+@media (prefers-reduced-motion: reduce){
+  .hero canvas{ display:none; }
+  /* nav-pill.js and tutorial.js check the same query and skip their motion. */
+  .theme-switch::before{ transition:none; }
+  .tutorial-modal-backdrop, .tutorial-modal-panel{ animation:none !important; }
+}
 
 /* ---------- PHONE LAYOUT (< 640px) ----------
    Follows the user's mobile wireframes (landing top, hazard guide, lower
@@ -1046,6 +1103,7 @@ body.dark .hz-section{
   /* These states set `background` as a shorthand, which resets the clip. */
   .nav-btn.is-active, .nav-btn:hover, .nav-btn:active{ background-clip:padding-box; }
   .theme-switch{ padding:0; border:0; background:none; }
+  .theme-switch::before{ content:none; }
   .theme-switch-btn.is-active{ display:none; }
   .theme-switch-btn{
     width:44px; height:44px; border:4px solid transparent; background:var(--panel); background-clip:padding-box;

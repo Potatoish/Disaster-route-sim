@@ -1,6 +1,10 @@
+import json
 import os
+import time
+import uuid
+from collections import OrderedDict, deque
 from datetime import datetime, timezone
-from threading import Lock, RLock
+from threading import Condition, RLock, Thread
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -37,7 +41,6 @@ def _version_static_urls(endpoint, values):
     except OSError:
         pass
 
-_SIMULATION_GATE = Lock()
 _SIMULATION_STATE_LOCK = RLock()
 _SIMULATION_STATE = {
     "busy": False,
@@ -51,6 +54,8 @@ def _utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 def _serialize_simulation_status():
+    with _JOBS_LOCK:
+        queue_length = len(_JOB_QUEUE)
     with _SIMULATION_STATE_LOCK:
         if not _SIMULATION_STATE["busy"]:
             return {
@@ -60,6 +65,7 @@ def _serialize_simulation_status():
                 "started_at": None,
                 "elapsed_seconds": 0.0,
                 "request": None,
+                "queue_length": queue_length,
             }
 
         started_at_raw = _SIMULATION_STATE["started_at"]
@@ -69,10 +75,6 @@ def _serialize_simulation_status():
             (datetime.now(timezone.utc) - started_at).total_seconds(),
         )
         request_summary = dict(_SIMULATION_STATE["request"] or {})
-        progress_state = get_progress()
-        total = progress_state["total"]
-        current = min(progress_state["current"], total) if total else 0
-        percent = round((current / total) * 100, 1) if total else 0.0
         return {
             "busy": True,
             "mode": _SIMULATION_STATE["mode"],
@@ -80,12 +82,20 @@ def _serialize_simulation_status():
             "started_at": started_at_raw,
             "elapsed_seconds": round(elapsed_seconds, 1),
             "request": request_summary,
-            "progress": {
-                "current": current,
-                "total": total,
-                "percent": percent,
-            },
+            "progress": _current_progress(),
+            "queue_length": queue_length,
         }
+
+def _current_progress():
+    progress_state = get_progress()
+    total = progress_state["total"]
+    current = min(progress_state["current"], total) if total else 0
+    percent = round((current / total) * 100, 1) if total else 0.0
+    return {
+        "current": current,
+        "total": total,
+        "percent": percent,
+    }
 
 def _mark_simulation_started(mode, request_summary):
     reset_progress(0)
@@ -109,26 +119,178 @@ def _mark_simulation_finished():
         _SIMULATION_STATE["request"] = None
 
 
-def _simulation_busy_response():
-    status = _serialize_simulation_status()
-    return jsonify({
-        "error": True,
-        "code": "simulation_busy",
-        "message": "Another simulation is still running on the backend. Wait for it to finish before starting a new one.",
-        "status": status,
-    }), 429
+# ---- Simulation queue ----
+# Simulations run one at a time on a single worker thread, first come first
+# served (the graph caches, the progress counter and the CPU are shared). A
+# request no longer gets "busy" while another runs: it waits in line, and the
+# frontend shows its place (per the user). The frontend submits with
+# {"async": true} and polls GET /simulation-jobs/<id>, so a page reload can
+# pick its run back up; without "async" the request waits for its result as
+# before (tools, curl). A request identical to a recent one (same mode,
+# barangay, hazard and pins -- the ant colony is seeded from those, so the
+# result would be the same) gets that job instead of running again.
+JOB_RESULT_TTL_SECONDS = 30 * 60
+MAX_KEPT_JOBS = 40
+SYNC_WAIT_TIMEOUT_SECONDS = 300
+
+_JOBS_LOCK = Condition()
+_JOBS = OrderedDict()
+_JOB_QUEUE = deque()
+_JOB_WORKER = None
 
 
-def _run_with_simulation_gate(mode, request_summary, work):
-    if not _SIMULATION_GATE.acquire(blocking=False):
-        return _simulation_busy_response()
+def _job_request_key(mode, request_summary):
+    def normalize(value):
+        if isinstance(value, dict):
+            normalized = {}
+            for key, item in value.items():
+                if key == "label":
+                    continue
+                if key in ("lat", "lng"):
+                    try:
+                        item = round(float(item), 6)
+                    except (TypeError, ValueError):
+                        pass
+                normalized[key] = item
+            return normalized
+        return value
 
-    _mark_simulation_started(mode, request_summary)
-    try:
-        return work()
-    finally:
-        _mark_simulation_finished()
-        _SIMULATION_GATE.release()
+    payload = {key: normalize(value) for key, value in request_summary.items()}
+    payload["mode"] = mode
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
+def _prune_jobs_locked():
+    now = time.time()
+    for job_id in list(_JOBS):
+        finished = _JOBS[job_id]["finished_at"]
+        if finished is not None and now - finished > JOB_RESULT_TTL_SECONDS:
+            del _JOBS[job_id]
+    finished_ids = [job_id for job_id, job in _JOBS.items() if job["finished_at"] is not None]
+    while len(_JOBS) > MAX_KEPT_JOBS and finished_ids:
+        del _JOBS[finished_ids.pop(0)]
+
+
+def _reusable_job_locked(key):
+    for job in reversed(_JOBS.values()):
+        if job["key"] != key:
+            continue
+        # A crash (5xx) is not a real answer; anything else for the same
+        # inputs would come out the same again.
+        if job["state"] == "failed" and job["status_code"] >= 500:
+            continue
+        return job
+    return None
+
+
+def _ensure_job_worker_locked():
+    global _JOB_WORKER
+    if _JOB_WORKER is None or not _JOB_WORKER.is_alive():
+        _JOB_WORKER = Thread(target=_job_worker_loop, name="simulation-worker", daemon=True)
+        _JOB_WORKER.start()
+
+
+def _submit_simulation_job(mode, request_summary, work):
+    key = _job_request_key(mode, request_summary)
+    with _JOBS_LOCK:
+        _prune_jobs_locked()
+        existing = _reusable_job_locked(key)
+        if existing is not None:
+            return existing
+
+        job = {
+            "id": uuid.uuid4().hex,
+            "key": key,
+            "mode": mode,
+            "summary": request_summary,
+            "work": work,
+            "state": "queued",
+            "created_at": time.time(),
+            "started_at": None,
+            "finished_at": None,
+            "result": None,
+            "status_code": None,
+        }
+        _JOBS[job["id"]] = job
+        _JOB_QUEUE.append(job["id"])
+        _ensure_job_worker_locked()
+        _JOBS_LOCK.notify_all()
+        return job
+
+
+def _job_worker_loop():
+    while True:
+        with _JOBS_LOCK:
+            while not _JOB_QUEUE:
+                _JOBS_LOCK.wait()
+            job = _JOBS.get(_JOB_QUEUE.popleft())
+            if job is None:
+                continue
+            job["state"] = "running"
+            job["started_at"] = time.time()
+
+        _mark_simulation_started(job["mode"], job["summary"])
+        try:
+            result = job["work"]()
+            status_code = 200 if not result.get("error") else 400
+        except Exception as exc:
+            result = {"error": True, "message": str(exc)}
+            status_code = 500
+        finally:
+            _mark_simulation_finished()
+
+        with _JOBS_LOCK:
+            job["result"] = result
+            job["status_code"] = status_code
+            job["state"] = "done" if status_code == 200 else "failed"
+            job["finished_at"] = time.time()
+            job["work"] = None
+            _JOBS_LOCK.notify_all()
+
+
+def _job_public_view(job):
+    with _JOBS_LOCK:
+        state = job["state"]
+        ahead = 0
+        if state == "queued" and job["id"] in _JOB_QUEUE:
+            # The simulations that run first: those queued before it, plus
+            # the one running now (if any).
+            ahead = _JOB_QUEUE.index(job["id"]) + sum(
+                1 for other in _JOBS.values() if other["state"] == "running"
+            )
+        view = {
+            "error": False,
+            "job_id": job["id"],
+            "state": state,
+            "queued_ahead": ahead,
+            "status_code": job["status_code"],
+        }
+        if state in ("done", "failed"):
+            view["result"] = job["result"]
+    if state == "running":
+        view["progress"] = _current_progress()
+    elif state == "done":
+        view["progress"] = {"percent": 100.0}
+    return view
+
+
+def _run_simulation_request(mode, request_summary, work, wait_async):
+    job = _submit_simulation_job(mode, request_summary, work)
+    if wait_async:
+        return jsonify(_job_public_view(job)), 202
+
+    with _JOBS_LOCK:
+        finished = _JOBS_LOCK.wait_for(
+            lambda: job["state"] in ("done", "failed"),
+            timeout=SYNC_WAIT_TIMEOUT_SECONDS,
+        )
+    if not finished:
+        return jsonify({
+            "error": True,
+            "message": "The simulation is still running. Try again shortly.",
+            "job_id": job["id"],
+        }), 504
+    return jsonify(job["result"]), job["status_code"]
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -141,6 +303,18 @@ def simulation_status():
         "error": False,
         "status": _serialize_simulation_status(),
     })
+
+@app.route("/simulation-jobs/<job_id>", methods=["GET"])
+def simulation_job(job_id):
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+    if job is None:
+        return jsonify({
+            "error": True,
+            "code": "job_not_found",
+            "message": "That simulation is no longer available. Run it again.",
+        }), 404
+    return jsonify(_job_public_view(job))
 
 @app.route("/locations", methods=["GET"])
 def locations():
@@ -298,15 +472,9 @@ def run_simulation():
         }
 
         def work():
-            result = simulate(start, end, hazard, barangay=barangay)
-            status_code = 200 if not result.get("error") else 400
-            return jsonify(result), status_code
+            return simulate(start, end, hazard, barangay=barangay)
 
-        return _run_with_simulation_gate(
-            "flood",
-            request_summary,
-            work,
-        )
+        return _run_simulation_request("flood", request_summary, work, data.get("async") is True)
     except Exception as e:
         return jsonify({
             "error": True,
@@ -340,15 +508,9 @@ def run_earthquake():
         }
 
         def work():
-            result = simulate_earthquake(start, barangay)
-            status_code = 200 if not result.get("error") else 400
-            return jsonify(result), status_code
+            return simulate_earthquake(start, barangay)
 
-        return _run_with_simulation_gate(
-            "earthquake",
-            request_summary,
-            work,
-        )
+        return _run_simulation_request("earthquake", request_summary, work, data.get("async") is True)
     except Exception as e:
         return jsonify({
             "error": True,

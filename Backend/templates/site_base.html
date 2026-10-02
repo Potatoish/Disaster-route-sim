@@ -4,6 +4,12 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>{% block title %}AGNAS{% endblock %}</title>
+  <!-- Home <-> About cross-fade (home.css styles it). Inline and first: from
+       home.css, Chrome sometimes read the opt-in as off and skipped it. -->
+  <style>
+    @view-transition{ navigation:auto; }
+    @media (prefers-reduced-motion: reduce){ @view-transition{ navigation:none; } }
+  </style>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='agnas-logo.png') }}">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,11 +38,11 @@
         <span class="brand-word">GNAS</span>
       </a>
       <div class="nav-links">
-        <a class="nav-btn {{ 'is-active' if active_page == 'home' else '' }}" href="{{ url_for('home') }}">
+        <a class="nav-btn {{ 'is-active' if active_page == 'home' else '' }}" href="{{ url_for('home') }}" {{ 'aria-current=page' if active_page == 'home' else '' }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg>
           <span>Home</span>
         </a>
-        <a class="nav-btn {{ 'is-active' if active_page == 'about' else '' }}" href="{{ url_for('about_page') }}">
+        <a class="nav-btn {{ 'is-active' if active_page == 'about' else '' }}" href="{{ url_for('about_page') }}" {{ 'aria-current=page' if active_page == 'about' else '' }}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="8" r=".9" fill="currentColor" stroke="none"/></svg>
           <span>About</span>
         </a>
@@ -58,6 +64,13 @@
     </div>
   </div>
 </nav>
+<!-- Right after the nav, before the page paints: see the file's header. -->
+<script src="{{ url_for('static', filename='nav-pill.js') }}"></script>
+<!-- Fetch the other page while the pointer rests on its nav link, so it is
+     ready by the time the pill has slid there (browsers without this skip it). -->
+<script type="speculationrules">
+{"prefetch": [{"where": {"selector_matches": ".nav-links a.nav-btn:not(.is-active):not(#howToUseNavBtn)"}, "eagerness": "moderate"}]}
+</script>
 
 {% block content %}{% endblock %}
 

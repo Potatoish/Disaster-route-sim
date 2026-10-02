@@ -40,18 +40,52 @@
     goToTutorialStep(tutorialStep - 1);
   }
 
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const CLOSE_FALLBACK_MS = 400;
+  let closeTimer = 0;
+
+  function finishClosing(modal) {
+    clearTimeout(closeTimer);
+    if (!modal.classList.contains('is-closing')) return;
+    modal.classList.remove('is-closing');
+    modal.hidden = true;
+    document.body.classList.remove('tutorial-modal-open');
+  }
+
+  // `tutorial:open` / `tutorial:close` let the Home/About nav move its pill
+  // to "How to use" and back (nav-pill.js).
   function openTutorial() {
     const modal = document.getElementById('tutorialModal');
     if (!modal) return;
+    clearTimeout(closeTimer);
+    modal.classList.remove('is-closing');
     goToTutorialStep(1);
     modal.hidden = false;
     document.body.classList.add('tutorial-modal-open');
+    document.dispatchEvent(new CustomEvent('tutorial:open'));
   }
 
+  // Plays the stylesheet's exit animation (`.is-closing`) before hiding.
   function closeTutorial() {
     const modal = document.getElementById('tutorialModal');
-    if (modal) modal.hidden = true;
-    document.body.classList.remove('tutorial-modal-open');
+    if (!modal || modal.hidden || modal.classList.contains('is-closing')) return;
+    modal.classList.add('is-closing');
+    document.dispatchEvent(new CustomEvent('tutorial:close'));
+    const panel = modal.querySelector('.tutorial-modal-panel');
+    if (reducedMotion.matches || !panel || getComputedStyle(panel).animationName === 'none') {
+      finishClosing(modal);
+      return;
+    }
+    const onEnd = (event) => {
+      if (event.target !== panel) return;
+      panel.removeEventListener('animationend', onEnd);
+      finishClosing(modal);
+    };
+    panel.addEventListener('animationend', onEnd);
+    closeTimer = setTimeout(() => {
+      panel.removeEventListener('animationend', onEnd);
+      finishClosing(modal);
+    }, CLOSE_FALLBACK_MS);
   }
 
   // The nav's / panel's "How to use" button: always opens in place.

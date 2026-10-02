@@ -20,8 +20,8 @@
   const levelFor = d => (d < 0.5 ? 'low' : d < 1.0 ? 'medium' : 'high');
 
   // Water depth (m) up to each body landmark, from standard proportions of
-  // standing height: a 162 cm adult (DOST-FNRI) and a 130 cm child.
-  const ADULT = [[0.1, 'ankles'], [0.3, 'shins'], [0.46, 'knees'], [0.86, 'thighs'], [0.97, 'waist'], [1.17, 'chest'], [1.33, 'shoulders'], [1.41, 'neck'], [9, 'face']];
+  // standing height: a 163 cm adult (DOST-FNRI) and a 130 cm child.
+  const ADULT = [[0.1, 'ankles'], [0.3, 'shins'], [0.46, 'knees'], [0.87, 'thighs'], [0.98, 'waist'], [1.18, 'chest'], [1.34, 'shoulders'], [1.42, 'neck'], [9, 'face']];
   const CHILD = [[0.08, 'ankles'], [0.25, 'shins'], [0.37, 'knees'], [0.69, 'thighs'], [0.78, 'waist'], [0.94, 'chest'], [1.06, 'shoulders'], [1.13, 'neck'], [1.3, 'face'], [9, null]];
   const firstAtOrAbove = (table, d) => table.find(([limit]) => d <= limit + 1e-9)[1];
   const reachText = part => (part ? `up to the ${part}` : 'over the head');
@@ -72,7 +72,8 @@
 
   cards.forEach(card => card.addEventListener('click', () => setDepth(LEVELS[card.dataset.level].preset)));
   slider.addEventListener('input', () => setDepth(Number(slider.value)));
-  setDepth(0.75);
+  // Opens on Low (per the user); the markup's starting values match.
+  setDepth(LEVELS.low.preset);
 
   // ================= EARTHQUAKE =================
   const layers = { gs: true, liq: false };

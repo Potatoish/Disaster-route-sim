@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import os
@@ -22,14 +23,24 @@ HAZARD_THRESHOLD = 3
 # above HAZARD_THRESHOLD: missing hazard data must never read as "safe".
 UNKNOWN_HAZARD_LEVEL = 5
 FINAL_ROUTES_TO_SHOW = 5
-MAX_ELIMINATED_ROUTES_TO_SHOW = 3
+# When safe routes exist, at most this many eliminated routes are listed (as
+# examples of what was ruled out), after the safe ones.
+MAX_ELIMINATED_ROUTES_TO_SHOW = 1
 DISPLAY_ROUTE_OVERLAP_THRESHOLDS = (0.6, 0.75, 0.9, 1.01)
 
 DIST_METERS = 7000
 # Routes may only use roads inside the hazard data coverage area (see
-# build_hazard_coverage_area). This slack keeps roads drawn along a boundary
-# line from being cut off by the few meters the traced polygons are off by;
-# below ~10 m Sta. Lucia's network splits apart along Ortigas Ave. Extension.
+# build_hazard_coverage_area), which never reaches past the barangay polygon:
+# there is no hazard data out there to check a road against (per the user,
+# routes stay inside unless data exists outside). The polygon gets just
+# enough slack to keep roads drawn along its line: with none, Sta. Lucia's
+# network splits apart along Ortigas Ave. Extension; 3 m joins it back up,
+# and the old 20 m let routes run down streets visibly outside the line.
+BARANGAY_BOUNDARY_TOLERANCE_METERS = 3.0
+# The hand-traced hazard layer extents are rougher and lie inside the
+# barangay, so they get more slack (Sta. Lucia's earthquake network needs
+# ~8 m to stay in one piece). Also how far a road may sit outside every
+# traced earthquake zone and still take the nearest one's reading.
 HAZARD_COVERAGE_TOLERANCE_METERS = 20.0
 ROUTE_STITCH_SNAP_TOLERANCE_METERS = 12.0
 # How far past the nearest road to look for a named street to label a pin
@@ -48,26 +59,40 @@ GRAPH_ROAD_ACCESS_FILTER = '["access"!~"^no$"]'
 
 ACO_MAX_ROUTE_STEPS_MULTIPLIER = 2.5
 ACO_MIN_ROUTE_STEPS = 25
+# The colony runs at least ACO_MIN_ITERATIONS rounds, then stops once its
+# best route has not improved for ACO_STAGNATION_LIMIT rounds in a row.
+ACO_MIN_ITERATIONS = 10
 ACO_STAGNATION_LIMIT = 8
 MAX_NODE_VISITS = 2
-DESTINATION_WEIGHT = 0.15
+# The ants' pull toward the destination: a step that closes this many metres
+# on it is e (~2.7x) more attractive than one that keeps level, and a step
+# that loses as much is 2.7x less (clamped, so one long road can't swamp the
+# pheromone). The old pull added 0.15 x the remaining distance to each edge's
+# cost, which barely told a step toward a goal 1.5 km away from a step away
+# from it (~3%): the ants wandered until their step limit and almost none
+# arrived, leaving every route on the map to the shortest-path helpers.
+ANT_GOAL_PULL_METERS = 15.0
+ANT_GOAL_PROGRESS_CLAMP_METERS = 60.0
 UNSAFE_EDGE_HEURISTIC_FACTOR = 0.05
 EDGE_PHEROMONE_MIN = 0.01
 EDGE_PHEROMONE_MAX = 25.0
-SUPPLEMENTAL_ROUTE_LIMIT = 100
-# Ants discount (never forbid) edges already used by routes already sitting
-# in route_cache, scaled by how many routes already use that edge -- pushes
-# later ants toward untried corridors instead of all funneling down the one
-# corridor pheromone has reinforced, without overriding the hazard/distance
-# heuristic itself (an unsafe edge is still deprioritized far more heavily).
+# Ants discount (never forbid) edges already used by routes the colony has
+# already found, scaled by how many use that edge -- pushes later ants toward
+# untried corridors instead of all funneling down the one corridor pheromone
+# has reinforced, without overriding the hazard/goal heuristic itself (an
+# unsafe edge is still deprioritized far more heavily).
 ANT_ROUTE_DIVERSITY_PENALTY = 0.4
-# Iterative-penalization search (see generate_diverse_supplemental_routes):
-# after each shortest-path attempt, multiply that path's edges' cost so the
-# next attempt is pushed toward a genuinely different corridor. Yen's
-# k-shortest-paths alone tends to only return near-clones of the shortest
-# path (single-block detours) on a uniform street grid.
-DIVERSE_ROUTE_SEARCH_ATTEMPTS = 14
-DIVERSE_ROUTE_EDGE_PENALTY = 1.8
+# Alternatives are found by ants too: after the main colony, each alternative
+# colony starts fresh with the roads of every route already chosen made
+# ALTERNATIVE_ROUTE_EDGE_PENALTY times less attractive, so its ants look for
+# a genuinely different corridor (see add_alternative_routes).
+ALTERNATIVE_COLONY_ANTS = 20
+ALTERNATIVE_COLONY_ITERATIONS = 6
+ALTERNATIVE_ROUTE_EDGE_PENALTY = 4.0
+# Backup only, when the ants found fewer distinct routes than the map shows:
+# iterative-penalization shortest paths (see generate_backup_routes).
+BACKUP_ROUTE_SEARCH_ATTEMPTS = 14
+BACKUP_ROUTE_EDGE_PENALTY = 1.8
 
 NUM_ANTS = 40
 NUM_ITERATIONS = 30
@@ -79,7 +104,10 @@ Q = 100.0
 SAFETY_WEIGHT = 0.80
 DISTANCE_WEIGHT = 0.20
 UNSAFE_PENALTY = 1_000_000.0
+# Each round, the round's best few routes lay pheromone, and the best route
+# found so far lays ELITIST_WEIGHT times a normal deposit (elitist ant system).
 TOP_ACO_REINFORCERS = 3
+ELITIST_WEIGHT = 1.0
 DEBUG = True
 FLOOD_GRAPH_ANNOTATION_VERSION = 2
 
@@ -682,12 +710,14 @@ def find_barangay_for_point(lat, lng):
 
 def build_hazard_coverage_area(boundary_geometry, hazard_extents=()):
     """The area where a route can actually be checked for safety: inside the
-    barangay polygon and inside every given hazard layer's extent, each
-    widened by HAZARD_COVERAGE_TOLERANCE_METERS."""
-    tolerance = HAZARD_COVERAGE_TOLERANCE_METERS / METERS_PER_DEGREE
-    coverage_area = boundary_geometry.buffer(tolerance)
+    barangay polygon (widened by BARANGAY_BOUNDARY_TOLERANCE_METERS) and
+    inside every given hazard layer's extent (widened by
+    HAZARD_COVERAGE_TOLERANCE_METERS). Never more than a few meters past the
+    barangay line."""
+    coverage_area = boundary_geometry.buffer(BARANGAY_BOUNDARY_TOLERANCE_METERS / METERS_PER_DEGREE)
+    extent_tolerance = HAZARD_COVERAGE_TOLERANCE_METERS / METERS_PER_DEGREE
     for extent in hazard_extents:
-        coverage_area = coverage_area.intersection(extent.buffer(tolerance))
+        coverage_area = coverage_area.intersection(extent.buffer(extent_tolerance))
     return coverage_area
 
 
@@ -1581,26 +1611,32 @@ def summarize_candidate_routes(routes):
     debug_print(f"[OSM] Eliminated candidate routes: {eliminated_count}")
 
 
-def generate_seed_routes(G, start_node, end_node):
-    seeded_routes = {}
+def shortest_path_baseline(G, start_node, end_node):
+    """The conventional answer the colony is checked against: Dijkstra on the
+    same hazard-weighted cost (route_cost) the ants weigh roads by. It is not
+    a candidate route -- it only steps in when it is strictly safer than
+    everything the ants found, or when they found nothing (see
+    finish_candidate_pool), and either way the result says so."""
+    try:
+        path = nx.shortest_path(G, start_node, end_node, weight="route_cost")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return None
 
-    for weight in ("route_cost", "length"):
-        try:
-            path = nx.shortest_path(G, start_node, end_node, weight=weight)
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            continue
+    path = simplify_route_path(path)
+    if len(path) < 2:
+        return None
+    return evaluate_route(G, path, 0, include_coordinates=False)
 
-        path = simplify_route_path(path)
-        if len(path) < 2:
-            continue
 
-        route = evaluate_route(G, path, 0, include_coordinates=False)
-        seeded_routes[tuple(route["path"])] = route
-
-    if seeded_routes:
-        debug_print(f"[OSM] Seed routes prepared: {len(seeded_routes)}")
-
-    return list(seeded_routes.values())
+def route_search_seed(*parts):
+    """A stable seed from a request's inputs, so the same pins always get the
+    same ant walks and therefore the same routes (Python's hash() is salted
+    per process, so it can't be used for this)."""
+    text = "|".join(
+        f"{part:.6f}" if isinstance(part, float) else str(part)
+        for part in parts
+    )
+    return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
 
 
 def build_goal_distance_map(G, end_node):
@@ -1679,66 +1715,22 @@ def route_overlap_ratio(route_a, route_b):
     return shared_edges / min(len(edges_a), len(edges_b))
 
 
-def generate_supplemental_routes(G, start_node, end_node, seed_routes):
-    unique_routes = {
-        route_path_signature(route): route
-        for route in seed_routes
-        if route.get("path")
-    }
-
-    try:
-        supplemental_paths = list(
-            ox.routing.k_shortest_paths(
-                G,
-                start_node,
-                end_node,
-                k=SUPPLEMENTAL_ROUTE_LIMIT,
-                weight="route_cost",
-            )
-        )
-    except Exception as exc:
-        debug_print(f"[OSM] Supplemental path search failed: {exc}")
-        supplemental_paths = []
-
-    for path in supplemental_paths:
-        path = simplify_route_path(path)
-        if len(path) < 2:
-            continue
-
-        route = evaluate_route(G, path, 0, include_coordinates=False)
-        path_key = route_path_signature(route)
-        if path_key in unique_routes:
-            continue
-
-        unique_routes[path_key] = route
-
-    generate_diverse_supplemental_routes(G, start_node, end_node, unique_routes)
-
-    return list(unique_routes.values())
-
-
-def generate_diverse_supplemental_routes(G, start_node, end_node, unique_routes):
-    """Repeatedly re-plans the shortest path, penalizing each attempt's
-    edges before the next one, so the search is pushed toward corridors it
-    hasn't already used -- mutates `unique_routes` in place with whatever
-    it finds.
-
-    Yen's k-shortest-paths above generates its alternatives by perturbing
-    a single edge of the shortest path at a time, so on a uniform street
-    grid (most streets the same length) almost all of its "alternatives"
-    are one-block detours around the same corridor with the same total
-    length -- exactly what shows up as several routes on the map that all
-    look identical. Penalizing whole paths instead of single edges forces
-    each attempt away from every corridor already found, not just the one
-    edge Yen's happened to swap out.
-    """
+def generate_backup_routes(G, start_node, end_node, known_signatures, needed):
+    """Backup when the ants found fewer distinct routes than the map shows:
+    repeatedly re-plans the shortest path, multiplying the cost of each
+    attempt's roads before the next one, so each attempt is pushed toward a
+    corridor not yet used. Returns up to `needed` new routes, each marked
+    found_by="backup_search"."""
     penalty_multipliers = {}
+    backups = []
 
     def penalized_weight(u, v, parallel_edges):
         key, edge = min(parallel_edges.items(), key=lambda item: edge_traversal_cost(item[1]))
         return edge_traversal_cost(edge) * penalty_multipliers.get((u, v, key), 1.0)
 
-    for _ in range(DIVERSE_ROUTE_SEARCH_ATTEMPTS):
+    for _ in range(BACKUP_ROUTE_SEARCH_ATTEMPTS):
+        if len(backups) >= needed:
+            break
         try:
             path = nx.shortest_path(G, start_node, end_node, weight=penalized_weight)
         except (nx.NetworkXNoPath, nx.NodeNotFound):
@@ -1749,19 +1741,24 @@ def generate_diverse_supplemental_routes(G, start_node, end_node, unique_routes)
             break
 
         route = evaluate_route(G, path, 0, include_coordinates=False)
-        unique_routes.setdefault(route_path_signature(route), route)
+        signature = route_path_signature(route)
+        if signature not in known_signatures:
+            known_signatures.add(signature)
+            route["found_by"] = "backup_search"
+            backups.append(route)
 
-        # Penalize this attempt's edges regardless of whether the route was
-        # already known, so a repeated search keeps getting pushed further
-        # away rather than re-finding the same corridor every time.
+        # Penalize this attempt's edges whether or not the route was new, so
+        # a repeated search keeps getting pushed further away.
         for u, v in route_edges(path):
             parallel_edges = G.get_edge_data(u, v)
             if not parallel_edges:
                 continue
             key, _ = min(parallel_edges.items(), key=lambda item: edge_traversal_cost(item[1]))
             penalty_multipliers[(u, v, key)] = (
-                penalty_multipliers.get((u, v, key), 1.0) * DIVERSE_ROUTE_EDGE_PENALTY
+                penalty_multipliers.get((u, v, key), 1.0) * BACKUP_ROUTE_EDGE_PENALTY
             )
+
+    return backups
 
 
 def select_display_routes(sorted_routes, limit):
@@ -1831,14 +1828,13 @@ def label_display_routes(sorted_routes):
     eliminated_routes = [route.copy() for route in sorted_routes if route["eliminated"]]
 
     if valid_routes:
-        eliminated_routes = select_display_routes(
-            eliminated_routes,
-            min(MAX_ELIMINATED_ROUTES_TO_SHOW, len(eliminated_routes)),
-        )
-        valid_routes = select_display_routes(
-            valid_routes,
-            FINAL_ROUTES_TO_SHOW - len(eliminated_routes),
-        )
+        # Safe routes fill the list first; an eliminated one only keeps the
+        # last slot, as an example of a route the system ruled out (per the
+        # user: before, up to 3 eliminated routes took slots ahead of safe
+        # ones even when over a hundred safe routes were found).
+        example_slots = min(MAX_ELIMINATED_ROUTES_TO_SHOW, len(eliminated_routes))
+        valid_routes = select_display_routes(valid_routes, FINAL_ROUTES_TO_SHOW - example_slots)
+        eliminated_routes = select_display_routes(eliminated_routes, example_slots)
     else:
         eliminated_routes = select_display_routes(eliminated_routes, FINAL_ROUTES_TO_SHOW)
 
@@ -1871,9 +1867,11 @@ def get_ant_choices(
     previous_node=None,
     allow_revisit=False,
     edge_route_usage=None,
+    edge_penalty=None,
 ):
     choices = []
     weights = []
+    here = goal_distance_map.get(current_node, 0.0)
 
     for neighbor in G.successors(current_node):
         goal_distance = goal_distance_map.get(neighbor)
@@ -1890,12 +1888,16 @@ def get_ant_choices(
         if not edge:
             continue
 
+        length, hazard, _ = edge_metrics(edge)
         tau = edge_pheromone.get((current_node, neighbor), 1.0) ** ALPHA
-        eta = (
-            1.0 / (edge_traversal_cost(edge) + DESTINATION_WEIGHT * goal_distance + 1e-9)
-        ) ** BETA
+        # How safe the road is per metre (1 with no hazard, lower the worse
+        # it gets), sharpened by BETA, times the pull toward the destination:
+        # the metres this step gains on it (see ANT_GOAL_PULL_METERS).
+        safety = length / edge_traversal_cost(edge)
+        progress = min(max(here - goal_distance, -ANT_GOAL_PROGRESS_CLAMP_METERS), ANT_GOAL_PROGRESS_CLAMP_METERS)
+        eta = (safety ** BETA) * math.exp(progress / ANT_GOAL_PULL_METERS)
 
-        if edge_hazard_level(edge) > HAZARD_THRESHOLD:
+        if hazard > HAZARD_THRESHOLD:
             eta *= UNSAFE_EDGE_HEURISTIC_FACTOR
 
         if visits > 0:
@@ -1912,6 +1914,9 @@ def get_ant_choices(
             if usage:
                 eta /= (1.0 + ANT_ROUTE_DIVERSITY_PENALTY * usage)
 
+        if edge_penalty:
+            eta /= edge_penalty.get((current_node, neighbor), 1.0)
+
         choices.append(neighbor)
         weights.append(max(tau * eta, 1e-12))
 
@@ -1925,7 +1930,9 @@ def construct_ant_route(
     edge_pheromone,
     goal_distance_map,
     max_steps,
+    rng,
     edge_route_usage=None,
+    edge_penalty=None,
 ):
     if start_node == end_node:
         return [start_node]
@@ -1952,6 +1959,7 @@ def construct_ant_route(
             previous_node=previous_node,
             allow_revisit=False,
             edge_route_usage=edge_route_usage,
+            edge_penalty=edge_penalty,
         )
 
         if not choices:
@@ -1965,12 +1973,13 @@ def construct_ant_route(
                 previous_node=previous_node,
                 allow_revisit=True,
                 edge_route_usage=edge_route_usage,
+                edge_penalty=edge_penalty,
             )
 
         if not choices:
             return None
 
-        next_node = random.choices(choices, weights=weights, k=1)[0]
+        next_node = rng.choices(choices, weights=weights, k=1)[0]
         route.append(next_node)
         visit_counts[next_node] = visit_counts.get(next_node, 0) + 1
         current_node = next_node
@@ -1978,57 +1987,53 @@ def construct_ant_route(
     return route if route[-1] == end_node else None
 
 
-def run_aco(G, start_node, end_node):
+def _evaporate_pheromone(edge_pheromone):
+    keep = 1 - EVAPORATION
+    for edge_key, level in edge_pheromone.items():
+        edge_pheromone[edge_key] = max(level * keep, EDGE_PHEROMONE_MIN)
+
+
+def _deposit_pheromone(edge_pheromone, route, weight=1.0):
+    deposit = weight * Q / (numeric_score(route) + 1e-9)
+    for edge_key in route_edges(route["path"]):
+        edge_pheromone[edge_key] = min(
+            edge_pheromone.get(edge_key, EDGE_PHEROMONE_MIN) + deposit,
+            EDGE_PHEROMONE_MAX,
+        )
+
+
+def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalty=None, report_progress=True):
+    """One ant colony from colony["start"] to colony["end"]: rounds of
+    num_ants ants, each round's best routes reinforced (ranked safety first,
+    like the results) plus the best so far (elitist), until the best stops
+    improving. Returns the distinct routes its ants completed (by path), its
+    pheromone, its best route and its round count; adds its ant counts to
+    colony["stats"]."""
+    G = colony["G"]
+    start_node, end_node = colony["start"], colony["end"]
     edge_pheromone = initialize_edge_pheromone(G)
-
-    if start_node == end_node:
-        return [evaluate_route(G, [start_node], 1, include_coordinates=False)], edge_pheromone
-
-    goal_distance_map = build_goal_distance_map(G, end_node)
-    if start_node not in goal_distance_map:
-        debug_print("[ACO] Start node cannot reach the destination in the directed graph")
-        return [], edge_pheromone
-
-    step_limit = estimate_ant_step_limit(G, start_node, end_node)
-    route_cache = {
-        tuple(route["path"]): route
-        for route in generate_seed_routes(G, start_node, end_node)
-    }
-    best_score = float("inf")
-    stagnant_iterations = 0
-
-    # How many routes already sitting in route_cache use each edge --
-    # get_ant_choices() uses this to gently steer later ants away from
-    # corridors that already have several found routes running through
-    # them, so the pool that comes out of the loop actually scatters across
-    # the road network instead of every ant converging on one pheromone
-    # trail (see ANT_ROUTE_DIVERSITY_PENALTY).
+    found = {}
     edge_route_usage = {}
+    best = None
+    stagnant_iterations = 0
+    iterations = 0
+    stats = colony["stats"]
 
-    def register_route_usage(route):
-        for edge_key in route_edges(route["path"]):
-            edge_route_usage[edge_key] = edge_route_usage.get(edge_key, 0) + 1
-
-    for route in route_cache.values():
-        register_route_usage(route)
-
-    debug_print(f"[ACO] Reachable nodes to destination: {len(goal_distance_map)}")
-    debug_print(f"[ACO] Ant step limit: {step_limit}")
-
-    for iteration in range(NUM_ITERATIONS):
-        completed_routes = []
-
-        for _ in range(NUM_ANTS):
+    for _ in range(max_iterations):
+        completed = {}
+        for _ in range(num_ants):
+            stats["ants_sent"] += 1
             ant_route = construct_ant_route(
                 G,
                 start_node,
                 end_node,
                 edge_pheromone,
-                goal_distance_map,
-                step_limit,
+                colony["goal_distance_map"],
+                colony["step_limit"],
+                colony["rng"],
                 edge_route_usage=edge_route_usage,
+                edge_penalty=edge_penalty,
             )
-
             if not ant_route or ant_route[-1] != end_node:
                 continue
 
@@ -2036,79 +2041,222 @@ def run_aco(G, start_node, end_node):
             if len(ant_route) < 2 or ant_route[0] != start_node or ant_route[-1] != end_node:
                 continue
 
+            stats["ants_arrived"] += 1
             route_key = tuple(ant_route)
-            route = route_cache.get(route_key)
+            route = found.get(route_key)
             if route is None:
                 route = evaluate_route(G, ant_route, 0, include_coordinates=False)
-                route_cache[route_key] = route
-                register_route_usage(route)
+                route["found_by"] = "aco"
+                found[route_key] = route
+                for edge_key in route_edges(ant_route):
+                    edge_route_usage[edge_key] = edge_route_usage.get(edge_key, 0) + 1
+            completed[route_key] = route
 
-            completed_routes.append(route)
+        iterations += 1
+        if report_progress:
+            bump_progress()
+        _evaporate_pheromone(edge_pheromone)
 
-        unique_completed = list({
-            tuple(route["path"]): route for route in completed_routes
-        }.values())
-        debug_print(
-            f"[ACO] Iteration {iteration + 1}: "
-            f"completed={len(completed_routes)}, unique={len(unique_completed)}"
-        )
-        bump_progress()
-
-        for edge_key in edge_pheromone:
-            edge_pheromone[edge_key] *= (1 - EVAPORATION)
-            edge_pheromone[edge_key] = max(edge_pheromone[edge_key], EDGE_PHEROMONE_MIN)
-
-        if not completed_routes:
-            stagnant_iterations += 1
-            if stagnant_iterations >= ACO_STAGNATION_LIMIT and route_cache:
-                debug_print("[ACO] Early stop: route pool stopped improving")
-                break
-            continue
-
-        reinforcement_pool = [
-            route for route in completed_routes
-            if not route["eliminated"]
-        ] or completed_routes
-
-        winners = []
-        seen_winners = set()
-        for route in sorted(reinforcement_pool, key=numeric_score):
-            route_key = tuple(route["path"])
-            if route_key in seen_winners:
-                continue
-            seen_winners.add(route_key)
-            winners.append(route)
-            if len(winners) >= TOP_ACO_REINFORCERS:
-                break
-
-        for route in winners:
-            deposit = Q / (numeric_score(route) + 1e-9)
-            for edge_key in route_edges(route["path"]):
-                edge_pheromone[edge_key] = min(
-                    edge_pheromone.get(edge_key, EDGE_PHEROMONE_MIN) + deposit,
-                    EDGE_PHEROMONE_MAX,
-                )
-
-        current_best = min(route_cache.values(), key=numeric_score, default=None)
-        if current_best is not None and numeric_score(current_best) + 1e-9 < best_score:
-            best_score = numeric_score(current_best)
-            stagnant_iterations = 0
+        if completed:
+            round_best = sorted(completed.values(), key=safety_sort_key)[:TOP_ACO_REINFORCERS]
+            for route in round_best:
+                _deposit_pheromone(edge_pheromone, route)
+            if best is None or safety_sort_key(round_best[0]) < safety_sort_key(best):
+                best = round_best[0]
+                stagnant_iterations = 0
+            else:
+                stagnant_iterations += 1
+            _deposit_pheromone(edge_pheromone, best, ELITIST_WEIGHT)
         else:
             stagnant_iterations += 1
 
-        if stagnant_iterations >= ACO_STAGNATION_LIMIT and len(route_cache) >= FINAL_ROUTES_TO_SHOW:
-            debug_print("[ACO] Early stop: enough stable routes collected")
+        if iterations >= min_iterations and stagnant_iterations >= ACO_STAGNATION_LIMIT:
             break
 
-    candidate_routes = sorted(route_cache.values(), key=safety_sort_key)
-    candidate_routes = generate_supplemental_routes(G, start_node, end_node, candidate_routes)
-    candidate_routes = sorted(candidate_routes, key=safety_sort_key)
+    if report_progress and iterations < max_iterations:
+        bump_progress(max_iterations - iterations)  # stopped early: settle the bar
+    return found, edge_pheromone, best, iterations
+
+
+def start_aco(G, start_node, end_node, rng):
+    """Runs the main colony (NUM_ANTS ants for up to NUM_ITERATIONS rounds,
+    one progress step per round) and returns its state for
+    add_alternative_routes() and finish_candidate_pool()."""
+    colony = {
+        "G": G,
+        "start": start_node,
+        "end": end_node,
+        "rng": rng,
+        "routes": {},
+        "pheromone": {},
+        "best": None,
+        "alternatives": [],
+        "baseline": None,
+        "stats": {
+            "ants_sent": 0,
+            "ants_arrived": 0,
+            "rounds": 0,
+            "max_rounds": NUM_ITERATIONS,
+            "alternative_colonies": 0,
+        },
+    }
+    if start_node == end_node:
+        bump_progress(NUM_ITERATIONS)
+        return colony
+
+    colony["goal_distance_map"] = build_goal_distance_map(G, end_node)
+    if start_node not in colony["goal_distance_map"]:
+        debug_print("[ACO] Start node cannot reach the destination in the directed graph")
+        bump_progress(NUM_ITERATIONS)
+        return colony
+
+    colony["step_limit"] = estimate_ant_step_limit(G, start_node, end_node)
+    colony["baseline"] = shortest_path_baseline(G, start_node, end_node)
+    debug_print(f"[ACO] Reachable nodes to destination: {len(colony['goal_distance_map'])}")
+    debug_print(f"[ACO] Ant step limit: {colony['step_limit']}")
+
+    found, edge_pheromone, best, rounds = _run_colony(
+        colony,
+        num_ants=NUM_ANTS,
+        max_iterations=NUM_ITERATIONS,
+        min_iterations=ACO_MIN_ITERATIONS,
+    )
+    colony["routes"] = found
+    colony["pheromone"] = edge_pheromone
+    colony["best"] = best
+    colony["stats"]["rounds"] = rounds
+    debug_print(
+        f"[ACO] Main colony: {colony['stats']['ants_arrived']}/{colony['stats']['ants_sent']} ants arrived "
+        f"in {rounds} rounds, {len(found)} distinct routes"
+    )
+    return colony
+
+
+def add_alternative_routes(colony, count):
+    """Finds up to `count` alternatives with fresh colonies, one at a time,
+    each steered off the roads of every route already chosen (the main
+    colony's best first). A colony's pick is its safest route that does not
+    mostly repeat a chosen one. One progress step per colony."""
+    chosen = [colony["best"]] if colony["best"] else []
+    edge_penalty = {}
+
+    for _ in range(count):
+        if not chosen:
+            bump_progress()
+            continue
+        for edge_key in route_edges(chosen[-1]["path"]):
+            edge_penalty[edge_key] = edge_penalty.get(edge_key, 1.0) * ALTERNATIVE_ROUTE_EDGE_PENALTY
+
+        found, _, _, _ = _run_colony(
+            colony,
+            num_ants=ALTERNATIVE_COLONY_ANTS,
+            max_iterations=ALTERNATIVE_COLONY_ITERATIONS,
+            min_iterations=ALTERNATIVE_COLONY_ITERATIONS,
+            edge_penalty=edge_penalty,
+            report_progress=False,
+        )
+        bump_progress()
+        colony["stats"]["alternative_colonies"] += 1
+
+        for route_key, route in found.items():
+            colony["routes"].setdefault(route_key, route)
+
+        chosen_paths = {tuple(route["path"]) for route in chosen}
+        ranked = [
+            route for route in sorted(found.values(), key=safety_sort_key)
+            if tuple(route["path"]) not in chosen_paths
+        ]
+        pick = next(
+            (
+                route for route in ranked
+                if all(route_overlap_ratio(route, other) <= DISPLAY_ROUTE_OVERLAP_THRESHOLDS[0] for other in chosen)
+            ),
+            ranked[0] if ranked else None,
+        )
+        if pick is not None:
+            chosen.append(colony["routes"][tuple(pick["path"])])
+
+    colony["alternatives"] = chosen[1:]
+    return colony
+
+
+def compare_with_baseline(best, baseline):
+    if baseline is None:
+        return "no_baseline"
+    if best is None:
+        return "aco_found_nothing"
+    if tuple(best["path"]) == tuple(baseline["path"]):
+        return "same_route"
+
+    best_safety = safety_sort_key(best)[:3]
+    baseline_safety = safety_sort_key(baseline)[:3]
+    if best_safety < baseline_safety:
+        return "aco_safer"
+    if best_safety == baseline_safety:
+        return "equally_safe"
+    return "baseline_safer"
+
+
+def finish_candidate_pool(colony):
+    """The routes the results are picked from: every distinct route the ants
+    completed. The shortest-path baseline joins only when it is strictly safer
+    than all of them (or the ants found nothing), and the backup search only
+    tops the pool up to FINAL_ROUTES_TO_SHOW distinct routes -- both marked
+    in found_by, and the comparison recorded in the stats."""
+    G, start_node, end_node = colony["G"], colony["start"], colony["end"]
+    routes = list(colony["routes"].values())
+    stats = colony["stats"]
+    baseline = colony["baseline"]
+    best = min(routes, key=safety_sort_key) if routes else None
+
+    stats["routes_found"] = len(routes)
+    stats["best_vs_shortest_path"] = compare_with_baseline(best, baseline)
+    if baseline is not None:
+        stats["shortest_path"] = {
+            "distance": baseline["distance"],
+            "risk_distance": baseline["risk_distance"],
+            "unsafe_distance": baseline["unsafe_distance"],
+        }
+
+    known = {tuple(route["path"]) for route in routes}
+    if baseline is not None and tuple(baseline["path"]) not in known and (
+        best is None or safety_sort_key(baseline)[:3] < safety_sort_key(best)[:3]
+    ):
+        baseline["found_by"] = "shortest_path"
+        routes.append(baseline)
+
+    if len(routes) < FINAL_ROUTES_TO_SHOW and start_node != end_node:
+        signatures = {route_path_signature(route) for route in routes}
+        routes.extend(generate_backup_routes(
+            G,
+            start_node,
+            end_node,
+            signatures,
+            FINAL_ROUTES_TO_SHOW - len(routes),
+        ))
+
+    stats["backup_routes"] = sum(1 for route in routes if route.get("found_by") == "backup_search")
+    candidate_routes = sorted(routes, key=safety_sort_key)
     for idx, route in enumerate(candidate_routes, start=1):
         route["candidate_route_no"] = idx
 
     summarize_candidate_routes(candidate_routes)
-    debug_print(f"[ACO] Unique routes generated: {len(candidate_routes)}")
-    return candidate_routes, edge_pheromone
+    debug_print(f"[ACO] Best route vs shortest path: {stats['best_vs_shortest_path']}")
+    return candidate_routes
+
+
+def run_aco(G, start_node, end_node, rng=None, alternatives=FINAL_ROUTES_TO_SHOW - 1):
+    """The whole search for one start/end pair: the main colony, then
+    `alternatives` alternative colonies, then the candidate pool. Takes
+    NUM_ITERATIONS + alternatives progress steps. Returns (candidate routes,
+    the main colony's pheromone, stats)."""
+    colony = start_aco(G, start_node, end_node, rng or random.Random())
+    if start_node == end_node:
+        bump_progress(alternatives)
+        return [evaluate_route(G, [start_node], 1, include_coordinates=False)], colony["pheromone"], colony["stats"]
+
+    add_alternative_routes(colony, alternatives)
+    return finish_candidate_pool(colony), colony["pheromone"], colony["stats"]
 
 
 def finalize_routes(G, candidate_routes, edge_pheromone):
@@ -2213,8 +2361,15 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     debug_print(f"[OSM] Phase 2/4 complete in {now - phase_started:.2f}s")
     phase_started = now
     debug_print("[OSM] Phase 3/4: searching candidate routes")
-    reset_progress(NUM_ITERATIONS)
-    candidate_routes, edge_pheromone = run_aco(G, start_node, end_node)
+    alternatives = FINAL_ROUTES_TO_SHOW - 1
+    # Progress: one step per main-colony round, per alternative colony, and
+    # one for finalizing.
+    reset_progress(NUM_ITERATIONS + alternatives + 1)
+    rng = random.Random(route_search_seed(
+        "flood", normalize_barangay_name(scope_name), hazard_type,
+        float(start_lat), float(start_lng), float(end_lat), float(end_lng),
+    ))
+    candidate_routes, edge_pheromone, aco_stats = run_aco(G, start_node, end_node, rng, alternatives)
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 3/4 complete in {now - phase_started:.2f}s")
 
@@ -2230,6 +2385,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     phase_started = now
     debug_print("[OSM] Phase 4/4: finalizing route results")
     final_routes = finalize_routes(G, candidate_routes, edge_pheromone)
+    bump_progress()
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 4/4 complete in {now - phase_started:.2f}s")
 
@@ -2252,5 +2408,6 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
         "hazard_type": hazard_type,
         "safe_threshold": HAZARD_THRESHOLD,
         "total_candidate_routes": len(candidate_routes),
+        "aco": aco_stats,
         "routes": final_routes
     }
