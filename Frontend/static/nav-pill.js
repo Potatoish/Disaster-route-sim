@@ -1,16 +1,13 @@
-// Home / About nav: the highlight slides to the page or panel you switch to
-// (per the user, who found the static highlight too flat). One gradient layer
-// over the links holds a white copy of every label and is clipped to the
-// pill's shape, so whatever sits under the pill reads white at every frame of
-// a slide. Its two edges move separately, the leading one first, so the pill
-// stretches toward where it is going and settles there.
+// Home / About nav: the highlight slides to the page or panel you switch to.
+// One gradient layer over the links holds a white copy of every label and is
+// clipped to the pill's shape, so whatever sits under the pill reads white at
+// every frame. Its two edges move separately, the leading one first, so the
+// pill stretches toward where it is going and settles there.
 //
 // Switching page: the pill slides first and the page follows once it has
-// nearly landed (NAVIGATE_AFTER_MS), since a page that is still loading drops
-// frames. The next page starts its pill where this one left it (it is loaded
-// right after the nav, before the page paints, and reads sessionStorage); a
-// page reached any other way (the logo, a footer link) slides the rest of the
-// way once it has finished its first full render.
+// nearly landed (NAVIGATE_AFTER_MS), since a loading page drops frames. The
+// next page starts its pill where this one left it (sessionStorage); a page
+// reached any other way slides the rest of the way after its first render.
 (function initNavPill() {
   const links = document.querySelector('.site-nav .nav-links');
   if (!links || typeof links.animate !== 'function') return;
@@ -27,8 +24,7 @@
   const TRAIL_MS = 380;
   const SLIDE_MS = TRAIL_DELAY_MS + TRAIL_MS;
   // By then the leading edge is ~97% there and the trailing one ~85%; the
-  // next page finishes the slide from the handoff (shorter, per the user,
-  // who found the switch slow).
+  // next page finishes the slide from the handoff.
   const NAVIGATE_AFTER_MS = 160;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 

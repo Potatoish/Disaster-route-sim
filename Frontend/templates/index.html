@@ -4,9 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>AGNAS</title>
-  <!-- Home <-> simulator cross-fade, the same opt-in as site_base.html
-       (style.css styles it). Inline and first: from a stylesheet, Chrome
-       sometimes read the opt-in as off and skipped it. -->
+  {# Home <-> simulator cross-fade opt-in (styled in style.css). Inline and
+     first: from a stylesheet, Chrome sometimes skipped it. #}
   <style>
     @view-transition{ navigation:auto; }
     @media (prefers-reduced-motion: reduce){ @view-transition{ navigation:none; } }
@@ -17,8 +16,8 @@
   <link rel="preconnect" href="https://tile.openstreetmap.org">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Leaflet 1.9.4, served from here (static/vendor/leaflet, unmodified,
-       BSD-2 licence alongside) so the map never depends on a CDN. -->
+  {# Leaflet 1.9.4, served locally (unmodified, BSD-2 licence alongside) so
+     the map never depends on a CDN. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -40,8 +39,8 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
   </button>
 
-  <!-- Mobile only (style.css): opens/closes whichever of setup/results is
-       currently relevant. Invisible and inert at every other size. -->
+  {# Short viewports only (style.css): opens or closes whichever of setup and
+     results is relevant. #}
   <button class="mobile-panel-bar" id="mobilePanelBar" type="button" onclick="toggleMobilePanelBar()" aria-label="Toggle simulation panel">
     <span id="mobilePanelBarLabel">Simulation setup</span>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
@@ -233,13 +232,9 @@
         <button type="button" class="empty-map-retry" id="emptyMapRetry" onclick="retryBackendConnection()" hidden>Try again</button>
       </div>
       <script>
-        // Runs synchronously at parse time, before initMap()/startApp() get a
-        // chance to run -- a barangay picked on the homepage's quick-start
-        // card is about to auto-load here (see bootstrapBarangayFromUrl() in
-        // script.js), so show a spinner instead of the "Select a barangay"
-        // copy. Without this, that copy paints first and then gets swapped
-        // out a beat later once the boundary fetch resolves, which reads as
-        // the map/polygon failing to show up right away.
+        // Before initMap() runs: a barangay from the homepage is about to load
+        // (bootstrapBarangayFromUrl), so show a spinner instead of flashing
+        // the "Select a barangay" text first.
         (function () {
           try {
             if (new URLSearchParams(window.location.search).get('barangay')) {
@@ -260,13 +255,9 @@
 
     </div>
 
-    <!-- Phones and tablets (< 1024px wide, >= 500px tall; mobile-sim.js):
-         the full-screen map's top bar, controls and center pin, the
-         setup/results bottom sheet, and the Map layers sheet. Hidden on
-         desktops and short viewports, where the setup and results panels
-         do this job.
-         Inside .right-panel so the loader (z-index 999, same stacking
-         context) still covers it. -->
+    {# Phones and tablets (< 1024px wide, >= 500px tall; mobile-sim.js): the
+       map's top bar, controls and center pin, the setup/results sheet and the
+       Map layers sheet. Inside .right-panel so the loader still covers it. #}
     <div class="msim" id="msim">
       <header class="msim-topbar" id="msimTopbar">
         <button class="msim-icon-btn" type="button" onclick="goToHomepageForNewScope()" aria-label="Back to home">
@@ -284,7 +275,7 @@
         </button>
       </header>
 
-      <!-- Barangay switcher, opened from the top bar's title. -->
+      {# Barangay switcher, opened from the top bar's title. #}
       <div class="msim-bgy-scrim" id="msimBarangayScrim" hidden onclick="closeMobileBarangayMenu()"></div>
       <section class="msim-bgy-menu" id="msimBarangayMenu" role="dialog" aria-labelledby="msimBarangayMenuTitle" hidden>
         <h2 class="msheet-label" id="msimBarangayMenuTitle">Barangay</h2>
@@ -316,7 +307,7 @@
         </div>
       </div>
 
-      <!-- The legend, bottom-left above the sheet; its header folds it. -->
+      {# The legend, bottom-left above the sheet; its header folds it. #}
       <div class="msim-maplegend" id="msimMapLegend" hidden>
         <button type="button" class="msim-maplegend-toggle" id="msimMapLegendToggle" onclick="toggleMobileMapLegend()" aria-expanded="true" aria-controls="msimMapLegendBody">
           <span>Legend</span>
@@ -546,10 +537,8 @@
       <div class="safety-eyebrow">AGNAS</div>
       <h2>Ant guided navigation and safety system</h2>
     </div>
-    <!-- Mobile only (style.css): results is a full-screen panel there, so
-         this is how you get back to setup without closing it first. Hidden
-         everywhere else -- desktop/tablet keep both panels independently
-         visible/docked, with nothing to "return" from. -->
+    {# Short viewports only (style.css): results is a full-screen panel there,
+       so this goes back to setup. #}
     <button class="safety-edit-setup-btn" type="button" onclick="openSetupDrawerFromResults()">Edit setup</button>
     <div id="routeSafetyContent" hidden></div>
     <button class="safety-download-btn" id="safetyDownloadBtn" type="button" onclick="downloadSimulationReport()">
@@ -561,7 +550,6 @@
     </button>
   </aside>
 </div>
-
 
 <div class="route-modal-backdrop" id="routeListModal" hidden>
   <section class="route-list-modal" role="dialog" aria-modal="true" aria-label="More routes">
@@ -597,9 +585,8 @@
 
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 
-<!-- Used only by downloadSimulationReport() (script.js) to build the PDF
-     report -- loaded from a CDN (only the report needs it, and it fails
-     softly), no bundler in this project. -->
+{# jsPDF, only for the PDF report (downloadSimulationReport); from a CDN since
+   it fails softly. #}
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
@@ -608,8 +595,8 @@
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 <script src="{{ url_for('static', filename='mobile-sim.js') }}"></script>
-<!-- Started here rather than on <body onload>, which waits for every font,
-     image and CDN script first, so the map tiles began loading late. -->
+{# Started here rather than on <body onload>, which waits for every font,
+   image and CDN script, so the map tiles began loading late. #}
 <script>initTheme(); initMap();</script>
 
 </body>

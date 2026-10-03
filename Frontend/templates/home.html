@@ -160,13 +160,13 @@
               </defs>
               <rect width="520" height="230" fill="url(#hzFloodSky)"/>
               <g aria-hidden="true">
-                <!-- One-storey house: 2.6 m walls, 0.8 x 2.1 m door, window sill at 1.2 m -->
+                {# One-storey house: 2.6 m walls, 0.8 x 2.1 m door, window sill at 1.2 m #}
                 <path d="M224 46 L292 6 L360 46 Z" style="fill: var(--house-roof)"/>
                 <rect x="232" y="44" width="120" height="156" style="fill: var(--house)"/>
                 <rect x="248" y="74" width="48" height="126" rx="2" style="fill: var(--house-roof)"/>
                 <circle cx="287" cy="140" r="2.2" style="fill: var(--house)"/>
                 <rect x="310" y="86" width="30" height="42" rx="2" style="fill: var(--window)"/>
-                <!-- Two-storey shophouse running out of frame: 2.5 m roll-up door, upper floor at 3 m -->
+                {# Two-storey shophouse running out of frame: 2.5 m roll-up door, upper floor at 3 m #}
                 <rect x="372" y="-10" width="160" height="210" style="fill: var(--house)"/>
                 <rect x="368" y="14" width="164" height="7" style="fill: var(--house-roof)"/>
                 <rect x="386" y="-10" width="34" height="16" rx="2" style="fill: var(--window)"/>
@@ -175,7 +175,7 @@
                 <path d="M386 62 H476 M386 74 H476 M386 86 H476 M386 98 H476 M386 110 H476 M386 122 H476 M386 134 H476 M386 146 H476 M386 158 H476 M386 170 H476 M386 182 H476" stroke-width="1" opacity=".35" style="stroke: var(--house)"/>
                 <rect x="490" y="86" width="24" height="42" rx="2" style="fill: var(--window)"/>
               </g>
-              <!-- 163 cm adult and 130 cm child at 60 units per metre -->
+              {# 163 cm adult and 130 cm child at 60 units per metre #}
               <use href="#hzPerson" transform="translate(41.0875 77.75) scale(.61125)"/>
               <use href="#hzPerson" transform="translate(112.125 102.5) scale(.4875)"/>
               <g class="hz-water" id="hzWater" style="transform: translateY(200px)" aria-hidden="true">
@@ -394,8 +394,7 @@
               </g>
             </svg>
           </div>
-          <!-- Phones only (home.css): the scene's own ground labels are hidden
-               there, too small to read at that width. -->
+          {# Phones only (home.css): the scene's ground labels are hidden there. #}
           <ul class="hz-key" aria-label="Ground layers">
             <li><i style="background: var(--sand)"></i>Loose, wet sand</li>
             <li><i style="background: var(--groundwater)"></i>Groundwater</li>
@@ -485,9 +484,8 @@
 </footer>
 </div>
 
-<!-- "Emergency hotlines" in the Plan ahead card: the same numbers as the
-     simulator's results panel (_emergency_contacts.html), styled like the
-     coverage-map dialog. -->
+{# "Emergency hotlines" from the Plan ahead card: the same numbers as the
+   simulator (_emergency_contacts.html), styled like the coverage-map dialog. #}
 <div class="scope-modal hotline-modal" id="hotlineModal" role="dialog" aria-modal="true" aria-labelledby="hotlineModalTitle" hidden>
   <div class="scope-modal-backdrop" onclick="closeHotlines()"></div>
   <div class="scope-modal-panel">

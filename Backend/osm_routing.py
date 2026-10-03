@@ -29,13 +29,11 @@ MAX_ELIMINATED_ROUTES_TO_SHOW = 1
 DISPLAY_ROUTE_OVERLAP_THRESHOLDS = (0.6, 0.75, 0.9, 1.01)
 
 DIST_METERS = 7000
-# Routes may only use roads inside the hazard data coverage area (see
-# build_hazard_coverage_area), which never reaches past the barangay polygon:
-# there is no hazard data out there to check a road against (per the user,
-# routes stay inside unless data exists outside). The polygon gets just
-# enough slack to keep roads drawn along its line: with none, Sta. Lucia's
-# network splits apart along Ortigas Ave. Extension; 3 m joins it back up,
-# and the old 20 m let routes run down streets visibly outside the line.
+# Routes stay on roads inside the hazard data coverage area
+# (build_hazard_coverage_area), which ends at the barangay polygon: there is
+# no hazard data past it to check a road against. 3 m of slack keeps roads
+# drawn along the line; with none, Sta. Lucia's network splits apart along
+# Ortigas Ave. Extension.
 BARANGAY_BOUNDARY_TOLERANCE_METERS = 3.0
 # The hand-traced hazard layer extents are rougher and lie inside the
 # barangay, so they get more slack (Sta. Lucia's earthquake network needs
@@ -51,10 +49,9 @@ PIN_STREET_LABEL_RADIUS_METERS = 30.0
 # intersection just uses that intersection.
 ROAD_ACCESS_NODE_SNAP_METERS = 1.0
 GRAPH_NETWORK_TYPE = "walk"
-# The walk network normally leaves out access=private roads -- the streets
-# of a gated subdivision, where plenty of residents live. They are downloaded
-# too, but keep_private_roads_near() lets only a route starting or ending
-# inside one use them. access=no roads stay out.
+# The walk network normally leaves out access=private roads (gated
+# subdivisions). They are downloaded too, but keep_private_roads_near() lets
+# only a route starting or ending inside one use them. access=no stays out.
 GRAPH_ROAD_ACCESS_FILTER = '["access"!~"^no$"]'
 
 ACO_MAX_ROUTE_STEPS_MULTIPLIER = 2.5
@@ -64,23 +61,18 @@ ACO_MIN_ROUTE_STEPS = 25
 ACO_MIN_ITERATIONS = 10
 ACO_STAGNATION_LIMIT = 8
 MAX_NODE_VISITS = 2
-# The ants' pull toward the destination: a step that closes this many metres
+# The ants' pull toward the destination: a step that gains this many metres
 # on it is e (~2.7x) more attractive than one that keeps level, and a step
 # that loses as much is 2.7x less (clamped, so one long road can't swamp the
-# pheromone). The old pull added 0.15 x the remaining distance to each edge's
-# cost, which barely told a step toward a goal 1.5 km away from a step away
-# from it (~3%): the ants wandered until their step limit and almost none
-# arrived, leaving every route on the map to the shortest-path helpers.
+# pheromone).
 ANT_GOAL_PULL_METERS = 15.0
 ANT_GOAL_PROGRESS_CLAMP_METERS = 60.0
 UNSAFE_EDGE_HEURISTIC_FACTOR = 0.05
 EDGE_PHEROMONE_MIN = 0.01
 EDGE_PHEROMONE_MAX = 25.0
 # Ants discount (never forbid) edges already used by routes the colony has
-# already found, scaled by how many use that edge -- pushes later ants toward
-# untried corridors instead of all funneling down the one corridor pheromone
-# has reinforced, without overriding the hazard/goal heuristic itself (an
-# unsafe edge is still deprioritized far more heavily).
+# found, scaled by how many use them, so later ants try other corridors
+# instead of all following the one pheromone has reinforced.
 ANT_ROUTE_DIVERSITY_PENALTY = 0.4
 # Alternatives are found by ants too: after the main colony, each alternative
 # colony starts fresh with the roads of every route already chosen made
@@ -787,12 +779,9 @@ def _get_edge_index(G):
 
 def find_road_access_point(G, lat, lng):
     """Where a pin at (lat, lng) meets the road network: the closest point on
-    the closest road open to walkers (access not "no") and connected to the
-    rest of the network -- a gated subdivision's private streets included, for
-    a pin inside one. A pin can sit anywhere -- in a building, a compound, a
-    field -- and its route still starts on a street. Returns the
-    edge (u, v, key), that point and its distance in meters, or None when G
-    has no such road."""
+    the closest walkable road (access not "no") in G's largest connected
+    piece, private roads included. Returns the edge (u, v, key), that point
+    and its distance in meters, or None when G has no such road."""
     index = _get_edge_index(G)
     if not index["geometries"]:
         return None
@@ -1034,14 +1023,12 @@ def _line_length_meters(line):
 
 def add_road_access_nodes(G, points, annotate_edge):
     """A copy of G in which each (lat, lng) in points gets a node where it
-    meets the road (find_road_access_point). That road is split in two there,
-    so a route starts or ends on the street right beside a pin -- not at the
-    nearest intersection, which can be across a block from it, and with no
-    line drawn from the pin through buildings. Each road piece gets its own
-    length, and annotate_edge(data) re-derives its hazard from its own
-    geometry, as if the map had a node there. Private roads stay only where
-    one of the points sits among them (keep_private_roads_near). Returns
-    (graph, [node for each point, None where no road was found])."""
+    meets the road (find_road_access_point): that road is split in two there,
+    so a route starts or ends on the street beside the pin rather than at the
+    nearest intersection. Each piece gets its own length, and
+    annotate_edge(data) re-derives its hazard from its own geometry. Private
+    roads stay only where a point sits among them (keep_private_roads_near).
+    Returns (graph, [node for each point, None where no road was found])."""
     graph = G.copy()
     # Indexes G's roads, not the split ones.
     graph.graph.pop("_edge_index", None)
@@ -1828,10 +1815,8 @@ def label_display_routes(sorted_routes):
     eliminated_routes = [route.copy() for route in sorted_routes if route["eliminated"]]
 
     if valid_routes:
-        # Safe routes fill the list first; an eliminated one only keeps the
-        # last slot, as an example of a route the system ruled out (per the
-        # user: before, up to 3 eliminated routes took slots ahead of safe
-        # ones even when over a hundred safe routes were found).
+        # Safe routes fill the list first; at most MAX_ELIMINATED_ROUTES_TO_SHOW
+        # eliminated routes follow, as examples of what was ruled out.
         example_slots = min(MAX_ELIMINATED_ROUTES_TO_SHOW, len(eliminated_routes))
         valid_routes = select_display_routes(valid_routes, FINAL_ROUTES_TO_SHOW - example_slots)
         eliminated_routes = select_display_routes(eliminated_routes, example_slots)

@@ -72,7 +72,7 @@
 
   cards.forEach(card => card.addEventListener('click', () => setDepth(LEVELS[card.dataset.level].preset)));
   slider.addEventListener('input', () => setDepth(Number(slider.value)));
-  // Opens on Low (per the user); the markup's starting values match.
+  // Opens on Low; the markup's starting values match.
   setDepth(LEVELS.low.preset);
 
   // ================= EARTHQUAKE =================

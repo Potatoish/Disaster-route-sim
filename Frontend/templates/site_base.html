@@ -4,18 +4,17 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>{% block title %}AGNAS{% endblock %}</title>
-  <!-- Home <-> About cross-fade (home.css styles it). Inline and first: from
-       home.css, Chrome sometimes read the opt-in as off and skipped it. -->
+  {# Home <-> About cross-fade opt-in (styled in home.css). Inline and first:
+     from home.css, Chrome sometimes skipped it. #}
   <style>
     @view-transition{ navigation:auto; }
     @media (prefers-reduced-motion: reduce){ @view-transition{ navigation:none; } }
   </style>
-  <!-- The page content (#pageBody) is its own transition layer only while a
-       page switch runs, so home.css can bring it into focus apart from the
-       nav and the background. A permanent one would trap the hotline popup
-       under the nav. The expect link holds the first paint until the nav and
-       the start of #pageBody are parsed (#pageStart, an empty marker): on
-       phones the browser otherwise painted before either existed. -->
+  {# #pageBody gets its view-transition name only while a page switch runs
+     (the script below), so home.css can focus it apart from the nav; a
+     permanent one would trap the hotline popup under the nav. The expect link
+     holds the first paint until the nav and #pageStart are parsed: on phones
+     the browser otherwise painted before either existed. #}
   <link rel="expect" href="#pageStart" blocking="render">
   <script>
     addEventListener('pagereveal', function (event) {
@@ -79,14 +78,12 @@
     </div>
   </div>
 </nav>
-<!-- #pageBody opens before the scripts below: the browser can paint while
-     nav-pill.js loads, and the page-switch transition needs #pageBody to
-     exist by that first paint (on phones it often didn't). -->
+{# #pageBody opens before the scripts below, so it exists by the first paint
+   the page-switch transition captures. #}
 <div id="pageBody"><span id="pageStart" hidden></span>
-<!-- Right after the nav, before the page paints: see the file's header. -->
+{# Right after the nav, before the page paints (see nav-pill.js). #}
 <script src="{{ url_for('static', filename='nav-pill.js') }}"></script>
-<!-- Fetch the other page while the pointer rests on its nav link, so it is
-     ready by the time the pill has slid there (browsers without this skip it). -->
+{# Prefetch the other page while the pointer rests on its nav link. #}
 <script type="speculationrules">
 {"prefetch": [{"where": {"selector_matches": ".nav-links a.nav-btn:not(.is-active):not(#howToUseNavBtn)"}, "eagerness": "moderate"}]}
 </script>

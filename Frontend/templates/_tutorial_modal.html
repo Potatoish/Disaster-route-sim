@@ -1,5 +1,5 @@
-<!-- "How to use" step-by-step tutorial, driven by static/tutorial.js.
-     Included by site_base.html (Home, About) and index.html (simulator). -->
+{# "How to use" step-by-step tutorial (tutorial.js), included by
+   site_base.html (Home, About) and index.html (simulator). #}
 <div class="tutorial-modal" id="tutorialModal" role="dialog" aria-modal="true" aria-label="How to use AGNAS" hidden>
   <div class="tutorial-modal-backdrop" onclick="closeTutorial()"></div>
   <div class="tutorial-modal-panel">
@@ -10,8 +10,8 @@
       </button>
     </div>
 
-    <!-- loading="lazy": the modal starts hidden, so its screenshots load when
-         it opens instead of holding up the page's load event. -->
+    {# loading="lazy": the modal starts hidden, so its screenshots load when
+       it opens instead of holding up the page's load event. #}
     <div id="tutorialSlides">
       <div class="tutorial-slide is-active" data-step="1">
         <div class="tutorial-tile-shot">

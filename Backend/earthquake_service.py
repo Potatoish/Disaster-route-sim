@@ -150,10 +150,9 @@ def _get_earthquake_graph(dataset):
             debug_print(f"[EQ] Building graph for {boundary['display_name']} with radius {radius_m:.1f} meters")
             debug_print(f"[EQ] Graph center: ({float(centroid.y)}, {float(centroid.x)})")
             graph = download_walk_graph(centroid, radius_m)
-        # Only roads inside the barangay AND inside both earthquake layers can
-        # be routed on. The traced layer polygons leave strips of the
-        # barangay (riverbanks, edges) undescribed; before this, roads there
-        # read as severity 1 and were the only "safe" roads in the network.
+        # Only roads inside the barangay AND inside both earthquake layers can be
+        # routed on: the traced layer polygons leave strips of the barangay
+        # (riverbanks, edges) that no layer describes.
         coverage_area = build_hazard_coverage_area(
             boundary_geometry,
             [dataset["layer_extents"][layer_key] for layer_key in ("liquefaction", "ground_shaking")],

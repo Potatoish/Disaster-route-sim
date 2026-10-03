@@ -44,11 +44,8 @@ body.dark{
    on .site-nav. :clip has the same effect of preventing a horizontal
    scrollbar without that side effect. */
 html,body{ height:auto; overflow-x:clip; }
-/* Full-height gradient base. This used to carry the `fixed` attachment
-   keyword, which sizes/tiles a background against the viewport instead of
-   the page -- on any page taller than one screen (i.e. this one) that made
-   it visibly repeat/band partway down instead of spanning smoothly, which
-   is what made the lower sections look flatly white. */
+/* Full-height gradient base. Not `fixed`: that sizes the background to the
+   viewport, so on a page taller than one screen it bands partway down. */
 body{
   margin:0;
   background: linear-gradient(180deg, var(--page-top), var(--page-bottom));
@@ -56,13 +53,9 @@ body{
   color:var(--text); font-family:var(--font-body); -webkit-font-smoothing:antialiased;
 }
 
-/* Static colorful wavy motif behind "Good to know" onward (Before you
-   start / How it works / footer) -- kept off the hero, which already has
-   its own ant-canvas animation, and off the plain stats strip. Seamless
-   top-to-bottom (the SVG's paths start/end at matching points) so it tiles
-   cleanly no matter how tall this section grows; swapped for a
-   brighter-stroke variant in dark mode rather than trying to make one
-   coloring work on both. */
+/* Static wavy motif behind "Good to know" onward, kept off the hero (it has
+   the ant canvas) and the stats strip. It tiles seamlessly top to bottom,
+   with a brighter-stroke variant in dark mode. */
 .wave-zone{
   background-image: url('wave-bg-light.svg');
   background-repeat: repeat-y;
@@ -84,10 +77,8 @@ a{color:inherit;}
 
 button{font-family:inherit; cursor:pointer;}
 
-/* Baseline visible focus ring for every interactive element that doesn't
-   define a more specific one of its own elsewhere in this file. Real UA
-   default outlines are inconsistent across browsers and easy to lose behind
-   this page's own backgrounds, so give keyboard focus one deliberate look. */
+/* One deliberate focus ring for every interactive element without its own:
+   browser defaults vary and get lost on this page's backgrounds. */
 a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
 input:focus-visible, select:focus-visible, textarea:focus-visible{
   outline:2px solid var(--accent); outline-offset:2px;
@@ -95,10 +86,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible{
 
 .site-nav{
   position:sticky; top:0; z-index:40; padding:14px 24px 0;
-  /* Promotes the sticky bar to its own compositor layer so its
-     backdrop-filter blur is composited once instead of being
-     recalculated against the content scrolling underneath it on every
-     scroll frame. */
+  /* Own compositor layer, so the backdrop blur isn't recomputed against the
+     content scrolling under it on every frame. */
   will-change:transform;
 }
 
@@ -110,8 +99,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible{
 }
 body.dark .nav-row{ box-shadow:0 12px 30px rgba(0,0,0,.32); }
 .brand{position:relative; display:flex; align-items:center; gap:0; text-decoration:none;}
-/* A short divider line between the logo and the links (per the user),
-   centered in the nav's gap -- `right` is half of .nav-row's gap. */
+/* A short divider between the logo and the links, centered in the nav's
+   gap -- `right` is half of .nav-row's gap. */
 .brand::after{
   content:""; position:absolute; top:50%; right:-10px; width:1px; height:24px; margin-top:-12px;
   background:var(--border2);
@@ -131,10 +120,10 @@ body.dark .nav-row{ box-shadow:0 12px 30px rgba(0,0,0,.32); }
 .nav-btn:hover{ color:var(--text); background:var(--panel-strong); }
 .nav-btn:active{ color:var(--accent-ink); background:linear-gradient(180deg,var(--accent2),var(--accent)); }
 .nav-btn.is-active{ color:var(--accent-ink); background:linear-gradient(180deg,var(--accent2),var(--accent)); }
-/* The highlight slides between the links (static/nav-pill.js; per the user,
-   who found the nav too static): one gradient layer with white copies of the
-   labels, clipped to the pill's shape and click-through. With it the links
-   lose their own fill; without JS the active link keeps it. */
+/* The highlight slides between the links (nav-pill.js): one gradient layer
+   with white copies of the labels, clipped to the pill's shape and
+   click-through. With it the links lose their own fill; without JS the
+   active link keeps it. */
 .nav-links{ position:relative; }
 .nav-pill{
   position:absolute; top:0; left:0; z-index:1; pointer-events:none;
@@ -145,9 +134,8 @@ body.dark .nav-row{ box-shadow:0 12px 30px rgba(0,0,0,.32); }
 .nav-links.has-pill .nav-btn:active{ color:var(--text); background-color:var(--panel-strong); background-image:none; }
 .nav-actions{display:flex; align-items:center; gap:8px;}
 
-/* Both theme states sit side by side instead of one icon swapping in
-   place, matching the app's other segmented-choice controls (see
-   .qs-segmented) rather than introducing a new interaction pattern. */
+/* Both theme states sit side by side, like the other segmented controls
+   (.qs-segmented). */
 .theme-switch{ position:relative; display:flex; align-items:center; gap:2px; padding:3px; border-radius:999px; border:1px solid var(--border); background:var(--panel); }
 /* The raised thumb under the active theme's icon slides across with the
    theme, like the nav's pill (a gap plus a button over in dark mode). */
@@ -171,19 +159,16 @@ body.dark .theme-switch::before{ transform:translateX(30px); }
 }
 .cta.big{ padding:13px 24px; font-size:15px; border-radius:11px; }
 .cta.full{ width:100%; }
-/* Flat solid fill (no gradient) for the quick-start card's primary action,
-   matching the plain "Go to Map" reference button rather than the site's
-   default gradient CTA. */
+/* Flat fill for the quick-start card's primary action, not the default
+   gradient CTA. */
 .cta.qs-cta{ background:var(--accent); border-radius:14px; }
 .cta.qs-cta:hover{ background:var(--accent2); }
 .cta.qs-cta svg{ width:16px; height:16px; flex:none; }
 
 /* ---------- HERO ---------- */
 .hero{ position:relative; overflow:hidden; border-bottom:1px solid var(--border); }
-/* Low-opacity by design: this is a decorative road-network/ant-swarm
-   backdrop (see initAntCanvas in home.js), never the thing carrying
-   information, so it must stay well under the text/card sitting on top
-   of it for both legibility and WCAG contrast. */
+/* Decorative backdrop (initAntCanvas in home.js), kept faint so the text and
+   card on top stay legible. */
 .hero canvas{ position:absolute; inset:0; width:100%; height:100%; opacity:.4; }
 .hero-inner{ position:relative; padding-block:64px; }
 .hero-split{
@@ -288,9 +273,7 @@ body.dark .about-logo .logo-dark{ display:block; }
 /* Candidate paths ants may take -- muted and dashed so the reinforced/best
    route (below) reads as the one thing that "won". */
 .algo-line{ stroke:var(--border2); stroke-width:1.4; stroke-dasharray:3 4; opacity:.65; fill:none; }
-/* Evaporating-but-still-there: these are the paths ants stopped
-   reinforcing, not paths that never existed, so they stay legible instead
-   of fading to near-nothing. */
+/* Paths the ants stopped reinforcing: fainter, but still legible. */
 .algo-line-faint{ opacity:.4; }
 .algo-line-strong{
   stroke:var(--accent); stroke-width:2.4; fill:none; stroke-linecap:round;
@@ -327,8 +310,7 @@ body.dark .about-logo .logo-dark{ display:block; }
 .gtk-icon svg{ width:18px; height:18px; }
 .gtk-card h3{ font-size:15.5px; margin:0; }
 .gtk-card p{ margin:0; font-size:12.5px; color:var(--muted); line-height:1.55; }
-/* The plan-ahead card's way to the hotlines. Same border as the other cards
-   (the user removed its darker one). */
+/* The plan-ahead card's way to the hotlines, with the other cards' border. */
 .gtk-link{
   align-self:flex-end; margin-top:auto; display:inline-flex; align-items:center; gap:6px;
   border:0; background:none; padding:4px 0; color:var(--accent); font-size:13px; font-weight:700;
@@ -536,13 +518,11 @@ body.tutorial-modal-open{ overflow:hidden; }
 
 /* ---------- PAGE TRANSITIONS ----------
    Home <-> About (browsers with cross-document view transitions; the rest
-   just cut). The opt-in is an inline style in site_base.html. A focus pull,
-   matching the frosted nav (per the user, who wanted the screen to blur but
-   smoothly): the old page blurs out of focus and fades, then the new page's
-   content (#pageBody, named only while the switch runs, site_base.html)
-   comes into focus over the shared background. The nav is lifted out and
-   shown live, so its pill keeps sliding across the change. A plain
-   cross-fade drew both pages sharp at half strength, a messy double image. */
+   just cut). The opt-in is an inline style in site_base.html. A focus pull:
+   the old page blurs out of focus and fades, then the new page's content
+   (#pageBody, named only while the switch runs) comes into focus over the
+   shared background. The nav is lifted out and stays live, so its pill keeps
+   sliding. A plain cross-fade drew both pages sharp at half strength. */
 .nav-row{ view-transition-name:site-nav; }
 ::view-transition-old(site-nav){ display:none; }
 ::view-transition-new(site-nav){ animation:none; }
@@ -867,14 +847,10 @@ body.dark .hz-section{
   .stat{ padding:18px 14px; }
   .stat b{ font-size:22px; }
 }
-/* The pill nav stays a single row at every width, same as desktop -- wrapping
-   it (links pushed to their own row, labels breaking onto 2-3 lines) is what
-   made the phone header look like a broken layout. Instead it sheds detail in
-   steps as the viewport narrows: tighter spacing, then the link icons, then
-   the " & Contact" half of that label, then the wordmark text. Each step's
-   breakpoint is where the previous step stops fitting, with some slack.
-   If a phone's enlarged system font still overflows the last step, the
-   links scroll sideways inside the pill rather than breaking it. */
+/* The pill nav stays one row at every width; wrapping it broke the phone
+   header. Instead it sheds detail as the viewport narrows: tighter spacing,
+   then the link icons, then the wordmark text. If an enlarged system font
+   still overflows, the links scroll sideways inside the pill. */
 @media (max-width:720px){
   .site-nav{ padding:10px 10px 0; }
   .site-nav .wrap{ padding-inline:0; }
@@ -917,23 +893,16 @@ body.dark .hz-section{
   .coverage-badge{ padding:8px; }
 }
 @media (max-width:639px){
-  /* The feedback FAB is fixed to the corner at every width; on a phone-width
-     hero the quickstart card's full-width CTA sits right under it, so the
-     text label (not just the icon) was overlapping "See map" / body copy.
-     Icon-only keeps its footprint small enough to clear both -- the button's
-     own aria-label ("Send feedback") still gives it an accessible name with
-     the visible text gone. */
+  /* Icon-only on phones, so the corner button clears the quick-start card's
+     full-width CTA; its aria-label still names it. */
   .fab{ width:48px; padding:0; justify-content:center; }
   .fab span{ display:none; }
 }
 /* ---------- TOUCH TARGETS (< 1024px) ----------
-   Anything tappable is at least 44x44px below desktop width; desktop keeps
-   its compact sizes (a mouse doesn't need them). Small round controls keep
-   their look and gain an invisible band instead: in `inset`, 100% is the
-   button's own size, so each side grows by half of what is missing. The phone
-   nav (< 640px) gets rebuilt separately (menu button, single theme toggle),
-   so only its 640-1023px pill is sized here. The depth slider is sized with
-   the rest of the hazard showcase. */
+   Anything tappable is at least 44x44px below desktop width. Small round
+   controls keep their look and gain an invisible band instead: in `inset`,
+   100% is the button's own size, so each side grows by half of what is
+   missing. The phone nav (< 640px) is sized in its own block. */
 @media (max-width:1023px){
   .hero-action, .hz-sim-btn, .fab-send, .tutorial-btn, .cta, .gtk-link{ min-height:44px; }
   .emergency-contact-number a{ display:inline-flex; align-items:center; min-height:44px; }
@@ -975,16 +944,13 @@ body.dark .hz-section{
 }
 
 /* ---------- PHONE LAYOUT (< 640px) ----------
-   Follows the user's mobile wireframes (landing top, hazard guide, lower
-   sections). The pill nav and the round feedback button stay as they are
-   (per the user). */
+   Follows the mobile wireframes; the pill nav and the round feedback button
+   stay as they are. */
 @media (max-width:639px){
-  /* Hero: the copy, then the barangay card, then Coverage map. The title
-     (eyebrow and heading) is centered (per the user; the wireframe had it
-     left-aligned) and the intro's last line follows it, like every
-     paragraph under a centered heading. .hero-copy steps out of the way
-     (display:contents) so its children and the card share one column and
-     can be reordered. */
+  /* Hero: the copy, then the barangay card, then Coverage map. The title is
+     centered, and so is the intro's last line. .hero-copy steps out of the
+     way (display:contents) so its children and the card share one column
+     and can be reordered. */
   .hero-inner{ padding-block:28px 36px; }
   .hero-split{ display:flex; flex-direction:column; align-items:stretch; gap:14px; text-align:left; }
   .hero-copy{ display:contents; }
@@ -1003,7 +969,7 @@ body.dark .hz-section{
   .qs-barangay-card{ min-height:58px; gap:12px; padding:10px 14px; border-radius:12px; }
   .qs-barangay-card strong{ font-size:14.5px; }
   .qs-barangay-card span{ font-size:12.5px; }
-  /* Same pin icon as the desktop cards (per the user), a touch larger. */
+  /* Same pin icon as the desktop cards, a touch larger. */
   .qs-barangay-icon{ width:32px; height:32px; }
   .qs-barangay-icon svg{ width:16px; height:16px; }
   .qs-barangay-card.is-active{ box-shadow:inset 0 0 0 1px var(--accent); }
@@ -1016,9 +982,8 @@ body.dark .hz-section{
   .stat b{ font-size:22px; margin-bottom:2px; }
   .stat span{ font-size:13px; }
 
-  /* Footer: two columns side by side (per the user) -- on the left
-     "© 2026 AGNAS Project." over "All rights reserved.", on the right Privacy
-     Policy over Terms of Service. */
+  /* Footer: two columns side by side -- the copyright lines on the left,
+     Privacy Policy over Terms of Service on the right. */
   .foot-row{ flex-wrap:nowrap; align-items:center; gap:16px; padding-block:12px 4px; }
   /* Each copyright line gets the same 34px row as a link, so the two
      columns share one rhythm and their lines sit level with each other. */
@@ -1106,12 +1071,10 @@ body.dark .hz-section{
   .algo-diagram svg{ height:112px; }
 }
 
-/* Phone nav: the same pill, packed tight -- logo, a short divider line, the
-   links, then the theme button, with no stretched gaps between them (per the
-   user). Each link and the theme button is a 44px tap box, but a 4px
-   transparent border (with the fill clipped inside it) keeps the visible
-   pill a moderate 36px -- and that border doubles as the spacing between the
-   pill's edge and its contents. The light/dark pair becomes one button that
+/* Phone nav: the same pill, packed tight -- logo, divider, links, theme
+   button. Each link and the theme button is a 44px tap box, but a 4px
+   transparent border (fill clipped inside it) keeps the visible pill 36px
+   and doubles as its padding. The light/dark pair becomes one button that
    switches to the other theme (the active one hides). */
 @media (max-width:639px){
   .site-nav{ padding:8px 8px 0; }
@@ -1148,9 +1111,9 @@ body.dark .hz-section{
 }
 
 /* ---------- JUSTIFIED TEXT ----------
-   Every running-text paragraph is justified (per the user). Paragraphs that
-   sit under a centered heading keep their last line centered, so the block
-   still lines up with it; single-line notes are unaffected either way. */
+   Every running-text paragraph is justified. Paragraphs under a centered
+   heading keep their last line centered, so the block still lines up with
+   it; single-line notes are unaffected. */
 .hero p.lede,
 .block-head p,
 .gtk-card p,

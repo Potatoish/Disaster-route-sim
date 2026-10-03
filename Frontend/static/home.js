@@ -2,9 +2,8 @@
 // background, and the feedback widget. Loaded on every page that extends
 // site_base.html.
 
-// Same as script.js (never loaded on these pages): Flask serves the pages
-// and the API together, so the coverage-map modal below calls the API on
-// the page's own origin.
+// Flask serves the pages and the API together, so the API is on the page's
+// own origin.
 window.BACKEND_BASE = window.BACKEND_BASE || window.location.origin;
 
 const HOME_THEME_STORAGE_KEY = 'disaster-route-sim-theme';
@@ -191,11 +190,10 @@ async function submitContactForm() {
   showHomeToast(result.message || "Message sent. We'll reply by email.", 3500);
 }
 
-// ---- hero quick-start card: barangay pick, folded into the "Open simulator"
-// link's query string (?barangay=...) so the simulator page can read a
-// starting selection from the URL. No barangay is pre-selected, so the
-// link stays inert (href="#") until the visitor picks one -- clicking it
-// before that just surfaces qsBarangayError instead of navigating.
+// ---- hero quick-start card ----
+// The barangay pick goes into the "Open simulator" link as ?barangay=...;
+// until one is picked the link stays inert and clicking it shows
+// qsBarangayError.
 let quickStartBarangay = null;
 
 function syncQuickStartLink() {
@@ -250,14 +248,9 @@ function handleQuickStartLaunch(event) {
 }
 
 // ---- nav's "Map" badge: a read-only coverage-area preview ----
-// Opens a modal with a real Leaflet map outlining both supported barangays,
-// fetched from the same /barangay-boundary endpoint the simulator uses.
-// This is a viewer only -- it never touches simulate/ACO endpoints, so it
-// works identically from the homepage or the About page and needs no
-// barangay to already be picked.
-// Both barangays use the same color -- this map is coverage-viewing only,
-// not a route/hazard display, so there's nothing for distinct colors to
-// distinguish.
+// A modal with a Leaflet map outlining both supported barangays, from the
+// same /barangay-boundary endpoint the simulator uses. Both share one color:
+// it only shows coverage, not routes or hazards.
 const SCOPE_BARANGAYS = [
   { name: 'Pinagbuhatan', color: '#2563eb' },
   { name: 'Sta. Lucia', color: '#2563eb' },
@@ -438,11 +431,9 @@ document.addEventListener('keydown', (event) => {
 });
 
 // ---- ant colony ambient hero background ----
-// Ants no longer wander freely -- they walk a small procedural "road
-// network" (nodes + edges regenerated per canvas size) and only travel
-// along its edges, closer to the ACO graph-walk the rest of the app is
-// simulating. Pheromone trail is fixed to the brand's electric cyan
-// (#00e5ff) with a glow, independent of the road/ant theme colors.
+// Ants walk the edges of a small procedural road network (regenerated per
+// canvas size), like the ACO graph walk the app simulates. The pheromone
+// trail is the brand's electric cyan, independent of the theme colors.
 const PHEROMONE_COLOR = '#00e5ff';
 
 function initAntCanvas() {
@@ -456,12 +447,9 @@ function initAntCanvas() {
   let cachedRoad = '#94a3b8';
   let resizeTimer = null;
 
-  // Road lines/nodes never move once generated, so they're painted once
-  // onto an offscreen layer and blitted with drawImage() every frame
-  // instead of re-stroking ~80 line segments per frame -- that redundant
-  // redraw (plus a per-frame getComputedStyle() call and a shadowBlur glow
-  // on every trail dot) was the actual cause of the scroll jank, not the
-  // page itself.
+  // Road lines and nodes never move once generated, so they are painted once
+  // onto an offscreen layer and blitted with drawImage() every frame instead
+  // of re-stroking ~80 segments per frame.
   const networkLayer = document.createElement('canvas');
   const networkCtx = networkLayer.getContext('2d');
 
@@ -608,10 +596,8 @@ function initAntCanvas() {
       if (trail[i].life <= 0) trail.splice(i, 1);
     }
 
-    // Two flat, differently-sized fills (soft wide + solid core) fake a
-    // glow far more cheaply per-shape than ctx.shadowBlur, which forces an
-    // extra blur pass for every single dot and was the main scroll-jank
-    // culprit at this trail density.
+    // Two flat fills (soft wide + solid core) fake a glow far more cheaply than
+    // ctx.shadowBlur, which costs an extra blur pass per dot.
     ctx.fillStyle = PHEROMONE_COLOR;
     trail.forEach((p) => {
       const ratio = Math.max(0, p.life / 70);
@@ -647,16 +633,10 @@ function initAntCanvas() {
     });
   }
 
-  // The loop below used to run forever regardless of scroll position --
-  // once the hero (and this canvas) scrolls out of view, the rAF callback
-  // still fires and still does a full clear+drawImage+14-ant redraw every
-  // frame, competing with the browser's own scroll compositing for main-
-  // thread time on every section below the hero. `visible` gates
-  // rescheduling so the loop actually stops while the canvas is offscreen
-  // or the tab is backgrounded, and a single requestAnimationFrame from
-  // the observer/visibility callback restarts it -- there's never more
-  // than one loop alive at a time since step() only reschedules itself
-  // while still visible.
+  // `visible` stops the loop while the canvas is offscreen or the tab is in
+  // the background; the observer/visibility callback restarts it with a single
+  // requestAnimationFrame. step() only reschedules itself while visible, so
+  // there is never more than one loop.
   let visible = true;
 
   function step() {
@@ -692,10 +672,8 @@ function initAntCanvas() {
     resizeTimer = window.setTimeout(() => {
       const nextWidth = canvas.parentElement.clientWidth;
       const nextHeight = canvas.parentElement.clientHeight;
-      // Mobile browsers fire 'resize' when the URL bar collapses/expands
-      // on scroll; a small height-only change isn't worth rebuilding the
-      // whole road graph for, and doing so on every such event is exactly
-      // what made scrolling feel laggy.
+      // Mobile browsers fire 'resize' when the URL bar collapses or expands on
+      // scroll; a small change like that isn't worth rebuilding the road network.
       if (Math.abs(nextWidth - width) < 40 && Math.abs(nextHeight - height) < 80) return;
       resize();
       rebuildScene();

@@ -17,9 +17,8 @@ let selectedRouteFocus = null;
 let workflowFocusSection = null;
 let simulationInProgress = false;
 let floodHazardOverlayMode = 'all';
-// Barangay is now picked on the homepage (see home.js's quick-start card)
-// and handed off via ?barangay=... -- must match the data-barangay values
-// that card uses exactly, since selectBarangay() looks locations up by name.
+// Barangay names the homepage's quick-start card hands over in ?barangay=...;
+// must match its data-barangay values exactly.
 const SUPPORTED_QUICKSTART_BARANGAYS = ['Pinagbuhatan', 'Sta. Lucia'];
 const activeInfoWindowRef = { current: null };
 const loaderState = {
@@ -365,11 +364,10 @@ function applyHazardTheme() {
 const BARANGAY_BOUNDARY_WEIGHT = 3;
 const BARANGAY_BOUNDARY_EDGE_EXTRA_WEIGHT = 2;
 
-// Line and edge color: one dark navy for every hazard (per the user), so the
-// outline never competes with the orange evacuation pins and hazard fills or
-// adds another color to the map.
-// Navy disappears into the dark satellite imagery, so on that base map the
-// line turns light blue and keeps the navy as its edge.
+// Line and edge color: one dark navy for every hazard, so the outline never
+// competes with the orange evacuation pins and hazard fills. Navy disappears
+// into the dark satellite imagery, so there the line turns light blue and
+// keeps the navy as its edge.
 const BARANGAY_BOUNDARY_COLORS = { line: '#1e3a8a', edge: '#172554' };
 const BARANGAY_BOUNDARY_SATELLITE_COLORS = { line: '#93c5fd', edge: '#1e3a8a' };
 
@@ -522,10 +520,9 @@ document.getElementById('emergencyContactModal')?.addEventListener('mousedown', 
 // map hints, since the map glides out at the same moment.
 const LOCATION_OUTSIDE_HINT_MS = 7000;
 
-// My location from outside the barangay: a short notice in the map hint
-// (bottom of the map on desktop, under the top bar on phones; per the user,
-// a short line there rather than a dialog), and the map glides out to the
-// whole barangay so its outline shows where location does work.
+// My location from outside the barangay: a short notice in the map hint, and
+// the map glides out to the whole barangay so its outline shows where
+// location does work.
 function showLocationOutsideNotice() {
   fitMapToBoundaryPaths(barangayBoundaryRings, 42, { fly: true, duration: RECENTER_FLY_SECONDS });
   showPinHintError(
@@ -564,9 +561,8 @@ const MOBILE_PANEL_QUERY = window.matchMedia('(max-height: 499px)');
 
 function applySetupSidebarState(shouldCollapse) {
   const shell = document.getElementById('appShell');
-  // This button lives inside .left-panel itself, so it disappears along
-  // with the rest of the panel when collapsed -- #sidebarReopenBtn (outside
-  // .left-panel, see toggleSetupSidebar()) is what brings it back.
+  // This button sits inside .left-panel, so it hides with the panel;
+  // #sidebarReopenBtn (outside it) brings the panel back.
   const toggleBtn = document.getElementById('sidebarToggleBtn');
   if (!shell) return;
 
@@ -579,16 +575,14 @@ function applySetupSidebarState(shouldCollapse) {
     if (tipLabel) tipLabel.textContent = shouldCollapse ? 'Show sidebar' : 'Hide sidebar';
   }
 
-  // On a short viewport, setup and results are each a full-screen panel, not two
-  // panels that can both stay open like on desktop/tablet -- so opening
-  // setup there also closes results, if they happened to be open.
+  // On a short viewport setup and results are each full-screen, so opening
+  // setup closes results.
   if (!shouldCollapse && MOBILE_PANEL_QUERY.matches) {
     setRouteSafetyPanelVisible(false);
   }
 
-  // No invalidateSize() call here: collapsing/expanding resizes #map's own
-  // box, which the ResizeObserver in initMap() already watches and settles
-  // on its own once the .22s CSS transition finishes.
+  // No invalidateSize() here: the ResizeObserver in initMap() watches #map's
+  // box and settles once the transition ends.
 }
 
 function toggleSetupSidebar(forceOpen = null) {
@@ -605,18 +599,14 @@ function toggleSetupSidebar(forceOpen = null) {
   document.getElementById(shouldCollapse ? 'sidebarReopenBtn' : 'sidebarToggleBtn')?.focus({ preventScroll: true });
 }
 
-// "Edit setup" button (mobile results panel): swap back to the setup
-// panel. Goes through toggleSetupSidebar so focus management and the
-// results-panel-closing side effect (applySetupSidebarState above) both
-// happen the same way a bottom-bar tap already would.
+// "Edit setup" (mobile results panel): back to the setup panel, through
+// toggleSetupSidebar so focus and the results panel close the usual way.
 function openSetupDrawerFromResults() {
   toggleSetupSidebar(true);
 }
 
-// Esc (short viewports only): close whichever of setup/results is open. At
-// most one ever is by design (see applySetupSidebarState), so this only
-// ever does one or the other. Also the bottom bar's own close path -- see
-// toggleMobilePanelBar below.
+// Esc (short viewports only): close whichever of setup/results is open (at
+// most one is; see applySetupSidebarState).
 function closeWorkspaceDrawers() {
   const shell = document.getElementById('appShell');
   if (!shell) return;
@@ -627,9 +617,8 @@ function closeWorkspaceDrawers() {
   }
 }
 
-// Bottom bar tap (short viewports only): closes whichever panel is open, or -- if
-// neither is -- opens the one that's currently relevant (results once a
-// simulation has run, setup before that).
+// Bottom bar tap (short viewports only): close the open panel, or open the
+// relevant one (results after a run, setup before).
 function toggleMobilePanelBar() {
   const shell = document.getElementById('appShell');
   if (!shell) return;
@@ -713,10 +702,8 @@ document.addEventListener('keydown', event => {
 
   if (key !== 'Escape') return;
 
-  // Topmost first: dialogs, then an open "Choose on Map" menu, then pinning,
-  // then the mobile setup/results panel (lowest priority: if a pin is
-  // actively being placed, Esc backs out of that first -- a second press
-  // then closes the panel).
+  // Topmost first: dialogs, the "Choose on Map" menu, pinning, then the mobile
+  // setup/results panel.
   if (document.getElementById('emergencyContactModal')?.hidden === false) {
     event.preventDefault();
     closeEmergencyContactModal();
@@ -756,13 +743,10 @@ function syncSimulationConfigLock() {
     card.setAttribute('aria-disabled', String(interactionLocked));
   });
 
-  // changeHazardBtn/changeRouteBtn are deliberately left out of this list:
-  // syncWorkflowSummaries() (called via advanceStep() right before this on
-  // every lock-state change) already recomputes their disabled state fresh
-  // from isSimulationInteractionLocked() on every call, so running them
-  // through the save/restore dance below too just races with that and can
-  // leave them stuck disabled after the lock clears. The pin fields and
-  // markers are likewise recomputed from state each time.
+  // changeHazardBtn/changeRouteBtn are left out: syncWorkflowSummaries() (via
+  // advanceStep(), just before this) recomputes their disabled state on every
+  // call, and saving/restoring them here too raced with it and could leave them
+  // stuck disabled. Pin fields and markers are recomputed from state too.
   syncRoutePinFields();
   syncRoutePinMarkers();
   syncBarangaySwitch();
@@ -1090,16 +1074,12 @@ function revealMapWhenBaseReady() {
 }
 
 function initMap() {
-  // Leaflet's touch handling already lets one finger drag/pinch the map on
-  // every device (no "page becomes scrollable" quirk to work around here),
-  // so there's no gestureHandling-style option needed.
   gMap = L.map('map', {
     center: [14.5590, 121.0955],
     zoom: 15,
     zoomControl: false,
-    // Defaults snap to whole zoom levels (zoomSnap:1), which makes both
-    // the +/- buttons and scroll-wheel zoom feel like discrete jumps.
-    // Fractional levels let it ease to a smooth in-between stop instead.
+    // Fractional zoom levels, so the +/- buttons and the scroll wheel ease
+    // instead of jumping.
     zoomSnap: 0.25,
     zoomDelta: 0.5,
     wheelPxPerZoomLevel: 100,
@@ -1155,9 +1135,7 @@ function initMap() {
   // zoomed-in route doesn't shrink to a thin line lost in the hazard fills.
   gMap.on('zoomend', syncRouteFocusStyles);
   // collapsed:false keeps the Map/Satellite choice always visible instead of
-  // hiding it behind Leaflet's default collapsed icon (a hover-to-reveal
-  // layers glyph that doesn't render here since this page never loads
-  // Leaflet's marker/layers image sprites, only its CSS/JS).
+  // behind a hover icon.
   L.control.layers({ 'Map': streetLayer, 'Satellite': satelliteLayer }, null, { position: 'topright', collapsed: false }).addTo(gMap);
   gMap.on('baselayerchange', onBaseMapChange);
   // The phone layout swaps these from its own Map layers sheet.
@@ -1175,26 +1153,15 @@ function initMap() {
     mapViewportObserver.observe(mapEl);
   }
 
-  // window 'resize' alone misses container-size changes that don't resize
-  // the window itself -- the setup sidebar collapsing, the results panel
-  // opening, a breakpoint's layout swapping in, a drawer/sheet opening --
-  // and a media-query change event fires too early, while the panel is
-  // still mid-transition. Watching the map's own box with ResizeObserver
-  // instead catches all of those in one place, debounced so a CSS
-  // transition's many intermediate sizes collapse into one
-  // invalidateSize() once it settles.
-  // Leaflet caches its container size, so any of the above (also rotating
-  // the phone or toggling the browser's mobile address bar) needs
-  // invalidateSize() or the map keeps the old dimensions. That runs once
-  // per frame while the box changes, so tiles fill newly revealed space as
-  // it opens instead of leaving a blank strip until the transition ends;
-  // only the route refit waits for the size to settle.
-  // The map's content stays still on screen while its box changes (a panel
-  // sliding open or shut beside it): only the moving edge covers or reveals
-  // it. invalidateSize() on its own keeps the center instead, which slid the
-  // whole map by half of every change, frame after frame. And the refit
-  // after only happens if the route ended up out of view (per the user, one
-  // motion rather than a slide followed by a re-zoom).
+  // Leaflet caches its container size, so anything that resizes #map without
+  // resizing the window (a panel opening or collapsing, a breakpoint, the
+  // mobile address bar) needs invalidateSize(). A ResizeObserver on the map's
+  // box catches all of these; it runs once per frame while the box changes, so
+  // tiles fill newly revealed space at once, and only the route refit waits
+  // for the size to settle. The map's content stays still on screen while its
+  // box changes (invalidateSize() alone keeps the center, sliding the map by
+  // half of every change), and the refit after only happens if the route ended
+  // up out of view.
   const resizedMapEl = document.getElementById('map');
   let lastMapRect = resizedMapEl.getBoundingClientRect();
   // Scrolling the page (short phones; keepMapInPlace) moves the box on
@@ -1232,14 +1199,12 @@ function initMap() {
   startApp();
 }
 
-// Re-fits the map to whatever route is currently on screen, with the same
-// overlay-aware padding used right after a run (getMapFitPadding) -- called
-// after invalidateSize() so a panel/drawer/sheet opening or closing, or a
-// breakpoint change, doesn't leave the route sitting under the setup panel,
-// the results panel, or the map's own overlay chips.
-// onlyIfOutOfView: leave the map alone while the route and pins are all
-// still inside the padded view. flySeconds: glide there (flyToBounds)
-// instead of fitBounds, which jumps on any longer move.
+// Re-fits the map to the route on screen with the same overlay-aware padding
+// as after a run (getMapFitPadding), so a panel opening or closing never
+// leaves the route under a panel or the map's overlays.
+// onlyIfOutOfView: leave the map alone while the route and pins are still in
+// the padded view. flySeconds: glide there (flyToBounds) instead of
+// fitBounds, which jumps on any longer move.
 function refitMapToCurrentRoute({ onlyIfOutOfView = false, flySeconds = 0 } = {}) {
   if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return false;
 
@@ -1275,9 +1240,8 @@ function boundsFitInView(bounds, padding) {
   return nw.x >= left && nw.y >= top && se.x <= size.x - right && se.y <= size.y - bottom;
 }
 
-// How long Recenter's glide takes. fitBounds only animates short hops: a
-// move longer than the map's own size, or a big zoom change, snapped
-// straight to the end (per the user, it shouldn't just appear there).
+// How long Recenter's glide takes: fitBounds only animates short hops and
+// snaps on longer moves or big zoom changes.
 const RECENTER_FLY_SECONDS = 0.8;
 
 // The recenter button: brings back the view the current step started from
@@ -1297,13 +1261,11 @@ function recenterMap() {
   }
 }
 
-// "My location" (a control under Recenter on desktop; the phone/tablet map
-// button calls in through mobile-sim.js). Two requests run at once: a quick,
-// coarse one (network or a recent cached fix, usually well under a second)
-// moves the map straight away, and a GPS one refines the dot after (per the
-// user, it must open fast). Only a spot inside the barangay is shown (per
-// the user): from anywhere else, a short notice says location only works
-// inside the barangay (showLocationOutsideNotice).
+// "My location" (a control under Recenter on desktop; mobile-sim.js calls in
+// for the phone/tablet button). Two requests run at once: a quick, coarse one
+// (network or a recent cached fix) moves the map straight away, and a GPS one
+// refines the dot after. Only a spot inside the barangay is shown; from
+// anywhere else showLocationOutsideNotice explains.
 const LOCATE_QUICK_OPTIONS = { enableHighAccuracy: false, timeout: 5000, maximumAge: 5 * 60 * 1000 };
 const LOCATE_PRECISE_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
 let visitorLocationLayers = null;
@@ -1476,12 +1438,9 @@ function retryBackendConnection() {
   startApp();
 }
 
-// The homepage's quick-start card sends the barangay via ?barangay=... and
-// this loads it immediately so the workflow opens straight on the "Disaster"
-// step. This page can only switch between barangays once one is loaded
-// (switchBarangay), so a missing/unknown value
-// means the visitor skipped the homepage picker: send them back to it
-// instead of stranding them on a workflow with no scope.
+// The homepage's quick-start card sends the barangay as ?barangay=..., loaded
+// here so the workflow opens on the "Disaster" step. A missing or unknown
+// value means the visitor skipped the homepage picker, so they go back to it.
 async function bootstrapBarangayFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('barangay') || '';
 
@@ -1602,10 +1561,8 @@ function formatWalkingDuration(distanceMeters, fallback = 'N/A') {
   return minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`;
 }
 
-// The map label on a route line (see bindRouteEtaLabel in osm.js): which
-// route option it is (the same "Route N" as the results panel, so a line is
-// never a guess, per the user), then walking time over distance, like a map
-// app's route bubble.
+// The map label on a route line (bindRouteEtaLabel in osm.js): the same
+// "Route N" as the results panel, then walking time over distance.
 function buildRouteEtaLabel(route) {
   const duration = route?.display_duration || formatWalkingDuration(route?.distance, '');
   if (!duration) return '';
@@ -1693,8 +1650,8 @@ function formatFloodPeakRiskWithHazard(route) {
   return `${formatFloodPeakRisk(route)} (${getFloodPeakDepthRange(route)})`;
 }
 
-// One shared "peak severity" label for the map popup, regardless of hazard
-// type -- mirrors the wording used in the route safety panel.
+// One "peak severity" label for both hazard types, in the route safety
+// panel's wording.
 function formatRoutePeakRiskLabel(route) {
   return isEarthquakeRouteRecord(route)
     ? getRiskLevelLabelFromScore(route?.max_hazard)
@@ -2198,10 +2155,8 @@ function chooseOnMap(role) {
   zoomMapForPinPlacement(role);
 }
 
-// Short viewports only: the setup panel covers the whole screen there, so it has to
-// get out of the way for the map to actually be tappable, same as
-// desktop/tablet already let you tap it beside the always-visible/docked
-// setup panel.
+// Short viewports only: the setup panel covers the whole screen there, so it
+// gets out of the way to let the map be tapped.
 function closeMobilePanelForMapInteraction() {
   if (!MOBILE_PANEL_QUERY.matches) return;
   const shell = document.getElementById('appShell');
@@ -2318,7 +2273,7 @@ function glideMarkerTo(marker, latlng) {
 // The map marker for a route pin: the same pin over a ground shadow, in
 // parts that move on their own ("ROUTE PINS" in style.css), so it drops in
 // with a bounce and lifts off its shadow while dragged, like the phone's
-// center pin (per the user).
+// center pin.
 function makeRoutePinMarkerIcon(role) {
   const { iconUrl, iconSize, iconAnchor } = makeRouteEndpointPinIcon(role).options;
   return L.divIcon({
@@ -2664,11 +2619,10 @@ function hasFloodSimulationResult() {
   return !!(simData && !isEarthquakeSimulationResult(simData) && Array.isArray(simData.routes) && simData.routes.length);
 }
 
-// Once the setup stays editable after a run, moving a pin has to drop that
-// run's routes so the map and safety panel never show a route that no longer
-// matches the pins -- and put the map back the way it was for pinning:
-// barangay outline, no hazard overlay (flood) or plain evacuation sites
-// (earthquake), setup panel open with its Run button.
+// Moving a pin after a run drops that run's routes, so the map and safety
+// panel never show a route that no longer matches the pins, and puts the map
+// back as it was for pinning: barangay outline, no hazard overlay (flood) or
+// plain evacuation sites (earthquake), setup panel open with its Run button.
 function clearSimulationOutput() {
   if (!simData) return;
   clearSimulationSession();
@@ -2832,9 +2786,9 @@ function getMapFitPadding(base = 36) {
   }
 
   // The gap between the overlays is the only place the route and its pins
-  // show, so the padding gives way only when that gap is nearly gone. (Scaling
-  // it down to keep the route large is what put the start pin under the
-  // two-row flood filter on a 320-360px-wide phone.)
+  // show, so the padding gives way only when that gap is nearly gone (scaling
+  // it down instead put the start pin under the two-row flood filter on
+  // 320-360px phones).
   const maxPadding = Math.max(mapRect.height - MAP_FIT_MIN_ROUTE_HEIGHT, mapRect.height / 2);
   if (top + bottom > maxPadding) {
     const scale = maxPadding / (top + bottom);
@@ -2894,8 +2848,7 @@ function fitEarthquakeMapScope(options = {}) {
     return false;
   }
 
-  // One move, with the minimum zoom folded in (it used to fit, then zoom
-  // again once the fit landed: two motions in a row).
+  // One move, with the minimum zoom folded in.
   const padding = getMapFitPadding(52);
   const target = gMap._getBoundsCenterZoom(bounds, padding);
   gMap.setView(target.center, Math.max(target.zoom, EARTHQUAKE_MIN_FOCUS_ZOOM), mapMoveOptions({ animate: true }));
@@ -2903,8 +2856,8 @@ function fitEarthquakeMapScope(options = {}) {
 }
 
 // Outline + outside-mask for barangayBoundaryRings, drawing whichever of the
-// two is missing. Both stay on through a run's results (per the user): the
-// mask also dims the hazard fills outside the barangay.
+// two is missing. Both stay on through a run's results; the mask also dims
+// the hazard fills outside the barangay.
 function drawBarangayBoundary() {
   if (!gMap || !barangayBoundaryRings.length) return;
   const hasRole = role => mapLayers.boundaries.some(layer => layer.boundaryRole === role);
@@ -3073,10 +3026,8 @@ function makeRouteEndpointPinIcon(kind = 'start') {
   return L.icon({
     iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     iconSize: [48, 60],
-    // The pin's tip sits at (36, 78) in the 72x88 source viewBox; scaled to
-    // the 48x60 rendered size that's (24, 53.2) -- not (24, 55) -- which was
-    // pulling the marker's true anchor a couple of px off the route's actual
-    // endpoint coordinate.
+    // The pin's tip sits at (36, 78) in the 72x88 viewBox, which is (24, 53.2)
+    // at the 48x60 rendered size.
     iconAnchor: [24, 53],
   });
 }
@@ -3253,8 +3204,7 @@ async function selectHazard(name, el) {
     return;
   }
 
-  // Same barangay: its outline, mask and the current view stay put (they
-  // used to be redrawn and refitted on every hazard switch).
+  // Same barangay: its outline, mask and the current view stay put.
   const keepBoundary = shownBarangayMap === selectedBarangay && mapLayers.boundaries.length > 0;
   clearBarangaySelections({ keepBoundary });
   floodHazardOverlayMode = name === 'Flood' ? 'all' : 'none';
@@ -3362,9 +3312,7 @@ function syncWorkflowSummaries() {
   }
 
   if (summaryRun) {
-    // While running or locked, the workflow-run-body box below already
-    // spells this out in full -- repeating a shorter version here is just
-    // noise, so this line is hidden instead of duplicating it.
+    // While running or locked, the run body below already says this in full.
     summaryRun.hidden = simulationInProgress;
     summaryRun.textContent = simulationInProgress
       ? ''
@@ -3763,8 +3711,8 @@ async function followSimulationJob(startJob, context) {
     saveSimulationSession({ ...context.session, jobId: job.job_id, result });
 
     await showSimulationResult(result, context);
-    // Only hide once the bar has actually eased up to 100 (previously this fired
-    // right after the 'draw' step, so the bar visibly jumped to results mid-animation).
+    // Only hide once the bar has eased up to 100, so it never jumps to results
+    // mid-animation.
     hideLoader(650);
   } catch (err) {
     console.error(err);
@@ -3871,7 +3819,7 @@ async function restoreSimulationSession(session) {
 }
 
 // "New simulation": an empty setup on the same barangay and hazard, without
-// leaving the page (per the user; it used to reload the homepage).
+// leaving the page.
 function startNewSimulation() {
   if (simulationInProgress) return;
   clearSimulationSession();
@@ -3909,27 +3857,23 @@ function setResultsSidebarActionsVisible(visible) {
   document.getElementById('safetyDownloadBtn')?.classList.toggle('show', visible);
 }
 
-// The safety column only exists once the user has actually run a simulation.
+// The safety column only exists once a simulation has run.
 function setRouteSafetyPanelVisible(visible) {
   const shell = document.getElementById('appShell');
   if (!shell || shell.classList.contains('safety-open') === visible) return;
 
   shell.classList.toggle('safety-open', visible);
 
-  // Same mutual-exclusivity rule as applySetupSidebarState's, defended from
-  // this side too -- so a caller that shows results without explicitly
-  // collapsing setup first (a failed re-run restoring the previous result,
-  // for instance) still can't leave both open at once on mobile.
-  // Safe against the two functions re-triggering each other: each only
-  // calls the other when *opening*, and the call it makes is always a
-  // *close*, which doesn't call back.
+  // Same rule as applySetupSidebarState, from this side: a caller that shows
+  // results without collapsing setup first (a failed re-run restoring the
+  // previous result) still can't leave both open on mobile. Each function only
+  // calls the other when opening, and that call is always a close, so they
+  // never loop.
   if (visible && MOBILE_PANEL_QUERY.matches) {
     applySetupSidebarState(true);
   }
 
-  // No invalidateSize() call here either, same reason as
-  // applySetupSidebarState above: the ResizeObserver in initMap() picks up
-  // #map's resize once the results column's own transition settles.
+  // No invalidateSize() here either: the ResizeObserver in initMap() handles it.
 }
 
 function resetRouteSafetyPanel() {
@@ -4032,13 +3976,12 @@ function renderRouteSafetyPanel(result) {
   // Danger/red once it's actually High; amber/warning for Moderate; neutral for Low.
   const peakClass = peakScore >= 5 ? 'danger' : peakScore >= 3 ? 'warning' : '';
   const verdict = safeRouteFound ? 'Safe route found' : 'No safe route';
-  // The list button covers only the routes not already on the map (per the
-  // user); none off the map, no button.
+  // The list button covers only the routes not already on the map; none off
+  // the map, no button.
   const offMapCount = getRoutesOffMap(routes).length;
 
-  // Plain, non-technical wording -- this panel is read by barangay residents,
-  // not engineers, so it should make sense with no background on how the
-  // system works (no "ACO", "evaluated", "hazard lens", etc.). Kept short.
+  // Plain wording: barangay residents read this panel, so no "ACO",
+  // "evaluated" or "hazard lens".
   const routeCountLabel = `${routes.length} route${routes.length === 1 ? '' : 's'}`;
   const antSearchNote = buildAntSearchNote(result);
   const notes = [
@@ -4292,8 +4235,8 @@ function createRoutePreview(group) {
 function syncRoutePreview(group, enabled) {
   if (!group) return;
 
-  // Whichever route is picked (a click on its line or in the results) gets
-  // the marching dash; nothing moves otherwise (both per the user).
+  // Only the picked route (from its line or the results) gets the marching
+  // dash; nothing moves otherwise.
   if (!enabled) {
     clearRoutePreview(group);
     return;
@@ -4378,24 +4321,15 @@ function syncRouteFocusStyles() {
   applyRouteFocusState(selectedRouteFocus ? selectedRouteFocus.routeNo : null);
 }
 
-// ---- downloadable PDF report: the summary half is drawn straight from
-// simData with jsPDF text calls, never a screenshot of the live page --
-// html2canvas (used for an earlier version of this half) chokes on this
-// app's stylesheet with "unsupported color function" errors because it
-// predates color-mix(), which is used throughout style.css.
-//
-// The map half used to be redrawn from data too (a flat background with
-// just the route line), on the assumption that the OSM/Esri tile images
-// would taint the canvas as cross-origin content. That assumption doesn't
-// hold: both tile.openstreetmap.org and server.arcgisonline.com send
-// `Access-Control-Allow-Origin: *`, so fetching tiles as `Image` objects
-// with crossOrigin='anonymous' set *before* `src` keeps the canvas clean.
-// renderBestRouteMapCanvas() below fetches the OSM street tiles under the
-// route's bounding box and composites them with the same Web Mercator math
-// the tiles themselves are addressed by, so the route lines up exactly. If
-// tile loading fails for any reason (offline, blocked, slow network), it
-// falls back to the old flat schematic render rather than failing the
-// whole report. ----
+// ---- downloadable PDF report ----
+// The summary is drawn from simData with jsPDF text calls, not a screenshot:
+// html2canvas fails on this stylesheet's color-mix() ("unsupported color
+// function"). The map is real OSM tiles under the route: the tile server
+// sends Access-Control-Allow-Origin: *, so tiles loaded with
+// crossOrigin='anonymous' (set before src) keep the canvas clean, and they
+// are composited with the same Web Mercator math the tiles use, so the route
+// lines up exactly. If tiles fail (offline, blocked), it falls back to a flat
+// schematic render instead of failing the whole report.
 
 const REPORT_MAP_TILE_SIZE = 256;
 const REPORT_MAP_MIN_ZOOM = 10;
@@ -4498,8 +4432,7 @@ function drawReportPin(ctx, x, y, color, label) {
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  // White halo keeps the label readable over busy map tiles, not just the
-  // old flat background.
+  // White halo keeps the label readable over busy map tiles.
   ctx.font = 'bold 15px sans-serif';
   ctx.textAlign = 'center';
   ctx.lineWidth = 3;
@@ -4509,9 +4442,9 @@ function drawReportPin(ctx, x, y, color, label) {
   ctx.fillText(label, x, y - 16);
 }
 
-// Fallback projection used when real tiles can't be fetched: fits the
-// route's bounding box exactly to the canvas (the old, pre-basemap
-// behavior) rather than snapping to a real map's integer zoom levels.
+// Fallback projection when tiles can't be fetched: fits the route's bounding
+// box exactly to the canvas instead of snapping to a real map's integer zoom
+// levels.
 function buildFlatFitProjection(minLat, maxLat, minLng, maxLng, width, height, pad) {
   const spanLat = Math.max(maxLat - minLat, 1e-6);
   const spanLng = Math.max(maxLng - minLng, 1e-6);
@@ -4533,12 +4466,10 @@ function buildFlatFitProjection(minLat, maxLat, minLng, maxLng, width, height, p
   ];
 }
 
-// Renders the best route for the PDF report onto a canvas, with real OSM
-// street tiles composited underneath when they can be fetched (see the
-// header comment above for why that's safe from canvas tainting). Falls
-// back to a flat schematic background otherwise. Returns both the canvas
-// and whether a basemap was actually used, since the caller needs that to
-// decide whether an attribution line is required.
+// Renders the best route for the PDF report, with OSM tiles underneath when
+// they can be fetched (see the section header), else a flat schematic
+// background. Returns the canvas and whether a basemap was used (it then
+// needs an attribution line).
 async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = false } = {}) {
   const width = 900;
   const height = 540;
@@ -4675,11 +4606,8 @@ async function downloadSimulationReport() {
       mapDataUrl = mapResult.canvas.toDataURL('image/png');
     }
 
-    // The summary is built from the same simData the on-screen "Summary" tab
-    // reads, drawn directly with jsPDF -- not a screenshot of that tab. This
-    // used to go through html2canvas, which chokes on modern CSS color
-    // functions (color-mix(), used throughout this app's stylesheet) with
-    // "unsupported color function" errors, so it never reliably rendered.
+    // The summary is drawn from the same simData as the on-screen "Summary" tab,
+    // directly with jsPDF (see the section header).
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -4775,11 +4703,9 @@ async function downloadSimulationReport() {
   }
 }
 
-// Sends the visitor back to the homepage so a new simulation starts from
-// scratch. Plain '/' rather than the
-// '#heroBarangaySelector' anchor -- with the homepage's scroll-behavior:smooth,
-// landing on that hash played a visible auto-scroll past the hero on every
-// "Back to Home" click, which read as a bug rather than a shortcut.
+// Back to the homepage for a new scope. Plain '/', not '#heroBarangaySelector':
+// with the homepage's smooth scrolling, that hash played an auto-scroll past
+// the hero.
 function goToHomepageForNewScope() {
   if (simulationInProgress) return;
   window.location.href = '/';

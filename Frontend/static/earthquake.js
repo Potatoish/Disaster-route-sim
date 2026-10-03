@@ -151,7 +151,6 @@
     });
   }
 
-
   function getLayerEmphasis(layerKey, activeView, isLine = false) {
     if (activeView === 'overall') {
       // Both layers overlap here, so each fill stays lighter than a single

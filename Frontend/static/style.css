@@ -124,10 +124,8 @@ body.dark {
   box-sizing: border-box;
 }
 
-/* Baseline visible focus ring for every interactive element that doesn't
-   define a more specific one of its own elsewhere in this file (several
-   already do, e.g. .card-action-btn/.run-btn below -- this just fills the
-   gaps rather than replacing those). */
+/* One focus ring for every interactive element without a more specific one
+   (e.g. .card-action-btn, .run-btn below). */
 a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
 input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--accent);
@@ -141,9 +139,7 @@ body {
     linear-gradient(180deg, var(--page-top) 0%, var(--page-bottom) 100%);
   color: var(--text);
   font-family: var(--font-body);
-  /* dvh accounts for the mobile browser chrome (address bar, home indicator)
-     that vh ignores; the vh line first is a fallback for browsers without
-     dvh support -- dvh simply overrides it where supported. */
+  /* dvh excludes mobile browser chrome; the vh line is the fallback. */
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -154,13 +150,9 @@ body {
   position: relative;
   display: grid;
   grid-template-columns: var(--setup-col) minmax(0, 1fr) var(--safety-col);
-  /* Without this, the single implicit row auto-sizes to its tallest
-     in-flow grid item instead of filling the container -- harmless while
-     .left-panel/.route-safety-panel were normal grid items (their own tall
-     content stretched the row anyway), but both are position:fixed (removed
-     from grid layout entirely) at mobile/tablet widths, leaving nothing to
-     stretch it and .right-panel's height:100% resolving against an
-     almost-content-sized row instead of the real viewport height. */
+  /* Fill the container: the panels are position:fixed at mobile/tablet
+     widths, so nothing in the row stretches it, and .right-panel's
+     height:100% would resolve against a content-sized row. */
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
@@ -220,8 +212,8 @@ body.dark .left-panel {
   flex-shrink: 0;
 }
 
-/* Barangay toggle (syncBarangaySwitch in script.js). */
-/* The toggle drops under its label when the column is too narrow for both. */
+/* Barangay toggle (syncBarangaySwitch in script.js); it drops under its
+   label when the column is too narrow for both. */
 .panel-barangay {
   display: flex;
   flex-wrap: wrap;
@@ -290,9 +282,7 @@ body.dark .left-panel {
   gap: 12px;
 }
 
-/* Pinned below the scrollable card list, in the leftover space at the
-   bottom of the sidebar -- the page's one "go back" affordance now that
-   the floating map nav is gone. */
+/* Pinned below the scrollable card list, at the bottom of the sidebar. */
 .panel-foot {
   flex-shrink: 0;
   padding: 12px 18px 16px;
@@ -593,8 +583,8 @@ body.dark .earthquake-route-copy strong {
   display: none;
 }
 
-/* Start/destination inputs, Google Maps style: an icon column joined by a
-   dotted line, and a text-box-like button that opens a "Choose on Map" menu. */
+/* Start/destination inputs: an icon column joined by a dotted line, and a
+   text-box-like button that opens a "Choose on Map" menu. */
 .pin-inputs {
   display: flex;
   flex-direction: column;
@@ -909,12 +899,9 @@ body.dark .run-btn:hover {
   /* OpenStreetMap's land color, so a tile still loading blends into the map
      instead of showing as a stark white (grey under the outside mask) box. */
   background: #f2efe9;
-  /* Leaflet's own CSS never gives .leaflet-container a z-index, so without
-     this its internal panes (tiles/markers sit at z-index 200-700 in
-     Leaflet's stylesheet) compare directly against sibling overlays like
-     .flood-filter-control/.map-legend (z-index 5-7) and paint over them.
-     isolation:isolate scopes all of Leaflet's internal stacking to inside
-     #map, so from the outside it only competes using its own DOM order. */
+  /* Leaflet's panes sit at z-index 200-700 and .leaflet-container has none,
+     so they would paint over sibling overlays (.flood-filter-control,
+     .map-legend at 5-7). isolation scopes Leaflet's stacking inside #map. */
   isolation: isolate;
 }
 
@@ -934,7 +921,6 @@ body.dark .run-btn:hover {
 }
 
 .map-legend {
-  /* Docked bottom-left, lifted clear of the Google Maps attribution logo. */
   top: auto;
   bottom: calc(34px + env(safe-area-inset-bottom, 0px));
   left: calc(14px + env(safe-area-inset-left, 0px));
@@ -1022,8 +1008,7 @@ body.dark .run-btn:hover {
   line-height: 1.35;
 }
 
-/* Centered in the chip (per the user: a two-line notice, like "You're
-   outside Brgy. …", read lopsided left-aligned). */
+/* Centered: a two-line notice read lopsided left-aligned. */
 .map-pin-hint-text {
   flex: 1 1 auto;
   text-align: center;
@@ -1091,11 +1076,11 @@ body.dark .run-btn:hover {
 
 /* ---------- ROUTE PINS ----------
    makeRoutePinMarkerIcon (script.js): the pin over a ground shadow, like the
-   phone's center pin (per the user). A new pin drops in and bounces, a
-   dragged one lifts off its shadow (which marks where the tip will land)
-   and lands with a small bounce, and one being checked pulses. Only the
-   inner parts move: Leaflet positions the marker itself by transform. The
-   tip sits at (24, 53). */
+   phone's center pin. A new pin drops in and bounces, a dragged one lifts
+   off its shadow (which marks where the tip will land) and lands with a
+   small bounce, and one being checked pulses. Only the inner parts move:
+   Leaflet positions the marker itself by transform. The tip sits at
+   (24, 53). */
 .route-pin-shadow {
   position: absolute;
   left: 17px;
@@ -1773,10 +1758,8 @@ body.dark .empty-map {
 .sidebar-toggle:hover { color: var(--accent); border-color: var(--accent); }
 .sidebar-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
-/* The real toggle now lives inside .panel-head-title-row and disappears with
-   the rest of the sidebar when collapsed -- this tab is its only way back:
-   hidden in the normal state, it appears pinned to the map's left edge
-   once .sidebar-collapsed is set, so collapsing is never a dead end. */
+/* The sidebar's own toggle hides with it when collapsed; this tab, pinned
+   to the map's left edge, is the way back. */
 .sidebar-reopen-tab {
   display: none;
   position: absolute;
@@ -2160,10 +2143,8 @@ body.dark .emergency-modal {
   display: none;
 }
 
-/* Map-overlay chip: same slot and treatment as .flood-filter-control, since the
-   two are mutually exclusive (flood-only vs. earthquake-only) and should read
-   as the same kind of control rather than one living on the map and the other
-   buried in the right panel. */
+/* Map-overlay chip: the same slot and look as .flood-filter-control, since
+   the two never show together (flood vs. earthquake). */
 .earthquake-view-switcher { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); max-width: min(230px, calc(100% - 28px)); }
 .earthquake-view-title { margin: 0 2px 5px; color: var(--map-ui-muted); font: 700 .56rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
 .earthquake-view-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -2221,8 +2202,8 @@ body.dark .emergency-modal {
 }
 
 /* Marching dash on the selected route only (createRoutePreview in script.js);
-   route lines themselves are static. The 24px offset is one full dash + gap
-   cycle of that dash, so the loop is seamless; 2.4s keeps the original pace. */
+   route lines themselves are static. The 24px offset is one dash + gap
+   cycle, so the loop is seamless. */
 .leaflet-overlay-pane path.route-flow--focus {
   animation: route-flow 2.4s linear infinite;
 }
@@ -2351,10 +2332,8 @@ body.dark .leaflet-popup-close-button {
   border-color: var(--map-ui-border) !important;
 }
 
-/* Leaflet's own corner containers default to sitting flush against the map
-   pane's edges; nudge them in by the device safe-area so a notch or the
-   home-indicator gesture bar never sits over the zoom/layers controls once
-   the map runs edge-to-edge on a phone. Zero everywhere else. */
+/* Keep Leaflet's corner controls clear of a notch or the home-indicator bar
+   on an edge-to-edge phone map; zero everywhere else. */
 .leaflet-top { top: env(safe-area-inset-top, 0px); }
 .leaflet-right { right: env(safe-area-inset-right, 0px); }
 .leaflet-bottom { bottom: env(safe-area-inset-bottom, 0px); }
@@ -2494,9 +2473,8 @@ body.dark .leaflet-popup-close-button {
   }
 }
 
-/* Below desktop (< 1024px), whichever of the two layouts further down
-   applies: map chrome (overlay controls, tap targets) that's cramped at any
-   not-quite-desktop width either way. */
+/* Below desktop (< 1024px), under either layout further down: map chrome
+   and tap targets. */
 @media (max-width: 1023px) {
   /* The reopen tab is bigger here; keep the map chips below it. */
   .app.sidebar-collapsed .flood-filter-control,
@@ -2510,9 +2488,7 @@ body.dark .leaflet-popup-close-button {
     max-width: min(220px, calc(100% - 24px));
   }
 
-  /* Compact desktop hit targets are precise-pointer-only; widen the ones that
-     sit directly on the map or trigger navigation for reliable tapping --
-     44px is the tap-target floor for every size from here down. */
+  /* 44px tap targets for the controls on the map and the navigation. */
   .sidebar-toggle {
     width: 44px;
     height: 44px;
@@ -2575,9 +2551,8 @@ body.dark .leaflet-popup-close-button {
     inset: calc((44px - 100%) / -2);
   }
 
-  /* Leaflet's stock Map/Satellite radios are 13px. The label row is what gets
-     tapped, so make that row 44px. (Replaced by the Layers panel later, but it
-     has to be tappable until then.) */
+  /* Leaflet's stock Map/Satellite radios are 13px; the label row is what
+     gets tapped, so make that row 44px. */
   .leaflet-control-layers-base label > span {
     display: flex;
     align-items: center;
@@ -2680,31 +2655,22 @@ body.dark .leaflet-popup-close-button {
 }
 
 /* ---------- PHONES AND TABLETS (< 1024px) and any short viewport ----------
-   The map is always full-bleed and the page itself never scrolls (same
-   non-scrolling grid as desktop). What sits over the map differs: the
-   bottom sheet (phones and tablets, mobile-sim.js) is at the end of this
-   file, the short-viewport panels right below. (Tablets used to get the
-   desktop's docked columns, squeezed to ~210px each -- too narrow to read.) */
+   The map is always full-bleed and the page never scrolls. What sits over
+   the map differs: the bottom sheet (phones and tablets, mobile-sim.js) is
+   at the end of this file, the short-viewport panels right below. */
 @media (max-width: 1023px), (max-height: 499px) {
   #appShell {
     --setup-col: 0px;
     --safety-col: 0px;
   }
 
-  /* Belt-and-suspenders alongside .app's grid-template-rows fix further up:
-     takes .right-panel out of grid layout entirely (same trick already used
-     for .left-panel/.route-safety-panel below) so the map's size comes
-     directly from the viewport via inset:0, not from a percentage height
-     resolved through a grid row. */
+  /* Out of grid layout (like the side panels below), so the map's size
+     comes straight from the viewport via inset:0. */
   .right-panel {
     position: fixed;
     inset: 0;
   }
 
-  /* Belt-and-suspenders: #loader is already position:absolute inside
-     .right-panel, which now spans the full viewport itself (both side
-     columns are 0 above), so this shouldn't be load-bearing -- but costs
-     nothing to keep explicit. */
   #loader {
     position: fixed;
   }
@@ -2721,8 +2687,7 @@ body.dark .leaflet-popup-close-button {
     --mobile-bar-h: 56px;
   }
 
-  /* The corner reopen tab is a desktop/tablet affordance; the bottom bar
-     below replaces it here, so showing both would be redundant. */
+  /* The bottom bar replaces the corner reopen tab here. */
   .sidebar-reopen-tab {
     display: none;
   }
@@ -2824,10 +2789,9 @@ body.dark .leaflet-popup-close-button {
     padding: 12px;
   }
 
-  /* On a phone the stacked legend card and the filter / lens card covered
-     most of the map (and the pins under them): the legend becomes a compact
-     strip along the bottom edge, and the cards drop their hint line (the
-     active button already says the same). */
+  /* The legend becomes a compact strip along the bottom edge, and the cards
+     drop their hint line (the active button says the same), so they cover
+     less of the map. */
   .map-legend {
     left: 10px;
     right: 10px;
@@ -2888,9 +2852,8 @@ body.dark .leaflet-popup-close-button {
    map controls and a fixed center pin over the full-screen map, one bottom
    sheet holding setup or results, and a Map layers sheet. Mobile-first:
    these rules are the phone layout, and every other size hides the whole
-   layer (the desktop/tablet panels do its job there). --sheet-h (on
-   #appShell) is the sheet's visible height and --msim-pin-y the center
-   pin's tip; mobile-sim.js sets both. */
+   layer. --sheet-h (on #appShell) is the sheet's visible height and
+   --msim-pin-y the center pin's tip; mobile-sim.js sets both. */
 :root {
   --msim-ease: cubic-bezier(.22, .8, .3, 1);
 }
@@ -3161,10 +3124,10 @@ body.dark .leaflet-popup-close-button {
   to { opacity: .45; }
 }
 
-/* Zoom and locate, bottom-right, riding just above the sheet (and the map
-   attribution under them). Hidden when the sheet leaves too little map. */
-/* Like the sheet, everything riding above it moves by transform (no
-   relayout per frame): --sheet-h lifts it off a fixed bottom. */
+/* Zoom and locate, bottom-right, riding just above the sheet (the map
+   attribution under them); hidden when the sheet leaves too little map. Like
+   the sheet, everything riding above it moves by transform: --sheet-h lifts
+   it off a fixed bottom. */
 .msim-map-controls {
   position: fixed;
   z-index: 212;
@@ -4253,12 +4216,10 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   }
 }
 
-/* Tablets (640-1023px): the panel is docked on the left, full height under
-   a top bar of the same width, and the map fills the rest (per the user: the
-   phone's bottom sheet as a centered card wasted a tablet's screen).
-   mobile-sim.js (isSide) stops it sliding and puts the center pin, zoom and
-   route fits in the map beside it. The Map layers sheet stays a centered
-   card. */
+/* Tablets (640-1023px): the panel is docked on the left, full height under a
+   top bar of the same width, and the map fills the rest. mobile-sim.js
+   (isSide) stops it sliding and puts the center pin, zoom and route fits in
+   the map beside it. The Map layers sheet stays a centered card. */
 @media (min-width: 640px) {
   :root {
     --msim-side-w: clamp(300px, 42vw, 380px);
@@ -4405,10 +4366,9 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 }
 
 /* ---------- JUSTIFIED TEXT ----------
-   Every running-text paragraph is justified (per the user), in the setup and
-   results panels, the dialogs and the phone sheet alike. Short one-line
-   notes are unaffected; labels, buttons and numbers are not paragraphs and
-   stay as they are. */
+   Every running-text paragraph is justified, in the setup and results
+   panels, the dialogs and the phone sheet alike. Short one-line notes are
+   unaffected; labels, buttons and numbers are not paragraphs. */
 .panel-head-sub,
 .workflow-card-summary,
 .earthquake-route-copy,

@@ -9,10 +9,19 @@ __pycache__/
 Backend/cache/
 backend/cache/
 
+# Local secrets (RESEND_API_KEY, FEEDBACK_SHEET_URL, ...); Railway holds the real ones
+.env
+.env.*
+
+# Local AI assistant files: never committed
+CLAUDE.md
+.claude/
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
 *.log
+.vscode/
 
 # Local working notes (responsive redesign spec)
 AGNAS_RESPONSIVE_SPEC.md

@@ -107,7 +107,7 @@
           visibleVars.includes(Number(feature?.properties?.flood_var))
         )
       : (hazardLayers.features || []);
-      
+
     const sortedFeatures = [...filteredFeatures].sort(
       (a, b) => Number(a?.properties?.flood_var) - Number(b?.properties?.flood_var)
     );

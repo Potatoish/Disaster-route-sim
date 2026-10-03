@@ -140,14 +140,12 @@ def _mark_simulation_finished():
 
 # ---- Simulation queue ----
 # Simulations run one at a time on a single worker thread, first come first
-# served (the graph caches, the progress counter and the CPU are shared). A
-# request no longer gets "busy" while another runs: it waits in line, and the
-# frontend shows its place (per the user). The frontend submits with
-# {"async": true} and polls GET /simulation-jobs/<id>, so a page reload can
-# pick its run back up; without "async" the request waits for its result as
-# before (tools, curl). A request identical to a recent one (same mode,
-# barangay, hazard and pins -- the ant colony is seeded from those, so the
-# result would be the same) gets that job instead of running again.
+# served: the graph caches, the progress counter and the CPU are shared. The
+# frontend submits with {"async": true} and polls GET /simulation-jobs/<id>,
+# so a page reload can pick its run back up; without "async" the request
+# waits for its result. A request identical to a recent one (same mode,
+# barangay, hazard and pins -- the colony is seeded from those) gets that
+# job back instead of running again.
 JOB_RESULT_TTL_SECONDS = 30 * 60
 MAX_KEPT_JOBS = 40
 SYNC_WAIT_TIMEOUT_SECONDS = 300

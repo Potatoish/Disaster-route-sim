@@ -1,18 +1,14 @@
 // Phone and tablet layout of the simulator (< 1024px wide and >= 500px tall):
-// a full-screen map under a floating top bar, map controls and a fixed center
-// pin, one panel with a setup mode and a results mode, and a Map layers sheet
-// (a centered card on tablets). On phones the panel is a bottom sheet that
-// slides between peek, half and full; on tablets (>= 640px wide, isSide) it is
-// docked on the left beside the map, under a top bar of its width, and the
-// center pin, zoom and fits work in the map to its right. The markup is #msim
-// in index.html; style.css hides it on desktops and short viewports, where
-// the setup and results panels do the same job.
+// a full-screen map under a floating top bar, map controls, a fixed center
+// pin, one panel with a setup and a results mode, and a Map layers sheet. On
+// phones the panel is a bottom sheet (peek / half / full); on tablets
+// (>= 640px, isSide) it is docked on the left. The markup is #msim in
+// index.html; style.css hides it on desktops and short viewports.
 //
-// This file keeps no simulation state of its own. Everything it shows is read
-// from script.js's globals (selectedHazard, routePins, pinPlacementRole,
-// simData, ...) and every action goes through script.js's own functions
-// (placeRoutePin, selectHazard, runSimulation, ...), so the desktop panels and
-// this sheet can never disagree. script.js calls in through window.mobileSim.
+// This file keeps no simulation state: it reads script.js's globals
+// (selectedHazard, routePins, simData, ...) and acts through script.js's
+// functions (placeRoutePin, runSimulation, ...), so the desktop panels and
+// this sheet never disagree. script.js calls in through window.mobileSim.
 (function initMobileSim() {
   const SHEET_QUERY = window.matchMedia('(max-width: 1023px) and (min-height: 500px)');
   // Tablets: the panel docked on the left (style.css, same breakpoint).
@@ -205,12 +201,11 @@
     shell.style.setProperty('--sheet-box-h', `${state.box}px`);
   }
 
-  // Sets the sheet's visible height. The sheet moves by transform only --
-  // its box (--sheet-box-h) is held at the tallest height in play and slid
-  // down out of sight (style.css), so a drag or a snap never re-lays out
-  // its content frame by frame (that made it lag on low-end phones). The box
-  // shrinks to fit once the sheet has stopped. While the center pin shows,
-  // the map pans by as much as the pin moves, so the spot under it stays put.
+  // Sets the sheet's visible height. The sheet moves by transform only: its
+  // box (--sheet-box-h) is held at the tallest height in play and slid down
+  // out of sight (style.css), so a drag or snap never re-lays out its content
+  // each frame. The box shrinks to fit once the sheet stops. While the center
+  // pin shows, the map pans with it so the spot under the pin stays put.
   function applyHeight(height, { animate = true } = {}) {
     const previous = state.height;
     const next = Math.max(0, Math.round(height));

@@ -1,30 +1,24 @@
-// The best and eliminated routes are solid slim lines with a thin edge in a
-// darker shade of their own color, like a navigation app's route: it sits
-// inside the road instead of covering it, and the edge keeps it readable over
-// the hazard fills. The best route is heavier than the others so it is the
-// line the eye finds first (px at zoom scale 1; the edge adds 1px per side).
+// The best and eliminated routes are slim solid lines with a thin edge in a
+// darker shade of their color, so they sit inside the road and stay readable
+// over hazard fills. The best route is the heaviest (px at zoom scale 1; the
+// edge adds 1px per side).
 const ROUTE_BEST_WEIGHT = 5;
 const ROUTE_OTHER_WEIGHT = 3.5;
 const ROUTE_EDGE_EXTRA_WEIGHT = 2;
-// Available routes are dotted like the homepage's pheromone trails, but in
-// the best route's style (per the user): fully opaque gray dots, each ringed
-// in a darker edge (the edge stroke, dotted the same way). A picked one firms
-// up into the solid edged line (getFocusedRouteVisual in script.js). Dot +
-// gap in px at zoom scale 1; a near-zero dash with round caps draws a dot as
-// wide as the line.
+// Available routes are dotted: opaque gray dots, each ringed in a darker edge
+// (the edge stroke, dotted the same way). A picked one firms up into a solid
+// edged line (getFocusedRouteVisual in script.js). Dot + gap in px at zoom
+// scale 1; a near-zero dash with round caps draws a dot as wide as the line.
 const ROUTE_TRAIL_WEIGHT = 4;
 const ROUTE_TRAIL_OPACITY = 1;
 const ROUTE_TRAIL_DOT = 0.1;
 const ROUTE_TRAIL_GAP = 7;
-// Green (the user tried sky blue and kept green). The legend and the PDF map
-// use it too.
+// Also used by the legend and the PDF map.
 const ROUTE_BEST_COLOR = '#22c55e';
-// Slate gray, like a map app's alternative routes, so the green best route
-// is the one that stands out and the map carries one color fewer (the user
-// found violet too loud next to it).
+// Slate gray, so the green best route is the one that stands out.
 const ROUTE_AVAILABLE_COLOR = '#64748b';
 // When no route is safe, the "Best" one is bright red and the other
-// eliminated routes a darker brick red, so the two read apart (per the user).
+// eliminated routes a darker brick red, so the two read apart.
 const ROUTE_BEST_UNSAFE_COLOR = '#ef4444';
 const ROUTE_ELIMINATED_COLOR = '#991b1b';
 const ROUTE_EDGE_COLORS = {
@@ -70,13 +64,11 @@ function getRouteTrailDashArray(zoomScale = 1) {
 }
 
 // ---- one line per shared road ----
-// Routes often run down the same streets. Drawn whole, they stack into a
-// tangle of overlapping lines; instead each route on the map draws only the
-// stretches no route ahead of it already draws -- the best route first, then
-// the safe alternatives, then the eliminated ones, each by route number -- so
-// a shared road shows one line, the best route's whenever it is one of them
-// (per the user). A picked route shows its whole path again
-// (showRouteGroupFullPath). Routes run along the same graph edges, so a
+// Routes often share streets. Drawn whole they stack into a tangle, so each
+// route on the map draws only the stretches no higher-priority route already
+// draws (best, then safe alternatives, then eliminated, each by route
+// number): a shared road shows one line. A picked route shows its whole path
+// again (showRouteGroupFullPath). Routes run along the same graph edges, so a
 // shared stretch has the same coordinates in every route.
 
 function routeSegmentKey(a, b) {
@@ -142,7 +134,6 @@ function getRouteLineColors(color) {
   return satellite || { line: key, edge: getRouteEdgeColor(key), dash: '#ffffff' };
 }
 
-// Recolors the drawn routes after a base map switch.
 function syncRouteColorsToBaseMap(mapLayers) {
   (mapLayers.routeGroups || []).forEach(group => {
     const colors = getRouteLineColors(group.color);
@@ -319,14 +310,11 @@ function trackRouteLayer(layer, routeGroup, mapLayers, kind) {
   return layer;
 }
 
-// Leaflet paths have no numeric z-index: layers painted later sit on top.
-// Drawing casing -> main (below) and eliminated -> available -> best (in
-// renderRoutesOnRoads) stacks each route's layers and the routes through
-// insertion order alone. Only the interactive focus/highlight state needs an
-// explicit re-stack, handled in script.js via bringToFront().
-//
-// The casing is a slightly wider stroke under the line in a darker shade of
-// the route's own color: the thin edge.
+// Leaflet paths have no z-index: later layers paint on top. Drawing casing ->
+// line, and eliminated -> available -> best (renderRoutesOnRoads), stacks
+// everything by insertion order; only focus/highlight re-stacks, through
+// bringToFront() in script.js. The casing is a slightly wider stroke under
+// the line in a darker shade of the route's color: the thin edge.
 function addRouteCasing(pathCoords, cfg, gMap, mapLayers, routeGroup) {
   return trackRouteLayer(L.polyline(pathCoords, {
     color: getRouteLineColors(cfg.color).edge,
@@ -411,10 +399,9 @@ function bindRouteEtaLabel(hitLayer, content, permanent) {
   });
 }
 
-// Clicking a route line picks it, the same as picking it in the results
-// panel: the other routes dim and it gets the marching dash (createRoutePreview
-// in script.js). Clicking it again lets go. No info popup (per the user); the
-// time label still shows on hover/tap (bindRouteEtaLabel).
+// Clicking a route line picks it, like picking it in the results panel: the
+// other routes dim and it gets the marching dash (createRoutePreview in
+// script.js). Clicking it again lets go.
 function attachRouteClick(hitLayer, route) {
   hitLayer.on('click', ev => {
     // Not also a tap on the map underneath (which can drop a pin).
