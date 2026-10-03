@@ -518,6 +518,22 @@ document.getElementById('emergencyContactModal')?.addEventListener('mousedown', 
   if (event.target === event.currentTarget) closeEmergencyContactModal();
 });
 
+// How long the "outside the barangay" notice stays up; longer than other
+// map hints, since the map glides out at the same moment.
+const LOCATION_OUTSIDE_HINT_MS = 7000;
+
+// My location from outside the barangay: a short notice in the map hint
+// (bottom of the map on desktop, under the top bar on phones; per the user,
+// a short line there rather than a dialog), and the map glides out to the
+// whole barangay so its outline shows where location does work.
+function showLocationOutsideNotice() {
+  fitMapToBoundaryPaths(barangayBoundaryRings, 42, { fly: true, duration: RECENTER_FLY_SECONDS });
+  showPinHintError(
+    `You're outside Brgy. ${selectedBarangay || 'this barangay'}. My location only works inside the outlined area.`,
+    { durationMs: LOCATION_OUTSIDE_HINT_MS },
+  );
+}
+
 // The pin hint sits bottom-center and the legend bottom-left; when the map is
 // too narrow for both, the legend steps aside while the hint shows.
 function syncMapOverlayLayout() {
@@ -1121,9 +1137,16 @@ function initMap() {
     button.title = 'Recenter map';
     button.setAttribute('aria-label', 'Recenter map');
     button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>';
+    // My location (locateVisitor), in the same bar.
+    const locateButton = L.DomUtil.create('button', 'map-recenter-btn map-locate-btn', bar);
+    locateButton.type = 'button';
+    locateButton.title = 'Go to my location';
+    locateButton.setAttribute('aria-label', 'Go to my location');
+    locateButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>';
     // Otherwise the click also reaches the map and drops a pin.
     L.DomEvent.disableClickPropagation(bar);
     L.DomEvent.on(button, 'click', () => recenterMap());
+    L.DomEvent.on(locateButton, 'click', () => locateVisitor({ button: locateButton }));
     return bar;
   };
   recenterControl.addTo(gMap);
@@ -1215,8 +1238,9 @@ function initMap() {
 // breakpoint change, doesn't leave the route sitting under the setup panel,
 // the results panel, or the map's own overlay chips.
 // onlyIfOutOfView: leave the map alone while the route and pins are all
-// still inside the padded view.
-function refitMapToCurrentRoute({ onlyIfOutOfView = false } = {}) {
+// still inside the padded view. flySeconds: glide there (flyToBounds)
+// instead of fitBounds, which jumps on any longer move.
+function refitMapToCurrentRoute({ onlyIfOutOfView = false, flySeconds = 0 } = {}) {
   if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return false;
 
   const bestRoute = getBestRoute(simData.routes);
@@ -1233,7 +1257,11 @@ function refitMapToCurrentRoute({ onlyIfOutOfView = false } = {}) {
   const bounds = L.latLngBounds([...routeCoords, ...pinCoords]);
   const padding = getMapFitPadding();
   if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return true;
-  gMap.fitBounds(bounds, mapMoveOptions(padding));
+  if (flySeconds) {
+    gMap.flyToBounds(bounds, mapMoveOptions({ ...padding, duration: flySeconds }));
+  } else {
+    gMap.fitBounds(bounds, mapMoveOptions(padding));
+  }
   return true;
 }
 
@@ -1247,10 +1275,14 @@ function boundsFitInView(bounds, padding) {
   return nw.x >= left && nw.y >= top && se.x <= size.x - right && se.y <= size.y - bottom;
 }
 
-// The recenter button. Leaflet's map never rotates, so this stands in for a
-// compass: it brings back the view the current step started from -- the
-// picked route, else the best route and its pins after a run, and the whole
-// barangay before one.
+// How long Recenter's glide takes. fitBounds only animates short hops: a
+// move longer than the map's own size, or a big zoom change, snapped
+// straight to the end (per the user, it shouldn't just appear there).
+const RECENTER_FLY_SECONDS = 0.8;
+
+// The recenter button: brings back the view the current step started from
+// -- the picked route, else the best route and its pins after a run, and
+// the whole barangay before one.
 function recenterMap() {
   if (!gMap) return;
 
@@ -1259,10 +1291,148 @@ function recenterMap() {
     : null;
   const focusedPath = getRoutePreviewPath(focusedGroup);
   if (focusedPath.length > 1) {
-    gMap.fitBounds(L.latLngBounds(focusedPath), mapMoveOptions(getMapFitPadding()));
-  } else if (!refitMapToCurrentRoute()) {
-    fitMapToBoundaryPaths(barangayBoundaryRings);
+    gMap.flyToBounds(L.latLngBounds(focusedPath), mapMoveOptions({ ...getMapFitPadding(), duration: RECENTER_FLY_SECONDS }));
+  } else if (!refitMapToCurrentRoute({ flySeconds: RECENTER_FLY_SECONDS })) {
+    fitMapToBoundaryPaths(barangayBoundaryRings, 42, { fly: true, duration: RECENTER_FLY_SECONDS });
   }
+}
+
+// "My location" (a control under Recenter on desktop; the phone/tablet map
+// button calls in through mobile-sim.js). Two requests run at once: a quick,
+// coarse one (network or a recent cached fix, usually well under a second)
+// moves the map straight away, and a GPS one refines the dot after (per the
+// user, it must open fast). Only a spot inside the barangay is shown (per
+// the user): from anywhere else, a short notice says location only works
+// inside the barangay (showLocationOutsideNotice).
+const LOCATE_QUICK_OPTIONS = { enableHighAccuracy: false, timeout: 5000, maximumAge: 5 * 60 * 1000 };
+const LOCATE_PRECISE_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+let visitorLocationLayers = null;
+let locateRequestId = 0;
+
+function setLocateBusy(button, busy) {
+  if (!button) return;
+  button.classList.toggle('is-busy', busy);
+  if (busy) button.setAttribute('aria-busy', 'true');
+  else button.removeAttribute('aria-busy');
+}
+
+function showVisitorLocation(latlng, accuracy) {
+  if (!visitorLocationLayers) {
+    visitorLocationLayers = {
+      accuracy: L.circle(latlng, {
+        radius: accuracy,
+        interactive: false,
+        color: '#1d4ed8',
+        weight: 1,
+        opacity: 0.35,
+        fillColor: '#1d4ed8',
+        fillOpacity: 0.1,
+      }).addTo(gMap),
+      dot: L.marker(latlng, {
+        icon: L.divIcon({ className: 'visitor-dot', iconSize: [18, 18], iconAnchor: [9, 9] }),
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: 1000,
+      }).addTo(gMap),
+    };
+    return;
+  }
+  visitorLocationLayers.accuracy.setLatLng(latlng).setRadius(accuracy);
+  visitorLocationLayers.dot.setLatLng(latlng);
+}
+
+function clearVisitorLocationLayers() {
+  if (!visitorLocationLayers) return;
+  visitorLocationLayers.accuracy.remove();
+  visitorLocationLayers.dot.remove();
+  visitorLocationLayers = null;
+}
+
+// Also drops an answer still on its way (a barangay switch).
+function clearVisitorLocation() {
+  locateRequestId += 1;
+  clearVisitorLocationLayers();
+}
+
+function flyToVisitor(latlng) {
+  gMap.flyToBounds(latlng.toBounds(120), mapMoveOptions({
+    ...getMapFitPadding(),
+    maxZoom: Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM),
+    duration: RECENTER_FLY_SECONDS,
+  }));
+}
+
+function locateVisitor({ button = null, moveTo = flyToVisitor } = {}) {
+  if (!gMap) return;
+  if (!navigator.geolocation) {
+    showPinHintError('This browser cannot share your location.');
+    return;
+  }
+  if (!barangayBoundaryRings.length) {
+    showPinHintError('The barangay map is still loading. Try again in a moment.');
+    return;
+  }
+
+  const request = ++locateRequestId;
+  let waiting = 2;
+  let moved = false;
+  let outside = false;
+  let preciseAnswered = false;
+  let error = null;
+  setLocateBusy(button, true);
+
+  const settle = () => {
+    waiting -= 1;
+    if (waiting > 0 || request !== locateRequestId) return;
+    setLocateBusy(button, false);
+    if (moved) return;
+    if (outside) {
+      showLocationOutsideNotice();
+    } else if (error && error.code === 1) {
+      showPinHintError('Location is blocked for this site. Allow it in your browser, then try again.');
+    } else {
+      showPinHintError('Could not get your location. Try again in a moment.');
+    }
+  };
+
+  const onFix = precise => position => {
+    if (request !== locateRequestId) return;
+    // Once GPS has answered, a late coarse fix has nothing to add.
+    if (!precise && preciseAnswered) {
+      settle();
+      return;
+    }
+    if (precise) preciseAnswered = true;
+    const { latitude, longitude, accuracy } = position.coords;
+    const latlng = L.latLng(latitude, longitude);
+    if (isPointInsideBarangay(latitude, longitude)) {
+      outside = false;
+      showVisitorLocation(latlng, accuracy || 0);
+      if (!moved) {
+        moved = true;
+        setLocateBusy(button, false);
+        moveTo(latlng);
+      }
+    } else {
+      outside = true;
+      // A coarse fix can miss a barangay this small, so only GPS takes a
+      // shown dot away again.
+      if (precise) {
+        clearVisitorLocationLayers();
+        moved = false;
+      }
+    }
+    settle();
+  };
+
+  const onError = err => {
+    if (request !== locateRequestId) return;
+    error = err;
+    settle();
+  };
+
+  navigator.geolocation.getCurrentPosition(onFix(false), onError, LOCATE_QUICK_OPTIONS);
+  navigator.geolocation.getCurrentPosition(onFix(true), onError, LOCATE_PRECISE_OPTIONS);
 }
 
 const BACKEND_CHECK_ATTEMPTS = 6;
@@ -1939,14 +2109,14 @@ function syncPinHint() {
 // An error stays up while the visitor is still placing a pin (they need it
 // to pick a better spot) and fades on its own otherwise, e.g. after a
 // rejected drag.
-function showPinHintError(message) {
+function showPinHintError(message, { durationMs = PIN_HINT_ERROR_MS } = {}) {
   window.clearTimeout(pinHintTimer);
   pinHintMessage = { text: message, isError: true };
   if (!pinPlacementRole) {
     pinHintTimer = window.setTimeout(() => {
       pinHintMessage = null;
       syncPinHint();
-    }, PIN_HINT_ERROR_MS);
+    }, durationMs);
   }
   syncPinHint();
 }
@@ -2536,7 +2706,7 @@ function infoPopup(title, rows) {
 // then in on the new one).
 const BARANGAY_FLY_SECONDS = 1.1;
 
-function fitMapToBoundaryPaths(paths, padding = 42, { fly = false } = {}) {
+function fitMapToBoundaryPaths(paths, padding = 42, { fly = false, duration = BARANGAY_FLY_SECONDS } = {}) {
   const bounds = L.latLngBounds();
   let hasPoints = false;
 
@@ -2562,7 +2732,7 @@ function fitMapToBoundaryPaths(paths, padding = 42, { fly = false } = {}) {
   if (fly) {
     // fitBounds can only pan short hops; between barangays it jumps
     // straight there. flyToBounds arcs out and back in instead.
-    gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration: BARANGAY_FLY_SECONDS }));
+    gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration }));
   } else {
     gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
   }
@@ -2878,6 +3048,8 @@ async function selectBarangay(name) {
   selectedBarangay = name;
   syncBarangaySwitch();
   clearBarangaySelections();
+  // The visitor may be outside the new barangay: locate again there.
+  clearVisitorLocation();
   if (selectedHazard === 'Flood') floodHazardOverlayMode = 'all';
 
   await loadBarangayMapOnly(name);

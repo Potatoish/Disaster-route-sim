@@ -2298,6 +2298,25 @@ body.dark .leaflet-popup-close-button {
   background: var(--map-ui-bg);
 }
 
+/* My location (locateVisitor), below Recenter in the same bar. */
+.map-recenter-btn + .map-recenter-btn {
+  border-top: 1px solid var(--map-ui-border);
+}
+
+.map-locate-btn.is-busy svg {
+  animation: msimLocating 1.2s linear infinite;
+}
+
+/* The visitor's spot from My location. Fixed colours: it sits on map
+   tiles, which look the same in both themes. */
+.visitor-dot {
+  box-sizing: border-box;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #1d4ed8;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, .25), 0 2px 6px rgba(15, 23, 42, .35);
+}
+
 .map-recenter-btn svg {
   width: 17px;
   height: 17px;
@@ -4136,6 +4155,7 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 
   .msim-center-pin.is-checking .msim-center-pin-img,
   .msim-map-btn.is-busy svg,
+  .map-locate-btn.is-busy svg,
   .msim-bgy-menu {
     animation: none;
   }

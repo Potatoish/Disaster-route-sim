@@ -26,8 +26,10 @@
   const TRAIL_DELAY_MS = 20;
   const TRAIL_MS = 380;
   const SLIDE_MS = TRAIL_DELAY_MS + TRAIL_MS;
-  // By then the leading edge has landed and the trailing one is ~95% there.
-  const NAVIGATE_AFTER_MS = 220;
+  // By then the leading edge is ~97% there and the trailing one ~85%; the
+  // next page finishes the slide from the handoff (shorter, per the user,
+  // who found the switch slow).
+  const NAVIGATE_AFTER_MS = 160;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const pill = document.createElement('span');

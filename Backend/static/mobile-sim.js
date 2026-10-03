@@ -818,12 +818,14 @@
 
   // ---- choosing start and end with the center pin ----
 
-  // Moves the map so latlng sits under the center pin.
-  function centerUnderPin(latlng, zoom = gMap?.getZoom()) {
+  // Moves the map so latlng sits under the center pin. fly: glide there
+  // (setView only pans short hops and jumps on longer ones).
+  function centerUnderPin(latlng, zoom = gMap?.getZoom(), { fly = false } = {}) {
     if (!gMap || !latlng) return;
     const offsetY = gMap.getSize().y / 2 - getPinY();
     const center = gMap.unproject(gMap.project(latlng, zoom).add([0, offsetY]), zoom);
-    gMap.setView(center, zoom, mapMoveOptions({ animate: true }));
+    if (fly) gMap.flyTo(center, zoom, mapMoveOptions({ duration: RECENTER_FLY_SECONDS }));
+    else gMap.setView(center, zoom, mapMoveOptions({ animate: true }));
   }
 
   function setPinHere() {
@@ -898,32 +900,14 @@
     gMap.setZoomAround(L.point(gMap.getSize().x / 2, getPinY()), zoom, mapMoveOptions());
   }
 
+  // locateVisitor (script.js) finds the visitor and keeps them inside the
+  // barangay; here the spot lands under the center pin, ready for "Set
+  // start here".
   function locate() {
-    const button = $('msimLocateBtn');
-    if (!navigator.geolocation) {
-      showPinHintError('This browser cannot share your location.');
-      return;
-    }
-
-    const done = () => {
-      button.classList.remove('is-busy');
-      button.removeAttribute('aria-busy');
-    };
-    button.classList.add('is-busy');
-    button.setAttribute('aria-busy', 'true');
-
-    navigator.geolocation.getCurrentPosition(position => {
-      done();
-      const { latitude, longitude } = position.coords;
-      if (!isPointInsideBarangay(latitude, longitude)) {
-        showPinHintError(`Your location is outside Brgy. ${selectedBarangay || 'this barangay'}, so the map stays here.`);
-        return;
-      }
-      centerUnderPin(L.latLng(latitude, longitude), Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM));
-    }, () => {
-      done();
-      showPinHintError('Could not get your location. Check that this site is allowed to use it.');
-    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+    locateVisitor({
+      button: $('msimLocateBtn'),
+      moveTo: latlng => centerUnderPin(latlng, Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM), { fly: true }),
+    });
   }
 
   // ---- legend on the map ----

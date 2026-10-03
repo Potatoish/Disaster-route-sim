@@ -535,18 +535,34 @@ body.tutorial-modal-open{ overflow:hidden; }
 @keyframes tutorialPanelOut{ to{ opacity:0; transform:translateY(8px) scale(.98); } }
 
 /* ---------- PAGE TRANSITIONS ----------
-   Home <-> About cross-fade instead of cutting (browsers with cross-document
-   view transitions; the rest just cut). The opt-in is an inline style in
-   site_base.html. The nav is lifted out of the fade and shown live, so its
-   pill keeps sliding across the change. */
+   Home <-> About (browsers with cross-document view transitions; the rest
+   just cut). The opt-in is an inline style in site_base.html. A focus pull,
+   matching the frosted nav (per the user, who wanted the screen to blur but
+   smoothly): the old page blurs out of focus and fades, then the new page's
+   content (#pageBody, named only while the switch runs, site_base.html)
+   comes into focus over the shared background. The nav is lifted out and
+   shown live, so its pill keeps sliding across the change. A plain
+   cross-fade drew both pages sharp at half strength, a messy double image. */
 .nav-row{ view-transition-name:site-nav; }
 ::view-transition-old(site-nav){ display:none; }
 ::view-transition-new(site-nav){ animation:none; }
 /* Coming from the simulator (no nav there to carry over), the nav fades in
    with the page. */
 ::view-transition-new(site-nav):only-child{ animation:pageFadeIn .28s cubic-bezier(.4,0,.2,1) both; }
+/* Not during a theme switch, which cross-fades the whole page (below). The
+   old page sits above the new background while it blurs away. */
+html:not(.theme-transition)::view-transition-old(root){
+  z-index:1; mix-blend-mode:normal;
+  animation:pageFocusOut .18s cubic-bezier(.2,0,.4,1) both;
+}
+html:not(.theme-transition)::view-transition-new(root){ mix-blend-mode:normal; animation:none; }
+/* Starts once the old page is mostly out of focus, so the two never read
+   as one double image. */
+::view-transition-new(page-body){ animation:pageFocusIn .32s cubic-bezier(.2,0,0,1) .09s both; }
 ::view-transition-old(root), ::view-transition-new(root){ animation-duration:.28s; animation-timing-function:cubic-bezier(.4,0,.2,1); }
 @keyframes pageFadeIn{ from{ opacity:0; } }
+@keyframes pageFocusOut{ to{ opacity:0; filter:blur(10px); transform:scale(.985); } }
+@keyframes pageFocusIn{ from{ opacity:0; filter:blur(10px); transform:scale(1.015); } }
 /* A theme switch cross-fades the whole page, nav included (home.js) --
    except the switch, which stays live so its thumb slides. */
 html.theme-transition .nav-row{ view-transition-name:none; }
@@ -963,14 +979,21 @@ body.dark .hz-section{
    sections). The pill nav and the round feedback button stay as they are
    (per the user). */
 @media (max-width:639px){
-  /* Hero: left-aligned copy, then the barangay card, then Coverage map.
-     .hero-copy steps out of the way (display:contents) so its children and
-     the card share one column and can be reordered. */
+  /* Hero: the copy, then the barangay card, then Coverage map. The title
+     (eyebrow and heading) is centered (per the user; the wireframe had it
+     left-aligned) and the intro's last line follows it, like every
+     paragraph under a centered heading. .hero-copy steps out of the way
+     (display:contents) so its children and the card share one column and
+     can be reordered. */
   .hero-inner{ padding-block:28px 36px; }
   .hero-split{ display:flex; flex-direction:column; align-items:stretch; gap:14px; text-align:left; }
   .hero-copy{ display:contents; }
-  .hero h1{ font-size:34px; line-height:1.08; }
-  .hero p.lede{ font-size:15px; line-height:1.55; }
+  /* Block with an inline dot, not a flex row: when the line wraps, a flex
+     row left the dot stranded at the far left of the column. */
+  .hero .eyebrow{ display:block; text-align:center; letter-spacing:.1em; }
+  .hero .eyebrow::before{ display:inline-block; vertical-align:middle; margin:-2px 8px 0 0; }
+  .hero h1{ font-size:34px; line-height:1.08; text-align:center; }
+  .hero p.lede{ font-size:15px; line-height:1.55; text-align-last:center; }
   .hero-quickstart{ order:1; margin-top:8px; padding:18px; gap:14px; border-radius:16px; }
   .hero-actions{ order:2; justify-content:flex-start; }
 
