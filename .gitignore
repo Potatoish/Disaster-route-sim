@@ -14,8 +14,5 @@ backend/cache/
 Thumbs.db
 *.log
 
-# Local Claude Code settings
-.claude/settings.local.json
-
 # Local working notes (responsive redesign spec)
 AGNAS_RESPONSIVE_SPEC.md
