@@ -67,8 +67,13 @@ function setHomeTheme(theme) {
   }
 }
 
-// ---- feedback widget (UI only for now — no backend to send to yet) ----
+// ---- feedback widget and contact form ----
+// Both POST to the backend (contact_service.py): feedback becomes a row in
+// the team's Google Sheet, a contact message an email to the team inbox. The
+// visitor only sees "sent" once the backend confirms it; on any failure what
+// they typed stays put so they can try again.
 let fabOpen = false;
+let toastTimer = null;
 
 function toggleFab() {
   fabOpen = !fabOpen;
@@ -76,19 +81,64 @@ function toggleFab() {
   if (panel) panel.classList.toggle('open', fabOpen);
 }
 
-function showHomeToast(message) {
+function showHomeToast(message, duration = 2200) {
   const toast = document.getElementById('toast');
   if (!toast) return;
   toast.textContent = message;
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2200);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
 }
 
-function sendFeedback() {
+function setSending(button, sending) {
+  if (!button) return;
+  if (sending) button.dataset.label = button.textContent;
+  button.disabled = sending;
+  button.textContent = sending ? 'Sending…' : button.dataset.label;
+}
+
+async function postHomeForm(path, body) {
+  try {
+    const res = await fetch(`${window.BACKEND_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.error === false) return { ok: true, message: data.message };
+    return { ok: false, message: data.message || 'Something went wrong. Please try again.' };
+  } catch (err) {
+    return { ok: false, message: "Couldn't reach the server. Check your connection and try again." };
+  }
+}
+
+async function sendFeedback() {
   const msg = document.getElementById('fabMsg');
   const role = document.getElementById('fabRole');
-  toggleFab();
-  showHomeToast('Thanks for the feedback!');
+  const button = document.getElementById('fabSend');
+  const rated = rateRow ? rateRow.querySelector('button.sel') : null;
+  const comment = msg ? msg.value.trim() : '';
+  if (!rated && !comment) {
+    showHomeToast('Pick a rating or write a comment first.', 3500);
+    return;
+  }
+
+  setSending(button, true);
+  const result = await postHomeForm('/feedback', {
+    rating: rated ? Number(rated.dataset.v) : null,
+    role: role ? role.value : '',
+    comment,
+    page: window.location.pathname,
+    website: document.getElementById('fabWebsite')?.value || '',
+  });
+  setSending(button, false);
+  if (!result.ok) {
+    showHomeToast(result.message, 4500);
+    return;
+  }
+
+  if (fabOpen) toggleFab();
+  showHomeToast(result.message || 'Thanks for the feedback!');
   if (msg) msg.value = '';
   if (role) role.value = '';
   if (rateRow) rateRow.querySelectorAll('button.sel').forEach((btn) => btn.classList.remove('sel'));
@@ -103,8 +153,42 @@ if (rateRow) {
   });
 }
 
-function submitContactForm() {
-  showHomeToast('Thanks — preview only, this would send your message.');
+async function submitContactForm() {
+  const name = document.getElementById('cName');
+  const email = document.getElementById('cEmail');
+  const msg = document.getElementById('cMsg');
+  const button = document.getElementById('cSend');
+  if (!name || !email || !msg) return;
+
+  const empty = [name, email, msg].find((field) => !field.value.trim());
+  if (empty) {
+    showHomeToast('Please fill in your name, email, and message.', 3500);
+    empty.focus();
+    return;
+  }
+  if (!email.checkValidity()) {
+    showHomeToast('Please enter a valid email address.', 3500);
+    email.focus();
+    return;
+  }
+
+  setSending(button, true);
+  const result = await postHomeForm('/contact', {
+    name: name.value.trim(),
+    email: email.value.trim(),
+    message: msg.value.trim(),
+    website: document.getElementById('cWebsite')?.value || '',
+  });
+  setSending(button, false);
+  if (!result.ok) {
+    showHomeToast(result.message, 4500);
+    return;
+  }
+
+  name.value = '';
+  email.value = '';
+  msg.value = '';
+  showHomeToast(result.message || "Message sent. We'll reply by email.", 3500);
 }
 
 // ---- hero quick-start card: barangay pick, folded into the "Open simulator"

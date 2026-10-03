@@ -62,6 +62,7 @@ Disaster-route-sim/
 |   |-- earthquake_service.py
 |   |-- earthquake_data.py
 |   |-- simulation_progress.py
+|   |-- contact_service.py
 |   |-- requirements.txt
 |   |-- templates/
 |   |   |-- site_base.html
@@ -122,6 +123,29 @@ For deployment, the app entrypoint is:
 gunicorn app:app
 ```
 
+### 4. Contact form and feedback (optional)
+
+The About page's contact form emails the team inbox through [Resend](https://resend.com), and the
+feedback button saves each response as a row in a Google Sheet. Both are set with environment
+variables (Railway → service → Variables); until they are set, the forms answer "isn't set up yet".
+Email goes through Resend's HTTPS API, not SMTP, because Railway's Free/Hobby plans block outbound
+SMTP.
+
+| Variable | Value |
+|---|---|
+| `RESEND_API_KEY` | A Resend API key with sending access |
+| `CONTACT_TO_EMAIL` | The team Gmail. Without a verified domain, Resend only delivers to the address the Resend account was created with. |
+| `CONTACT_FROM_EMAIL` | Optional sender, default `AGNAS Contact Form <onboarding@resend.dev>` |
+| `FEEDBACK_SHEET_URL` | The `/exec` URL of the Apps Script in `Backend/tools/feedback_sheet.gs` |
+
+Feedback sheet setup: create a Google Sheet with the team account, open **Extensions → Apps Script**,
+replace the code with `Backend/tools/feedback_sheet.gs`, then **Deploy → New deployment → Web app**
+(Execute as: *Me*, Who has access: *Anyone*) and copy the web app URL. The script adds the header row
+itself.
+
+To try it locally, set the variables in the same PowerShell window before starting the server, e.g.
+`$env:RESEND_API_KEY = "re_..."`.
+
 ## Supported Scope
 
 - **Flood routing:** Pinagbuhatan and Sta. Lucia
@@ -141,6 +165,8 @@ Main backend endpoints include:
 - `POST /simulate`
 - `GET /earthquake/evac-sites`
 - `POST /earthquake/simulate`
+- `POST /contact` — About page contact form → email to the team inbox
+- `POST /feedback` — feedback widget → row in the team's Google Sheet
 
 ## Notes
 

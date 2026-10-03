@@ -38,10 +38,11 @@
         <div class="panel">
           <h3>Contact the team</h3>
           <p style="margin-bottom:16px;">Questions about the study, the data, or a request to use the system.</p>
-          <div class="form-row"><label for="cName">Name</label><input id="cName" type="text" placeholder="Juan Dela Cruz"></div>
-          <div class="form-row"><label for="cEmail">Email</label><input id="cEmail" type="email" placeholder="you@example.com"></div>
-          <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" rows="4" placeholder="Data request, question, or feedback"></textarea></div>
-          <button type="button" class="cta full" onclick="submitContactForm()">Send message</button>
+          <div class="form-row"><label for="cName">Name</label><input id="cName" type="text" placeholder="Juan Dela Cruz" autocomplete="name" maxlength="100" required></div>
+          <div class="form-row"><label for="cEmail">Email</label><input id="cEmail" type="email" placeholder="you@example.com" autocomplete="email" maxlength="254" required></div>
+          <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" rows="4" placeholder="Data request, question, or feedback" maxlength="5000" required></textarea></div>
+          <div class="hp-field" aria-hidden="true"><label for="cWebsite">Website</label><input id="cWebsite" type="text" tabindex="-1" autocomplete="off"></div>
+          <button type="button" class="cta full" id="cSend" onclick="submitContactForm()">Send message</button>
           <p class="contact-note">We typically reply within 2–3 business days. AGNAS isn't a live service wired directly to real-time hazard feeds, so the site doesn't need round-the-clock monitoring.</p>
         </div>
       </div>

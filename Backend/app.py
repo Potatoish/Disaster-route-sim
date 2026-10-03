@@ -8,6 +8,7 @@ from threading import Condition, RLock, Thread
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+from contact_service import record_feedback, send_contact_message
 from earthquake_service import (
     check_earthquake_pin,
     get_earthquake_evacuation_sites,
@@ -511,6 +512,38 @@ def run_earthquake():
             return simulate_earthquake(start, barangay)
 
         return _run_simulation_request("earthquake", request_summary, work, data.get("async") is True)
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+def _client_ip():
+    # Behind Railway's edge proxy remote_addr is the proxy, which would put
+    # every visitor in one rate-limit bucket. The edge appends the connecting
+    # IP to X-Forwarded-For, so the rightmost entry is the one a client can't
+    # forge.
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded.strip():
+        return forwarded.split(",")[-1].strip()
+    return request.remote_addr
+
+@app.route("/contact", methods=["POST"])
+def contact():
+    try:
+        payload, status_code = send_contact_message(request.get_json(silent=True), _client_ip())
+        return jsonify(payload), status_code
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+@app.route("/feedback", methods=["POST"])
+def feedback():
+    try:
+        payload, status_code = record_feedback(request.get_json(silent=True), _client_ip())
+        return jsonify(payload), status_code
     except Exception as e:
         return jsonify({
             "error": True,

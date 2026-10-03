@@ -393,6 +393,10 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
   font-family:inherit; font-size:16px; color:var(--text); resize:vertical; width:100%;
 }
 .form-row input:focus, .form-row textarea:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+/* Spam trap on the contact and feedback forms: off-screen, so only bots that
+   fill every field ever type in it. */
+.hp-field{ position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+.cta:disabled, .fab-send:disabled{ opacity:.65; cursor:progress; }
 .panel .contact-note{ margin:20px 0 0; font-size:9.5px; color:var(--dim); line-height:1.5; text-align:center; }
 
 /* ---------- FOOTER (homepage only) ----------

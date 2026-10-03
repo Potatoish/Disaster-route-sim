@@ -44,6 +44,7 @@ Deployment is Docker (`Backend/Dockerfile`, python:3.11-slim, gunicorn bound to 
 - `GET /check-pin` → `osm_routing.check_flood_pin()` / `earthquake_service.check_earthquake_pin()`
 - `GET /locations` → `main.get_locations()` → `data/database.py` (no longer used by the UI; kept for tools)
 - `GET /flood-hazard-layers`, `GET /barangay-boundary` → `osm_routing` payload builders
+- `POST /contact`, `POST /feedback` → `contact_service.py`: the About page's contact form is emailed to the team inbox through Resend's HTTPS API (Railway's Free/Hobby plans block outbound SMTP, so don't switch to Flask-Mail/Gmail SMTP), and the feedback widget appends a row to a Google Sheet through the Apps Script in `tools/feedback_sheet.gs`. Configured only by env vars (`RESEND_API_KEY`, `CONTACT_TO_EMAIL`, optional `CONTACT_FROM_EMAIL`, `FEEDBACK_SHEET_URL`); unset → 503 `not_configured`. Per-IP rate limit (in-memory, fine with the single gunicorn worker; IP = rightmost `X-Forwarded-For`) and a hidden `website` honeypot field
 
 Handlers never raise to the client: errors come back as `{"error": true, "message": ...}` with a 4xx/5xx status. `main.py` does validation (missing/identical/unknown locations); `osm_routing` and `earthquake_service` do the work.
 

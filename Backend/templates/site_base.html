@@ -103,12 +103,13 @@
   </div>
   <div class="fab-field">
     <label for="fabMsg">What worked, what didn't</label>
-    <textarea id="fabMsg" placeholder="Optional"></textarea>
+    <textarea id="fabMsg" placeholder="Optional" maxlength="2000"></textarea>
   </div>
-  <button type="button" class="fab-send" onclick="sendFeedback()">Send feedback</button>
+  <div class="hp-field" aria-hidden="true"><label for="fabWebsite">Website</label><input id="fabWebsite" type="text" tabindex="-1" autocomplete="off"></div>
+  <button type="button" class="fab-send" id="fabSend" onclick="sendFeedback()">Send feedback</button>
   <p class="fab-note">Responses are anonymous and used only to evaluate the system.</p>
 </div>
-<div class="toast" id="toast">Thanks for the feedback!</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="scope-modal" id="scopeModal" role="dialog" aria-modal="true" aria-label="AGNAS coverage area" hidden>
   <div class="scope-modal-backdrop" onclick="closeScopeMap()"></div>
