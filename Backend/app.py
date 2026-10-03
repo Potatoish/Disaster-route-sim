@@ -4,6 +4,7 @@ import time
 import uuid
 from collections import OrderedDict, deque
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Condition, RLock, Thread
 
 from flask import Flask, request, jsonify, render_template
@@ -22,7 +23,24 @@ from osm_routing import (
 )
 from simulation_progress import get_progress, reset_progress
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+# The pages and their CSS/JS/images live in Frontend/, next to Backend/.
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "Frontend"
+
+# /health never renders a page, so a deploy that left Frontend/ out would pass
+# Railway's health check and go live with every page broken. Refuse to start
+# instead, which keeps the previous deploy serving.
+if not (FRONTEND_DIR / "templates" / "index.html").is_file():
+    raise RuntimeError(
+        f"Frontend not found at {FRONTEND_DIR}. Build and deploy from the "
+        "repository root so both Frontend/ and Backend/ are included."
+    )
+
+app = Flask(
+    __name__,
+    template_folder=str(FRONTEND_DIR / "templates"),
+    static_folder=str(FRONTEND_DIR / "static"),
+    static_url_path="/static",
+)
 CORS(app)
 
 

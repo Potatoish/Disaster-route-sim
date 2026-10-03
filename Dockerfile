@@ -4,13 +4,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# Built from the repository root: the app needs both Backend/ (Python, data)
+# and Frontend/ (templates, static files). Railway's Root Directory must be /.
 WORKDIR /app
 
-COPY requirements.txt ./
+COPY Backend/requirements.txt Backend/
 RUN python -m pip install --upgrade pip \
-    && python -m pip install -r requirements.txt
+    && python -m pip install -r Backend/requirements.txt
 
-COPY . ./
+COPY Backend/ Backend/
+COPY Frontend/ Frontend/
+
+WORKDIR /app/Backend
 
 # One worker process, several threads: the simulation gate, progress counter
 # and graph caches are process-global, and a minutes-long simulation must not

@@ -50,19 +50,19 @@ The visitor picks a barangay and a hazard, pins a start point (and, for floods, 
 
 | Homepage | About |
 |---|---|
-| ![Homepage](Backend/static/assets/screenshots/homepage.png) | ![About page](Backend/static/assets/screenshots/about.png) |
+| ![Homepage](Frontend/static/assets/screenshots/homepage.png) | ![About page](Frontend/static/assets/screenshots/about.png) |
 
 | Guided "How to use" tutorial | Simulation setup |
 |---|---|
-| ![Guided tutorial step](Backend/static/assets/screenshots/tutorial.png) | ![Simulation setup with barangay boundary](Backend/static/assets/screenshots/simulation-setup.png) |
+| ![Guided tutorial step](Frontend/static/assets/screenshots/tutorial.png) | ![Simulation setup with barangay boundary](Frontend/static/assets/screenshots/simulation-setup.png) |
 
 **Flood route safety results**
 
-![Flood route results with safe/available/eliminated routes](Backend/static/assets/screenshots/flood-route-results.png)
+![Flood route results with safe/available/eliminated routes](Frontend/static/assets/screenshots/flood-route-results.png)
 
 ## Tech Stack
 
-- **Frontend:** HTML, CSS, JavaScript (no build step), Leaflet 1.9.4 served from `Backend/static/vendor/`, OpenStreetMap / Esri tiles, jsPDF for client-side PDF reports
+- **Frontend:** HTML, CSS, JavaScript (no build step), Leaflet 1.9.4 served from `Frontend/static/vendor/`, OpenStreetMap / Esri tiles, jsPDF for client-side PDF reports
 - **Backend:** Python, Flask, Flask-CORS
 - **Routing/Data:** OSMnx, NetworkX, Shapely, GeoPandas
 - **Hosting:** Docker on Railway (gunicorn, one worker with eight threads)
@@ -72,6 +72,28 @@ The visitor picks a barangay and a hazard, pins a start point (and, for floods, 
 
 ```text
 Disaster-route-sim/
+|-- Frontend/                   # everything the browser gets (served by Flask)
+|   |-- templates/
+|   |   |-- site_base.html      # shared layout of the homepage and About page
+|   |   |-- home.html
+|   |   |-- about.html
+|   |   |-- index.html          # the simulator
+|   |   |-- _emergency_contacts.html
+|   |   `-- _tutorial_modal.html
+|   `-- static/
+|       |-- script.js           # simulator orchestration
+|       |-- mobile-sim.js       # phone and tablet simulator layout
+|       |-- osm.js              # route drawing
+|       |-- flood.js
+|       |-- earthquake.js
+|       |-- tutorial.js
+|       |-- style.css
+|       |-- home.js
+|       |-- home.css
+|       |-- nav-pill.js         # sliding nav highlight
+|       |-- hazard-showcase.js  # homepage flood/earthquake illustrations
+|       |-- vendor/leaflet/
+|       `-- assets/
 |-- Backend/
 |   |-- app.py                  # Flask app: pages, API routes, simulation job queue
 |   |-- main.py                 # flood request validation
@@ -81,28 +103,6 @@ Disaster-route-sim/
 |   |-- contact_service.py      # contact form (Resend) and feedback (Google Sheet)
 |   |-- simulation_progress.py  # progress counter for the loader
 |   |-- requirements.txt
-|   |-- Dockerfile
-|   |-- templates/
-|   |   |-- site_base.html      # shared layout of the homepage and About page
-|   |   |-- home.html
-|   |   |-- about.html
-|   |   |-- index.html          # the simulator
-|   |   |-- _emergency_contacts.html
-|   |   `-- _tutorial_modal.html
-|   |-- static/
-|   |   |-- script.js           # simulator orchestration
-|   |   |-- mobile-sim.js       # phone and tablet simulator layout
-|   |   |-- osm.js              # route drawing
-|   |   |-- flood.js
-|   |   |-- earthquake.js
-|   |   |-- tutorial.js
-|   |   |-- style.css
-|   |   |-- home.js
-|   |   |-- home.css
-|   |   |-- nav-pill.js         # sliding nav highlight
-|   |   |-- hazard-showcase.js  # homepage flood/earthquake illustrations
-|   |   |-- vendor/leaflet/
-|   |   `-- assets/
 |   |-- data/
 |   |   |-- boundaries/
 |   |   |-- earthquake/
@@ -114,6 +114,7 @@ Disaster-route-sim/
 |       |-- route_batch_test.py # batch-test routing without the UI
 |       |-- reduce_flood_layers.py
 |       `-- feedback_sheet.gs   # Apps Script for the feedback sheet
+|-- Dockerfile                  # built from the repo root (copies Backend/ and Frontend/)
 |-- railway.json
 `-- README.md
 ```
@@ -146,11 +147,14 @@ http://127.0.0.1:5000/about  # About (with the contact form)
 http://127.0.0.1:5000/app    # The route simulator
 ```
 
-For deployment, the app entrypoint is:
+For deployment, the app entrypoint (run from `Backend/`) is:
 
 ```bash
 gunicorn app:app
 ```
+
+On Railway the service's **Root Directory** must be `/` (the repository root): the `Dockerfile` there
+copies both `Backend/` and `Frontend/`. The app refuses to start if `Frontend/` is missing.
 
 Batch-test routing without the UI:
 
