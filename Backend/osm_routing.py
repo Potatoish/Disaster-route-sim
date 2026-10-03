@@ -44,6 +44,9 @@ ROUTE_STITCH_SNAP_TOLERANCE_METERS = 12.0
 # How far past the nearest road to look for a named street to label a pin
 # with -- the nearest edge is often an unnamed footway or alley.
 PIN_STREET_LABEL_RADIUS_METERS = 30.0
+# With no named street that close, the nearest one within this distance still
+# gives the spot a recognisable name ("a spot near Davao Street").
+PIN_NEARBY_STREET_RADIUS_METERS = 300.0
 # A pin's route starts/ends where the pin meets the road (see
 # add_road_access_nodes); a meeting point this close to an existing
 # intersection just uses that intersection.
@@ -816,43 +819,59 @@ def find_road_access_point(G, lat, lng):
     return best
 
 
-def find_nearest_road(G, lat, lng):
-    """Where a pin at (lat, lng) meets the road (find_road_access_point), its
-    distance in meters, and the nearest street name within
-    PIN_STREET_LABEL_RADIUS_METERS past it (None when every road that close
-    is unnamed)."""
-    access = find_road_access_point(G, lat, lng)
-    if access is None:
-        return None
-
+def _nearest_named_street(G, lat, lng, reach_meters, measured=()):
+    """The nearest named street within reach_meters of (lat, lng), as
+    (name, distance in meters), or (None, None). `measured` seeds the search
+    with (distance, edge_id) pairs already known."""
     index = _get_edge_index(G)
     point = Point(float(lng), float(lat))
-    label_reach = access["distance"] + PIN_STREET_LABEL_RADIUS_METERS
     # Widened by 1/cos(lat) so the degree-based query misses no road that is
-    # within label_reach meters east or west.
-    label_radius = label_reach / METERS_PER_DEGREE / max(math.cos(math.radians(float(lat))), 0.1)
+    # within reach_meters east or west.
+    radius = reach_meters / METERS_PER_DEGREE / max(math.cos(math.radians(float(lat))), 0.1)
 
-    measured = [(access["distance"], access["edge_id"])]
-    for edge_id in index["tree"].query(point.buffer(label_radius)).tolist():
+    measured = list(measured)
+    for edge_id in index["tree"].query(point.buffer(radius)).tolist():
         geometry = index["geometries"][edge_id]
         snapped = geometry.interpolate(geometry.project(point))
         measured.append((coordinate_distance_meters(lat, lng, snapped.y, snapped.x), edge_id))
     measured.sort(key=lambda item: item[0])
 
-    street = next(
-        (
-            name
-            for distance, edge_id in measured
-            if distance <= label_reach
-            and (name := _edge_street_name(index["edges"][edge_id][3]))
-        ),
-        None,
+    for distance, edge_id in measured:
+        if distance > reach_meters:
+            break
+        name = _edge_street_name(index["edges"][edge_id][3])
+        if name:
+            return name, distance
+    return None, None
+
+
+def find_nearest_road(G, lat, lng):
+    """Where a pin at (lat, lng) meets the road (find_road_access_point), its
+    distance in meters, and the nearest street name within
+    PIN_STREET_LABEL_RADIUS_METERS past it (None when every road that close
+    is unnamed). Without one, nearby_street is the nearest named street within
+    PIN_NEARBY_STREET_RADIUS_METERS, for naming the spot."""
+    access = find_road_access_point(G, lat, lng)
+    if access is None:
+        return None
+
+    street, _ = _nearest_named_street(
+        G, lat, lng,
+        access["distance"] + PIN_STREET_LABEL_RADIUS_METERS,
+        [(access["distance"], access["edge_id"])],
     )
+    nearby_street = nearby_distance = None
+    if street is None:
+        nearby_street, nearby_distance = _nearest_named_street(
+            G, lat, lng, access["distance"] + PIN_NEARBY_STREET_RADIUS_METERS,
+        )
     return {
         "distance": access["distance"],
         "lat": access["lat"],
         "lng": access["lng"],
         "street": street,
+        "nearby_street": nearby_street,
+        "nearby_street_distance": nearby_distance,
     }
 
 
@@ -881,6 +900,7 @@ def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):
     return {
         "valid": True,
         "street": road["street"],
+        "nearby_street": road["nearby_street"],
         "road_distance": round(road["distance"], 1),
         "road_lat": road["lat"],
         "road_lng": road["lng"],

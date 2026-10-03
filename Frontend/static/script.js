@@ -2008,6 +2008,16 @@ function buildPinLabel(role, street, roadDistance) {
   return Number(roadDistance) <= PIN_ON_STREET_METERS ? street : `Near ${street}`;
 }
 
+// How the Run panel names a pin: its street, or for a spot with no named
+// street close by, the nearest one (nearby_street from /check-pin).
+function describePinPlace(pin) {
+  if (pin.street) {
+    return Number(pin.roadDistance) <= PIN_ON_STREET_METERS ? pin.street : `near ${pin.street}`;
+  }
+  if (pin.nearbyStreet) return `a spot near ${pin.nearbyStreet}`;
+  return `the pinned spot (${formatPinCoordinates(pin)})`;
+}
+
 // The route payload for one pin; the label is what the backend echoes back
 // as result.start / result.end and into each route's path_label.
 function buildPinRequestPoint(role) {
@@ -2200,17 +2210,17 @@ function syncRoutePinFields() {
 
   document.getElementById('pinInputs')?.classList.toggle('is-single', isEarthquakeMode());
 
-  // Shown while the route card is collapsed, so the pins stay readable.
+  // Shown while the route card is collapsed: how to change pins already set.
   const summary = document.getElementById('summaryRoute');
   if (summary) {
-    const start = getReadyPin('start')?.label;
-    const end = getReadyPin('end')?.label;
+    const start = getReadyPin('start');
+    const end = getReadyPin('end');
     summary.textContent = !selectedHazard
       ? ''
       : isEarthquakeMode()
-      ? (start ? `${start} → nearest reachable evacuation site` : 'Pin your location on the map.')
+      ? (start ? 'Your location is pinned. Drag its pin on the map to change it.' : 'Pin your location on the map.')
       : start && end
-      ? `${start} → ${end}`
+      ? 'Both points are pinned. Drag a pin on the map to change it.'
       : 'Pin your location and destination on the map.';
   }
 
@@ -2441,6 +2451,7 @@ async function placeRoutePin(role, lat, lng) {
     lng,
     status: 'ready',
     street: check.street || null,
+    nearbyStreet: check.nearby_street || null,
     roadDistance: Number(check.road_distance),
     label: buildPinLabel(role, check.street, check.road_distance),
   };
@@ -3160,11 +3171,11 @@ function buildRouteInfoHtml() {
     if (!earthquakeEvacSitesVisible) {
       return 'Location pinned. Now click <strong>Show Evacuation Sites</strong> to load the available evacuation shelters.';
     }
-    return `The system will compare routes from <strong>${escapeHtml(startPin.label)}</strong> to the evacuation sites that can still be reached. Click <strong>Run Earthquake Simulation</strong> to view the results.`;
+    return `The system will compare routes from <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the evacuation sites that can still be reached. Click <strong>Run Earthquake Simulation</strong> to view the results.`;
   }
 
   if (startPin && endPin) {
-    return `Ready! <strong>${escapeHtml(startPin.label)}</strong> to <strong>${escapeHtml(endPin.label)}</strong>. Click <strong>Run Simulation</strong>.`;
+    return `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to <strong>${escapeHtml(describePinPlace(endPin))}</strong>. Click <strong>Run Simulation</strong>.`;
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
   if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;
@@ -3818,17 +3829,22 @@ async function restoreSimulationSession(session) {
   }
 }
 
-// "New simulation": an empty setup on the same barangay and hazard, without
-// leaving the page.
+// "New simulation": back to choosing the disaster on the same barangay, as on
+// first arriving from the homepage, without leaving the page.
 function startNewSimulation() {
   if (simulationInProgress) return;
-  clearSimulationSession();
   closeRouteListModal();
-  if (simData) clearSimulationOutput();
-  resetRoutePins();
-  clearPinHintError();
-  setPinPlacementRole(selectedHazard ? getNextUnpinnedRole() : null);
-  onRoutePinsChange();
+  workflowFocusSection = null;
+  selectedHazard = null;
+  withViewTransition(() => {
+    clearHazardSelectionState();
+    applyHazardTheme();
+  });
+  clearBarangaySelections({ keepBoundary: true });
+  syncFloodHazardOverlay();
+  showPinningLegend();
+  advanceStep(2);
+  syncRouteInfoBox();
   reopenSetupSidebar();
   window.mobileSim?.showSetup();
   if (barangayBoundaryRings.length) fitMapToBoundaryPaths(barangayBoundaryRings);
