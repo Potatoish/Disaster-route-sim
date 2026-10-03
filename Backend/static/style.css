@@ -1022,6 +1022,13 @@ body.dark .run-btn:hover {
   line-height: 1.35;
 }
 
+/* Centered in the chip (per the user: a two-line notice, like "You're
+   outside Brgy. …", read lopsided left-aligned). */
+.map-pin-hint-text {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
 .map-pin-hint[hidden],
 .map-pin-hint-close[hidden] {
   display: none;
@@ -1082,8 +1089,96 @@ body.dark .run-btn:hover {
   visibility: hidden;
 }
 
-.route-pin-checking {
-  opacity: .55;
+/* ---------- ROUTE PINS ----------
+   makeRoutePinMarkerIcon (script.js): the pin over a ground shadow, like the
+   phone's center pin (per the user). A new pin drops in and bounces, a
+   dragged one lifts off its shadow (which marks where the tip will land)
+   and lands with a small bounce, and one being checked pulses. Only the
+   inner parts move: Leaflet positions the marker itself by transform. The
+   tip sits at (24, 53). */
+.route-pin-shadow {
+  position: absolute;
+  left: 17px;
+  top: 50px;
+  width: 14px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, .5);
+  opacity: .35;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.route-pin-body {
+  position: absolute;
+  inset: 0;
+  transition: transform .16s ease;
+}
+
+.route-pin-img {
+  display: block;
+  width: 48px;
+  height: 60px;
+}
+
+.route-pin.is-lifted .route-pin-body {
+  transform: translateY(-12px);
+}
+
+.route-pin.is-lifted .route-pin-shadow {
+  opacity: 1;
+  transform: scale(.75);
+}
+
+.route-pin.route-pin-checking .route-pin-img {
+  animation: msimPinChecking .8s ease-in-out infinite alternate;
+}
+
+.route-pin.route-pin-drop .route-pin-body {
+  animation: routePinDrop .62s both;
+}
+
+.route-pin.route-pin-drop .route-pin-shadow {
+  animation: routePinDropShadow .62s both;
+}
+
+.route-pin.route-pin-land .route-pin-body {
+  animation: routePinLand .38s both;
+}
+
+.route-pin.route-pin-land .route-pin-shadow {
+  animation: routePinLandShadow .38s both;
+}
+
+/* Falls (speeding up), then two bounces, each lower than the last. */
+@keyframes routePinDrop {
+  0% { transform: translateY(-34px); opacity: 0; animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+  12% { opacity: 1; }
+  48% { transform: translateY(0); animation-timing-function: cubic-bezier(0, .5, .5, 1); }
+  68% { transform: translateY(-9px); animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+  86% { transform: translateY(0); animation-timing-function: cubic-bezier(0, .5, .5, 1); }
+  93% { transform: translateY(-2px); animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes routePinDropShadow {
+  0% { opacity: 0; transform: scale(.35); }
+  48% { opacity: .9; transform: scale(1.05); }
+  68% { opacity: .6; transform: scale(.8); }
+  86% { opacity: .85; transform: scale(1); }
+  100% { opacity: .35; transform: scale(1); }
+}
+
+@keyframes routePinLand {
+  0% { transform: translateY(-12px); animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+  55% { transform: translateY(0); animation-timing-function: cubic-bezier(0, .5, .5, 1); }
+  78% { transform: translateY(-4px); animation-timing-function: cubic-bezier(.5, 0, 1, .5); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes routePinLandShadow {
+  0% { opacity: 1; transform: scale(.75); }
+  55% { opacity: .9; transform: scale(1.05); }
+  100% { opacity: .35; transform: scale(1); }
 }
 
 .empty-map {
@@ -1133,16 +1228,6 @@ body.dark .run-btn:hover {
 
 @keyframes mapLayerFadeIn {
   from { opacity: 0; }
-}
-
-/* A new pin drops in. `translate` stacks on Leaflet's own transform, which
-   positions the marker. */
-.leaflet-marker-icon.route-pin-drop {
-  animation: routePinDrop .34s cubic-bezier(.22, 1, .36, 1) both;
-}
-
-@keyframes routePinDrop {
-  from { translate: 0 -16px; opacity: 0; }
 }
 
 /* Home <-> simulator cross-fade (opt-in: index.html's inline style); the
@@ -2716,9 +2801,15 @@ body.dark .leaflet-popup-close-button {
   .about-modal-backdrop.is-closing .about-modal,
   .leaflet-container.routes-entering path.route-line,
   .leaflet-container.routes-entering .route-eta-tooltip,
-  .leaflet-pane.is-entering,
-  .leaflet-marker-icon.route-pin-drop {
+  .leaflet-pane.is-entering {
     animation: none;
+  }
+
+  .route-pin .route-pin-body,
+  .route-pin .route-pin-shadow,
+  .route-pin .route-pin-img {
+    animation: none;
+    transition: none;
   }
 }
 
@@ -3023,7 +3114,8 @@ body.dark .leaflet-popup-close-button {
   position: fixed;
   z-index: 211;
   top: 0;
-  left: 50%;
+  /* Beside the docked panel on tablets (mobile-sim.js sets it). */
+  left: var(--msim-pin-x, 50%);
   width: 48px;
   height: 60px;
   margin-left: -24px;
@@ -4161,10 +4253,61 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   }
 }
 
-/* Tablets (640-1023px): the same sheets, as a centered card rather than
-   edge to edge, so their text keeps a readable line length. */
+/* Tablets (640-1023px): the panel is docked on the left, full height under
+   a top bar of the same width, and the map fills the rest (per the user: the
+   phone's bottom sheet as a centered card wasted a tablet's screen).
+   mobile-sim.js (isSide) stops it sliding and puts the center pin, zoom and
+   route fits in the map beside it. The Map layers sheet stays a centered
+   card. */
 @media (min-width: 640px) {
-  .msheet,
+  :root {
+    --msim-side-w: clamp(300px, 42vw, 380px);
+    --msim-side-left: calc(8px + env(safe-area-inset-left, 0px));
+    /* The map's left edge as the panel leaves it. */
+    --msim-side-edge: calc(var(--msim-side-left) + var(--msim-side-w));
+  }
+
+  .msim-topbar {
+    left: var(--msim-side-left);
+    right: auto;
+    width: var(--msim-side-w);
+  }
+
+  /* As tall as its content (a short setup leaves the map below it in view),
+     scrolling once it reaches the bottom of the screen. */
+  .msheet {
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    left: var(--msim-side-left);
+    right: auto;
+    bottom: auto;
+    width: var(--msim-side-w);
+    height: auto;
+    max-height: calc(100vh - 72px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 72px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    transform: none;
+    padding: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--map-ui-shadow), 0 12px 32px rgba(2, 8, 23, .16);
+    transition: none;
+  }
+
+  /* No sizes to drag between, and nothing kept below a fold. */
+  .msheet-handle,
+  #msimDetailsBtn {
+    display: none;
+  }
+
+  .msheet .msheet-scroll {
+    overflow-y: auto;
+    padding-top: 14px;
+  }
+
+  .msim-maplegend {
+    left: calc(var(--msim-side-edge) + 12px);
+    max-width: min(210px, calc(100vw - var(--msim-side-edge) - 92px));
+  }
+
   .msim-layers {
     width: min(560px, calc(100% - 32px));
     margin-inline: auto;
@@ -4249,6 +4392,15 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 
   .route-eta-text .route-eta-name {
     font-size: .6rem;
+  }
+}
+
+/* Tablets: the map hint goes to the top of the map beside the docked panel
+   (the top bar no longer spans the map). */
+@media (min-width: 640px) and (max-width: 1023px) and (min-height: 500px) {
+  .map-pin-hint {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: calc(var(--msim-side-edge) + 12px);
   }
 }
 

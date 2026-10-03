@@ -2315,6 +2315,35 @@ function glideMarkerTo(marker, latlng) {
   marker._glideFrame = window.requestAnimationFrame(step);
 }
 
+// The map marker for a route pin: the same pin over a ground shadow, in
+// parts that move on their own ("ROUTE PINS" in style.css), so it drops in
+// with a bounce and lifts off its shadow while dragged, like the phone's
+// center pin (per the user).
+function makeRoutePinMarkerIcon(role) {
+  const { iconUrl, iconSize, iconAnchor } = makeRouteEndpointPinIcon(role).options;
+  return L.divIcon({
+    className: 'route-pin',
+    html: '<span class="route-pin-shadow"></span>'
+      + `<span class="route-pin-body"><img class="route-pin-img" src="${iconUrl}" alt="" draggable="false"></span>`,
+    iconSize,
+    iconAnchor,
+  });
+}
+
+// Lengths of routePinDrop and routePinLand in style.css.
+const PIN_DROP_MS = 620;
+const PIN_LAND_MS = 380;
+
+function playPinAnimation(marker, className, durationMs) {
+  const el = marker?.getElement();
+  if (!el || prefersReducedMotion()) return;
+  el.classList.remove('route-pin-drop', 'route-pin-land');
+  void el.offsetWidth;
+  el.classList.add(className);
+  window.clearTimeout(el._pinAnimationTimer);
+  el._pinAnimationTimer = window.setTimeout(() => el.classList.remove(className), durationMs + 60);
+}
+
 function syncRoutePinMarkers() {
   if (!gMap) return;
 
@@ -2334,7 +2363,7 @@ function syncRoutePinMarkers() {
     if (!marker) {
       marker = L.marker({ lat: pin.lat, lng: pin.lng }, {
         zIndexOffset: role === 'start' ? 3600 : 3500,
-        icon: makeRouteEndpointPinIcon(role),
+        icon: makeRoutePinMarkerIcon(role),
         draggable: true,
         autoPan: true,
         keyboard: false,
@@ -2342,8 +2371,13 @@ function syncRoutePinMarkers() {
       marker.on('dragstart', () => {
         activeInfoWindow?.remove();
         activeInfoWindow = null;
+        // Lifted off its shadow while it moves; the shadow marks where the
+        // tip will land.
+        marker.getElement()?.classList.add('is-lifted');
       });
       marker.on('dragend', () => {
+        marker.getElement()?.classList.remove('is-lifted');
+        playPinAnimation(marker, 'route-pin-land', PIN_LAND_MS);
         const { lat, lng } = marker.getLatLng();
         placeRoutePin(role, lat, lng);
       });
@@ -2371,8 +2405,8 @@ function syncRoutePinMarkers() {
     else glideMarkerTo(marker, { lat: pin.lat, lng: pin.lng });
     if (!gMap.hasLayer(marker)) {
       marker.addTo(gMap);
-      // A new pin drops onto the map.
-      if (isNewMarker) replayClassAnimation(marker.getElement(), 'route-pin-drop');
+      // A new pin drops onto the map and bounces.
+      if (isNewMarker) playPinAnimation(marker, 'route-pin-drop', PIN_DROP_MS);
     }
     marker.getElement()?.classList.toggle('route-pin-checking', pin.status === 'checking');
     marker.getElement()?.setAttribute('title', pin.label || PIN_ROLE_COPY[role].fallbackLabel);
@@ -2724,10 +2758,14 @@ function fitMapToBoundaryPaths(paths, padding = 42, { fly = false, duration = BA
 
   if (!hasPoints) return false;
 
-  // Phone layout: fit into the strip between the top bar and the sheet.
+  // Phone/tablet layout: fit into the strip between the top bar and the
+  // sheet, or beside the tablet's docked panel.
   const covered = window.mobileSim?.getCoveredInsets();
   const fitOptions = covered
-    ? { paddingTopLeft: [padding, covered.top + padding], paddingBottomRight: [padding, covered.bottom + padding] }
+    ? {
+      paddingTopLeft: [(covered.left || 0) + padding, covered.top + padding],
+      paddingBottomRight: [padding, covered.bottom + padding],
+    }
     : { padding: [padding, padding] };
   if (fly) {
     // fitBounds can only pan short hops; between barangays it jumps
@@ -2769,6 +2807,7 @@ function getMapFitPadding(base = 36) {
   const mapRect = mapEl.getBoundingClientRect();
   let top = base;
   let bottom = base;
+  let left = base;
 
   ['floodFilterControl', 'earthquakeViewSelector', 'sidebarReopenBtn'].forEach(id => {
     const el = document.getElementById(id);
@@ -2776,13 +2815,14 @@ function getMapFitPadding(base = 36) {
     top = Math.max(top, el.getBoundingClientRect().bottom - mapRect.top + 12);
   });
 
-  // Phone layout: its top bar and bottom sheet (those overlays are hidden
-  // there). Read from the sheet's target height, not its box, which may
-  // still be animating.
+  // Phone/tablet layout: its top bar and bottom sheet, or the tablet's
+  // docked panel (those overlays are hidden there). Read from the sheet's
+  // target height, not its box, which may still be animating.
   const covered = window.mobileSim?.getCoveredInsets();
   if (covered) {
     top = Math.max(top, covered.top + 12);
     bottom = Math.max(bottom, covered.bottom + 12);
+    left = Math.max(left, (covered.left || 0) + 24);
   }
   top += MAP_FIT_MARKER_HEADROOM;
 
@@ -2802,7 +2842,7 @@ function getMapFitPadding(base = 36) {
     bottom *= scale;
   }
 
-  return { paddingTopLeft: [base, top], paddingBottomRight: [base, bottom] };
+  return { paddingTopLeft: [left, top], paddingBottomRight: [base, bottom] };
 }
 
 function getDisplayedEarthquakeRoute() {

@@ -1,9 +1,12 @@
 // Phone and tablet layout of the simulator (< 1024px wide and >= 500px tall):
 // a full-screen map under a floating top bar, map controls and a fixed center
-// pin, one bottom sheet with a setup mode and a results mode, and a Map
-// layers sheet (a centered card on tablets). The markup is #msim in
-// index.html; style.css hides it on desktops and short viewports, where the
-// setup and results panels do the same job.
+// pin, one panel with a setup mode and a results mode, and a Map layers sheet
+// (a centered card on tablets). On phones the panel is a bottom sheet that
+// slides between peek, half and full; on tablets (>= 640px wide, isSide) it is
+// docked on the left beside the map, under a top bar of its width, and the
+// center pin, zoom and fits work in the map to its right. The markup is #msim
+// in index.html; style.css hides it on desktops and short viewports, where
+// the setup and results panels do the same job.
 //
 // This file keeps no simulation state of its own. Everything it shows is read
 // from script.js's globals (selectedHazard, routePins, pinPlacementRole,
@@ -12,6 +15,8 @@
 // this sheet can never disagree. script.js calls in through window.mobileSim.
 (function initMobileSim() {
   const SHEET_QUERY = window.matchMedia('(max-width: 1023px) and (min-height: 500px)');
+  // Tablets: the panel docked on the left (style.css, same breakpoint).
+  const SIDE_QUERY = window.matchMedia('(min-width: 640px)');
   // On a phone this short the open legend covers much of the route, so it
   // starts folded there (until the visitor opens it once; that is remembered).
   const LEGEND_STARTS_FOLDED_QUERY = window.matchMedia('(max-height: 700px)');
@@ -74,26 +79,52 @@
     return SHEET_QUERY.matches;
   }
 
-  // ---- geometry. #map fills the viewport here, so map-container y and
-  // viewport y differ only by the map's top (normally 0). ----
+  // Tablet: the panel sits beside the map and never slides.
+  function isSide() {
+    return isActive() && SIDE_QUERY.matches;
+  }
+
+  // ---- geometry. #map fills the viewport here, so map-container x/y and
+  // viewport x/y differ only by the map's left/top (normally 0). ----
 
   function getMapTop() {
     return $('map')?.getBoundingClientRect().top || 0;
+  }
+
+  function getMapLeft() {
+    return $('map')?.getBoundingClientRect().left || 0;
   }
 
   function getTopBarBottom() {
     return $('msimTopbar')?.getBoundingClientRect().bottom || 0;
   }
 
-  // Height of the map strip still visible between the top bar and the sheet.
+  // Where the map stops being covered on the left: the docked panel's right
+  // edge on a tablet, nothing on a phone.
+  function getSideCover() {
+    return isSide() ? Math.max(0, sheet.getBoundingClientRect().right - getMapLeft()) : 0;
+  }
+
+  // Height of the map still visible: between the top bar and the sheet on a
+  // phone, the whole height beside the docked panel on a tablet.
   function getMapRoom(height = state.height) {
+    if (isSide()) return window.innerHeight - getMapTop();
     return window.innerHeight - height - getTopBarBottom();
   }
 
   // Map-container y of the center pin's tip for a given sheet height: the
   // middle of the visible strip, not of the whole map (the sheet covers that).
   function getPinY(height = state.height) {
+    if (isSide()) return window.innerHeight / 2 - getMapTop();
     return (getTopBarBottom() + window.innerHeight - height) / 2 - getMapTop();
+  }
+
+  // Map-container x of the center pin: the middle of the map beside the
+  // docked panel on a tablet.
+  function getPinX() {
+    const width = window.innerWidth - getMapLeft();
+    const cover = getSideCover();
+    return cover + (width - cover) / 2;
   }
 
   function getPinRole() {
@@ -111,7 +142,8 @@
   // barangay into the part of the map that is actually visible.
   function getCoveredInsets() {
     if (!isActive()) return null;
-    return { top: Math.max(0, getTopBarBottom() - getMapTop()), bottom: state.height };
+    if (isSide()) return { top: 0, bottom: 0, left: getSideCover() };
+    return { top: Math.max(0, getTopBarBottom() - getMapTop()), bottom: state.height, left: 0 };
   }
 
   // ---- sheet height and snapping ----
@@ -135,6 +167,18 @@
 
   function measureSnaps() {
     if (!isActive()) return;
+    if (isSide()) {
+      // Docked: no sheet height for the map controls and legend to clear.
+      if (state.height || state.box) {
+        state.height = 0;
+        state.box = 0;
+        window.clearTimeout(state.settleTimer);
+        shell.style.removeProperty('--sheet-h');
+        shell.style.removeProperty('--sheet-box-h');
+      }
+      syncChrome();
+      return;
+    }
     const full = Math.max(160, Math.round(window.innerHeight - getTopBarBottom() - FULL_SHEET_TOP_GAP));
     const peek = Math.min(full, measurePeek() || 200);
     const half = Math.min(full, Math.max(peek, Math.round(window.innerHeight * 0.5)));
@@ -204,6 +248,12 @@
   }
 
   function snapTo(name, { animate = true } = {}) {
+    if (isSide()) {
+      // The docked panel shows everything at once; it only scrolls.
+      state.snap = name;
+      syncChrome();
+      return;
+    }
     if (!state.snaps[name]) measureSnaps();
     state.snap = name;
     if (name === 'peek') scroller.scrollTop = 0;
@@ -254,6 +304,7 @@
         img.dataset.role = role;
       }
       shell.style.setProperty('--msim-pin-y', `${getPinY() + getMapTop()}px`);
+      shell.style.setProperty('--msim-pin-x', `${getPinX() + getMapLeft()}px`);
       pin.classList.toggle('is-checking', routePins[role]?.status === 'checking');
     }
     pin.hidden = !shown;
@@ -262,7 +313,7 @@
   // ---- dragging the handle or a sheet header ----
 
   function onPointerDown(event) {
-    if (!isActive() || state.drag) return;
+    if (!isActive() || isSide() || state.drag) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const zone = event.target.closest?.('.msheet-handle, [data-sheet-drag]');
     if (!zone || !sheet.contains(zone)) return;
@@ -354,7 +405,7 @@
   // Tabbing to something below the peek line opens the sheet to half, so the
   // focused control is never hidden under the bottom of the screen.
   sheet.addEventListener('focusin', event => {
-    if (!isActive() || state.snap !== 'peek' || state.drag) return;
+    if (!isActive() || isSide() || state.snap !== 'peek' || state.drag) return;
     const bottom = event.target.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top + scroller.scrollTop;
     if (bottom > state.snaps.peek) snapTo('half');
   });
@@ -809,7 +860,7 @@
     const top = el.offsetTop - scroller.offsetTop;
     const bottom = top + el.offsetHeight;
     const paddingBottom = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
-    const visible = state.height - scroller.offsetTop - paddingBottom;
+    const visible = isSide() ? scroller.clientHeight : state.height - scroller.offsetTop - paddingBottom;
     let next = scroller.scrollTop;
     if (bottom + 12 > next + visible) next = bottom + 12 - visible;
     if (top - 12 < next) next = top - 12;
@@ -822,8 +873,9 @@
   // (setView only pans short hops and jumps on longer ones).
   function centerUnderPin(latlng, zoom = gMap?.getZoom(), { fly = false } = {}) {
     if (!gMap || !latlng) return;
-    const offsetY = gMap.getSize().y / 2 - getPinY();
-    const center = gMap.unproject(gMap.project(latlng, zoom).add([0, offsetY]), zoom);
+    const size = gMap.getSize();
+    const offset = L.point(size.x / 2 - getPinX(), size.y / 2 - getPinY());
+    const center = gMap.unproject(gMap.project(latlng, zoom).add(offset), zoom);
     if (fly) gMap.flyTo(center, zoom, mapMoveOptions({ duration: RECENTER_FLY_SECONDS }));
     else gMap.setView(center, zoom, mapMoveOptions({ animate: true }));
   }
@@ -831,7 +883,7 @@
   function setPinHere() {
     const role = getPinRole();
     if (!role || !gMap) return;
-    const latlng = gMap.containerPointToLatLng([gMap.getSize().x / 2, getPinY()]);
+    const latlng = gMap.containerPointToLatLng([getPinX(), getPinY()]);
     placeRoutePin(role, latlng.lat, latlng.lng);
   }
 
@@ -897,7 +949,7 @@
     if (!gMap) return;
     const step = (gMap.options.zoomDelta || 1) * direction;
     const zoom = Math.max(gMap.getMinZoom(), Math.min(gMap.getMaxZoom(), gMap.getZoom() + step));
-    gMap.setZoomAround(L.point(gMap.getSize().x / 2, getPinY()), zoom, mapMoveOptions());
+    gMap.setZoomAround(L.point(getPinX(), getPinY()), zoom, mapMoveOptions());
   }
 
   // locateVisitor (script.js) finds the visitor and keeps them inside the
@@ -1139,6 +1191,7 @@
   }
 
   SHEET_QUERY.addEventListener?.('change', onLayoutChange);
+  SIDE_QUERY.addEventListener?.('change', onLayoutChange);
   window.addEventListener('resize', () => {
     if (isActive()) scheduleSync();
   });
