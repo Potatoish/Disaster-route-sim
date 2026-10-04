@@ -107,6 +107,7 @@ DEBUG = True
 FLOOD_GRAPH_ANNOTATION_VERSION = 2
 
 BLOCKED_ENDPOINT_ACCESS_VALUES = {"no"}
+MAX_PIN_LABEL_LENGTH = 80
 
 _GRAPH_CACHE = {}
 _BARANGAY_BASE_GRAPH_CACHE = {}
@@ -581,34 +582,6 @@ def stamp_flood_hazard(data, edge_geom, flood_zones):
     return int(hazard), flood_var
 
 
-def resolve_point_hazard(lat, lng, flood_zones=None):
-    if lat is None or lng is None:
-        return {
-            "haz": None,
-            "flood_var": None,
-            "hazard_source": None,
-        }
-
-    if flood_zones is None:
-        flood_zones = load_flood_zones()
-
-    point = Point(float(lng), float(lat))
-
-    for zone in flood_zones:
-        if zone["prepared"].intersects(point):
-            return {
-                "haz": int(zone["hazard"]),
-                "flood_var": int(zone["var"]),
-                "hazard_source": "flood_json",
-            }
-
-    return {
-        "haz": 1,
-        "flood_var": None,
-        "hazard_source": "flood_json",
-    }
-
-
 def estimate_boundary_graph_radius(boundary_geometry):
     centroid = boundary_geometry.centroid
     max_distance = 0.0
@@ -873,6 +846,29 @@ def find_nearest_road(G, lat, lng):
         "nearby_street": nearby_street,
         "nearby_street_distance": nearby_distance,
     }
+
+
+def parse_route_pin(value, role):
+    """A route start/end from a request: a point pinned on the map,
+    {"lat", "lng", "label"?}. role is "Start" or "End", for messages.
+    Returns (location, error_message)."""
+    if not isinstance(value, dict):
+        return None, f"{role} must be a point pinned on the map"
+
+    try:
+        lat = float(value.get("lat"))
+        lng = float(value.get("lng"))
+    except (TypeError, ValueError):
+        lat = lng = math.nan
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return None, f"{role} pin has invalid coordinates"
+
+    label = " ".join(str(value.get("label") or "").split())[:MAX_PIN_LABEL_LENGTH]
+    return {
+        "name": label or ("Your location" if role == "Start" else "Your destination"),
+        "lat": lat,
+        "lng": lng,
+    }, None
 
 
 def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):

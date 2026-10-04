@@ -107,9 +107,7 @@ Disaster-route-sim/
 |   |   |-- boundaries/
 |   |   |-- earthquake/
 |   |   |-- flood_classes/
-|   |   |-- graphs/
-|   |   |-- database.py
-|   |   `-- node.csv            # named test locations (used by the batch tool)
+|   |   `-- graphs/
 |   `-- tools/
 |       |-- route_batch_test.py # batch-test routing without the UI
 |       |-- reduce_flood_layers.py
@@ -156,7 +154,7 @@ gunicorn app:app
 On Railway the service's **Root Directory** must be `/` (the repository root): the `Dockerfile` there
 copies both `Backend/` and `Frontend/`. The app refuses to start if `Frontend/` is missing.
 
-Batch-test routing without the UI:
+Batch-test routing without the UI (each pair's start and end are lat/lng points, like pins on the map):
 
 ```bash
 py Backend/tools/route_batch_test.py Backend/tools/route_pairs.example.json
@@ -205,7 +203,6 @@ To try it locally, set the variables in the same PowerShell window before starti
 - `POST /earthquake/simulate` — earthquake simulation (queued like flood)
 - `GET /simulation-jobs/<id>` — a queued or running simulation's state, progress and result
 - `GET /simulation-status` — whether a simulation is running, and the queue length
-- `GET /locations` — named test locations (not used by the UI)
 - `POST /contact` — About page contact form → email to the team inbox
 - `POST /feedback` — feedback widget → row in the team's Google Sheet
 

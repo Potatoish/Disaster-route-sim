@@ -4,7 +4,6 @@ import time
 
 import networkx as nx
 
-from data import database
 from earthquake_data import (
     get_earthquake_dataset,
     get_supported_earthquake_barangay_names,
@@ -33,7 +32,7 @@ from osm_routing import (
     hydrate_route_edge_records,
     is_point_in_hazard_coverage,
     label_display_routes,
-    normalize_barangay_name,
+    parse_route_pin,
     path_to_coords,
     resolve_route_edge_records,
     restrict_graph_to_hazard_coverage,
@@ -547,7 +546,7 @@ def simulate_earthquake(start, barangay_name):
             "message": _unsupported_earthquake_scope_message(),
         }
 
-    start_location, start_error = database.resolve_route_location(start, "Start")
+    start_location, start_error = parse_route_pin(start, "Start")
     if start_error:
         return {
             "error": True,
@@ -556,18 +555,6 @@ def simulate_earthquake(start, barangay_name):
 
     try:
         dataset = get_earthquake_dataset(barangay_name)
-        # Only CSV nodes carry a barangay; a map pin is checked against the
-        # coverage area below instead.
-        start_barangay = start_location.get("barangay")
-        if start_barangay and normalize_barangay_name(start_barangay) != dataset["canonical_barangay"]:
-            return {
-                "error": True,
-                "message": (
-                    f"The selected start node is outside {dataset['display_barangay']} "
-                    "earthquake routing coverage."
-                ),
-            }
-
         base_graph = _get_earthquake_graph(dataset)
         pin_check = check_route_pin(
             base_graph,

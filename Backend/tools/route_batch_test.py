@@ -9,7 +9,6 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 import osm_routing
-from data import database
 from osm_routing import HAZARD_THRESHOLD, simulate_osm_routes
 
 
@@ -47,41 +46,17 @@ def load_pairs(pairs_file):
     return pairs
 
 
-def resolve_named_location(name):
-    location = database.get_location_by_name(name)
-    if not location:
-        raise ValueError(f"Location not found in database: {name}")
-
-    return {
-        "name": location["name"],
-        "lat": float(location["lat"]),
-        "lng": float(location["lng"]),
-    }
-
-
 def resolve_endpoint(endpoint, role):
-    if isinstance(endpoint, str):
-        return resolve_named_location(endpoint)
+    if not isinstance(endpoint, dict) or endpoint.get("lat") is None or endpoint.get("lng") is None:
+        raise ValueError(f"{role} endpoint must be an object with lat/lng coordinates.")
 
-    if not isinstance(endpoint, dict):
-        raise ValueError(f"{role} endpoint must be a string or object.")
-
-    has_coords = endpoint.get("lat") is not None and endpoint.get("lng") is not None
-    if has_coords:
-        lat = float(endpoint["lat"])
-        lng = float(endpoint["lng"])
-        return {
-            "name": endpoint.get("name") or f"{role.title()} ({lat:.6f}, {lng:.6f})",
-            "lat": lat,
-            "lng": lng,
-        }
-
-    if endpoint.get("name"):
-        return resolve_named_location(endpoint["name"])
-
-    raise ValueError(
-        f"{role} endpoint must provide either a location name or explicit lat/lng coordinates."
-    )
+    lat = float(endpoint["lat"])
+    lng = float(endpoint["lng"])
+    return {
+        "name": endpoint.get("name") or f"{role.title()} ({lat:.6f}, {lng:.6f})",
+        "lat": lat,
+        "lng": lng,
+    }
 
 
 def build_pair_label(pair, pair_index, start, end):

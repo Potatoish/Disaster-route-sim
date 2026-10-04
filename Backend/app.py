@@ -15,7 +15,7 @@ from earthquake_service import (
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
-from main import simulate, get_locations
+from main import simulate
 from osm_routing import (
     build_flood_hazard_layer_payload,
     check_flood_pin,
@@ -332,26 +332,6 @@ def simulation_job(job_id):
             "message": "That simulation is no longer available. Run it again.",
         }), 404
     return jsonify(_job_public_view(job))
-
-@app.route("/locations", methods=["GET"])
-def locations():
-    locations_payload = get_locations()
-    if locations_payload is None:
-        return jsonify({
-            "error": True,
-            "message": "Failed to load node locations. Check that Backend/data/node.csv exists and is readable."
-        }), 500
-
-    if not locations_payload:
-        return jsonify({
-            "error": True,
-            "message": "No node locations were found. Check that Backend/data/node.csv has data for the supported barangays."
-        }), 500
-
-    return jsonify({
-        "error": False,
-        "locations": locations_payload
-    })
 
 @app.route("/barangay-boundary", methods=["GET"])
 @app.route("/barangay-boundary/<path:name>", methods=["GET"])
