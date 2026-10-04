@@ -25,3 +25,6 @@ Thumbs.db
 
 # Local working notes (responsive redesign spec)
 AGNAS_RESPONSIVE_SPEC.md
+
+# Routing evaluation output (re-creatable with the same --seed)
+Backend/tools/evaluation_results/

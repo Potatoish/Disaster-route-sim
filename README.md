@@ -110,6 +110,7 @@ Disaster-route-sim/
 |   |   `-- graphs/
 |   `-- tools/
 |       |-- route_batch_test.py # batch-test routing without the UI
+|       |-- evaluate_routing.py # ACO vs Dijkstra on random pins (results tables)
 |       |-- reduce_flood_layers.py
 |       `-- feedback_sheet.gs   # Apps Script for the feedback sheet
 |-- Dockerfile                  # built from the repo root (copies Backend/ and Frontend/)
@@ -158,6 +159,18 @@ Batch-test routing without the UI (each pair's start and end are lat/lng points,
 
 ```bash
 py Backend/tools/route_batch_test.py Backend/tools/route_pairs.example.json
+```
+
+Evaluate the route search on random pins: each pair's best ACO route is compared with Dijkstra on
+distance alone and Dijkstra on the same hazard-weighted cost, and with whether any safe route exists.
+It writes `pairs.json`, `results.csv`, `summary.csv` and `run_info.json` to a new folder in
+`Backend/tools/evaluation_results/` (about 5 minutes for the default 25 pairs per barangay and hazard;
+the same `--seed` gives the same pins and results):
+
+```bash
+py Backend/tools/evaluate_routing.py
+py Backend/tools/evaluate_routing.py --pairs 50 --hazard flood
+py Backend/tools/evaluate_routing.py --pairs-file Backend/tools/evaluation_results/<run>/pairs.json
 ```
 
 ### 4. Contact form and feedback (optional)
