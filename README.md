@@ -11,13 +11,14 @@ AGNAS is a planning tool for use *before* a disaster. It works from stored hazar
 
 The visitor picks a barangay and a hazard, pins a start point (and, for floods, a destination) anywhere inside the barangay on the map, and runs a simulation. AGNAS then shows the safest walking routes it found, with the hazard each one crosses.
 
-- **Flood** — point to point. Uses Project NOAH flood hazard classes (`Var 1`/`2`/`3` → Low / Moderate / High).
+- **Flood** — point to point. Uses Project NOAH flood hazard classes (`Var 1`/`2`/`3` → Low up to 0.5 m / Moderate 0.5–1.5 m / High over 1.5 m).
 - **Earthquake** — from the start point to the safest reachable evacuation site. Uses liquefaction and ground-shaking levels (PHIVOLCS, through HazardHunterPH), with three result views: Overall, Liquefaction and Ground Shaking.
 
 ## Key Features
 
 - **ACO route search** — every route comes from ant colonies: a main colony finds the best route, then four smaller colonies, each steered away from the roads already chosen, find genuinely different alternatives. A conventional shortest-path search (Dijkstra) is run only as a check, and the result says how the ants' best route compares with it.
 - **Safety-first ranking** — a route that crosses any road above the safe hazard threshold is ruled out and placed below every safe route, however much shorter it is. Safe routes are ranked by hazard exposure first and distance last.
+- **Three flood verdicts** — High water (over 1.5 m) rules a route out. Moderate water (0.5–1.5 m) is unsafe for children and older adults and, past 1.2 m, for anyone (AIDR Flood Hazard Guideline 7-3, 2017), so a route through it is shown as "Walk with caution" with the metres of Moderate water it crosses, never as safe. Only a route entirely in Low water (up to 0.5 m) is a "Safe route found", and such a route always ranks first.
 - **Missing data is never "safe"** — routes stay on roads inside the area the hazard data covers; a road without a hazard reading is treated as high hazard.
 - **Routes on the street** — routes start and end where each pin meets the nearest road, never drawn through buildings.
 - **Results** — a verdict (safe route found or not), each route's distance, estimated walking time (at 5 km/h), highest hazard level crossed and turn-by-turn steps, up to five routes on the map, and a downloadable PDF report.

@@ -19,6 +19,8 @@
 
   --green:   #16a34a;
   --yellow:  #f59e0b;
+  /* Amber text: --yellow is too light to read as text on the light panels. */
+  --yellow-ink: #b45309;
   --red:     #dc2626;
 
   --text:    #0f172a;
@@ -81,6 +83,7 @@ body.dark {
 
   --green:   #22c55e;
   --yellow:  #eab308;
+  --yellow-ink: #eab308;
   --red:     #ef4444;
 
   --text:    #e6edf5;
@@ -1823,7 +1826,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-result-card.success, .safety-result-card.success .safety-icon-box { border-color: rgba(22,163,74,.5); }
 .safety-result-card.success .safety-icon-box, .safety-result-card.success .safety-card-value { color: var(--green); }
 .safety-result-card.warning, .safety-result-card.warning .safety-icon-box { border-color: rgba(245,158,11,.55); }
-.safety-result-card.warning .safety-icon-box, .safety-result-card.warning .safety-card-value { color: var(--yellow); }
+.safety-result-card.warning .safety-icon-box, .safety-result-card.warning .safety-card-value { color: var(--yellow-ink); }
 .safety-notes { margin-top: 11px; padding: 10px 11px; border-left: 2px solid var(--border2); color: var(--muted); font-size: .79rem; line-height: 1.55; }
 .safety-notes em { color: var(--ink-strong); font-weight: 700; }
 .safety-notes ul { margin: 5px 0 0 15px; }
@@ -3771,6 +3774,7 @@ body.dark .leaflet-popup-close-button {
 }
 
 .mverdict.is-safe { border-color: color-mix(in srgb, var(--green) 70%, transparent); }
+.mverdict.is-caution { border-color: color-mix(in srgb, var(--yellow) 70%, transparent); }
 .mverdict.is-danger { border-color: color-mix(in srgb, var(--red) 70%, transparent); }
 
 .mverdict-title {
@@ -3779,6 +3783,7 @@ body.dark .leaflet-popup-close-button {
 }
 
 .mverdict.is-safe .mverdict-title { color: var(--green); }
+.mverdict.is-caution .mverdict-title { color: var(--yellow-ink); }
 .mverdict.is-danger .mverdict-title { color: var(--red); }
 
 .mverdict-sub {

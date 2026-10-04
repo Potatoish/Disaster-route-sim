@@ -1494,6 +1494,9 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
     max_hazard = 0
     eliminated = False
     hazard_breakdown = {}
+    # Metres per hazard level: the results say how much of a route is in
+    # Moderate water, which is passable but not safe for everyone.
+    hazard_distances = {}
     flood_vars_encountered = set()
     threshold_exceedance_count = 0
     threshold_exceedance_vars = set()
@@ -1521,6 +1524,7 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
         total_hazard += hazard
         max_hazard = max(max_hazard, hazard)
         hazard_breakdown[str(hazard)] = hazard_breakdown.get(str(hazard), 0) + 1
+        hazard_distances[str(hazard)] = hazard_distances.get(str(hazard), 0.0) + length
         risk_distance += length * hazard_factor
 
         if flood_var is not None:
@@ -1546,6 +1550,10 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
         "max_hazard": max_hazard,
         "eliminated": eliminated,
         "hazard_breakdown": dict(sorted(hazard_breakdown.items(), key=lambda item: int(item[0]))),
+        "hazard_distances": {
+            level: round(distance, 1)
+            for level, distance in sorted(hazard_distances.items(), key=lambda item: int(item[0]))
+        },
         "flood_vars_encountered": sorted(flood_vars_encountered),
         "threshold_exceedance_count": threshold_exceedance_count,
         "threshold_exceedance_vars": sorted(threshold_exceedance_vars),

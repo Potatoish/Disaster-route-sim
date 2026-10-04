@@ -9,15 +9,19 @@
   const $ = id => document.getElementById(id);
 
   // ================= FLOOD =================
-  // `walk` is the readout's Walking row: AGNAS plans walking routes only, so
-  // it says whether a person can walk through, not whether a road is open.
   const LEVELS = {
-    low: { preset: 0.3, color: 'var(--low)', ink: 'var(--low-ink)', on: 'var(--low-on)', label: 'Low', walk: ['safe', 'Walkable'] },
-    medium: { preset: 0.75, color: 'var(--med)', ink: 'var(--med-ink)', on: 'var(--med-on)', label: 'Medium', walk: ['risk', 'Walk with caution'] },
-    high: { preset: 1.25, color: 'var(--high)', ink: 'var(--high-ink)', on: 'var(--high-on)', label: 'High', walk: ['elim', 'Not walkable'] },
+    low: { preset: 0.3, color: 'var(--low)', ink: 'var(--low-ink)', on: 'var(--low-on)', label: 'Low' },
+    medium: { preset: 1.0, color: 'var(--med)', ink: 'var(--med-ink)', on: 'var(--med-on)', label: 'Medium' },
+    high: { preset: 1.75, color: 'var(--high)', ink: 'var(--high-ink)', on: 'var(--high-on)', label: 'High' },
   };
-  // Same class boundaries as the app's FLOOD_DEPTH_RANGE_BY_VAR.
-  const levelFor = d => (d < 0.5 ? 'low' : d < 1.0 ? 'medium' : 'high');
+  // Project NOAH's classes, as in the app's FLOOD_DEPTH_RANGE_BY_VAR: Low up
+  // to 0.5 m, Medium to 1.5 m, High above.
+  const levelFor = d => (d <= 0.5 ? 'low' : d <= 1.5 ? 'medium' : 'high');
+  // The readout's Walking row: AGNAS plans walking routes only, so it says
+  // whether a person can walk through, not whether a road is open. It follows
+  // the depth, not the class: past 1.2 m floodwater is unsafe for any adult
+  // (AIDR Flood Hazard Guideline 7-3, class H4), which is still Medium.
+  const walkFor = d => (d <= 0.5 ? ['safe', 'Walkable'] : d <= 1.2 ? ['risk', 'Walk with caution'] : ['elim', 'Not walkable']);
 
   // Water depth (m) up to each body landmark, from standard proportions of
   // standing height: a 163 cm adult (DOST-FNRI) and a 130 cm child.
@@ -29,8 +33,8 @@
     [0.2, 'Walk carefully. The water can hide open drains.'],
     [0.5, 'Walking is slower. Keep children close.'],
     [0.8, 'Hard to walk. Carry small children.'],
-    [0.99, 'Hard to stay standing. Children can be swept away.'],
-    [1.25, 'Too deep to walk through.'],
+    [1.2, 'Hard to stay standing. Children can be swept away.'],
+    [1.5, 'Too deep to walk through.'],
     [9, 'Too deep. Stay on higher ground.'],
   ];
 
@@ -67,7 +71,8 @@
       + `<span>Child: ${reachText(firstAtOrAbove(CHILD, depth))}</span>`;
     $('hzLevel').textContent = lvl.label;
     $('hzLevelNote').textContent = firstAtOrAbove(DEPTH_NOTES, depth);
-    $('hzRoad').innerHTML = `<span class="hz-chip hz-chip--${lvl.walk[0]}">${lvl.walk[1]}</span>`;
+    const [walkClass, walkText] = walkFor(depth);
+    $('hzRoad').innerHTML = `<span class="hz-chip hz-chip--${walkClass}">${walkText}</span>`;
   }
 
   cards.forEach(card => card.addEventListener('click', () => setDepth(LEVELS[card.dataset.level].preset)));

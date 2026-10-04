@@ -648,17 +648,17 @@
     });
   }
 
-  // The worst hazard a route crosses: its peak level and, when some of it is
-  // above the safety limit, how much (unsafe_distance). The backend sends no
-  // per-level distances, so a Low or Moderate peak has no length to show.
+  // The worst hazard a route crosses: its peak level, how much of a flood
+  // route is in Moderate water, and how much is above the safety limit.
   function describeRouteRisk(route) {
     const isEarthquake = isEarthquakeRouteRecord(route);
     const label = isEarthquake ? getRiskLevelLabelFromScore(route?.max_hazard) : formatFloodPeakRisk(route);
+    const moderate = isEarthquake ? 0 : getModerateFloodDistance(route);
     const unsafe = Number(route?.unsafe_distance) || 0;
-    return {
-      level: label.toLowerCase(),
-      text: `${label} ${isEarthquake ? 'road risk' : 'flooding'}${unsafe > 0 ? ` · ${formatDistanceCompact(unsafe)} unsafe` : ''}`,
-    };
+    const parts = [`${label} ${isEarthquake ? 'road risk' : 'flooding'}`];
+    if (moderate > 0) parts.push(`${formatDistanceCompact(moderate)} moderate`);
+    if (unsafe > 0) parts.push(`${formatDistanceCompact(unsafe)} unsafe`);
+    return { level: label.toLowerCase(), text: parts.join(' · ') };
   }
 
   function buildTurnStepsMarkup(route, routeNo) {
@@ -725,18 +725,22 @@
 
     const isEarthquake = isEarthquakeSimulationResult(result);
     const best = getBestRoute(routes);
-    const safeRouteFound = routes.some(route => route.category !== 'eliminated');
+    const tier = getRouteSafetyTier(best);
     const peak = getPeakRiskRow(best, isEarthquake);
     const unsafeParts = Number(best?.display_unsafe_segment_count ?? best?.threshold_exceedance_count ?? 0);
 
     // Same wording as the desktop results panel (renderRouteSafetyPanel).
     const verdict = $('msimVerdict');
-    verdict.classList.toggle('is-safe', safeRouteFound);
-    verdict.classList.toggle('is-danger', !safeRouteFound);
-    $('msimVerdictTitle').textContent = safeRouteFound ? 'Safe route found' : 'No safe route';
-    $('msimVerdictSub').textContent = safeRouteFound
-      ? `${peak.label}: ${peak.value}`
-      : `${peak.label}: ${peak.value}. Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'}, so be extra careful.`;
+    verdict.classList.toggle('is-safe', tier === 'safe');
+    verdict.classList.toggle('is-caution', tier === 'caution');
+    verdict.classList.toggle('is-danger', tier === 'unsafe');
+    $('msimVerdictTitle').textContent = ROUTE_VERDICTS[tier].title;
+    const VERDICT_SUBS = {
+      safe: `${peak.label}: ${peak.value}`,
+      caution: `${describeModerateFloodCrossing(best)} ${MODERATE_FLOOD_WARNING}`,
+      unsafe: `${peak.label}: ${peak.value}. Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'}, so be extra careful.`,
+    };
+    $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
     const duration = best?.display_duration || formatWalkingDuration(best?.distance);
     const distance = best?.display_distance || formatDistanceCompact(best?.distance);
@@ -754,7 +758,7 @@
 
     const source = isEarthquake
       ? 'These hazard levels are based on Hazard Hunter PH data.'
-      : 'These hazard levels are based on Project NOAH flood historical data.';
+      : 'These hazard levels are based on Project NOAH flood hazard maps.';
     $('msimSource').textContent = [buildAntSearchNote(result), source].filter(Boolean).join(' ');
     scheduleSync();
   }

@@ -635,12 +635,13 @@ body.dark .hz-section{
 .hz-depth-row label{ font-size:13px; font-weight:600; }
 .hz-depth-value{ font-family:var(--font-meta); font-size:13px; font-variant-numeric:tabular-nums; color:var(--lvl-ink, var(--text)); }
 .hz-depth input[type="range"]{ width:100%; height:28px; margin:0; accent-color:var(--lvl-ink, var(--accent)); cursor:pointer; }
-.hz-depth-bands{ display:grid; grid-template-columns:4fr 5fr 5fr; gap:3px; }
+/* Columns match the slider's 0.1-2 m range split at 0.5 and 1.5 m. */
+.hz-depth-bands{ display:grid; grid-template-columns:4fr 10fr 5fr; gap:3px; }
 .hz-depth-bands span{ height:5px; border-radius:3px; }
 .hz-depth-bands span:nth-child(1){ background:var(--low); }
 .hz-depth-bands span:nth-child(2){ background:var(--med); }
 .hz-depth-bands span:nth-child(3){ background:var(--high); }
-.hz-depth-ticks{ display:grid; grid-template-columns:4fr 5fr 5fr; font-family:var(--font-meta); font-size:10.5px; color:var(--muted); }
+.hz-depth-ticks{ display:grid; grid-template-columns:4fr 10fr 5fr; font-family:var(--font-meta); font-size:10.5px; color:var(--muted); }
 .hz-depth-ticks span:last-child{ display:flex; justify-content:space-between; }
 
 /* Flood readout */
