@@ -188,15 +188,6 @@ function mapMoveOptions(options = {}) {
   return prefersReducedMotion() ? { ...options, animate: false } : options;
 }
 
-function formatDistanceKm(distanceMeters) {
-  const numericDistance = Number(distanceMeters);
-  if (!Number.isFinite(numericDistance)) {
-    return 'N/A';
-  }
-
-  return `${(numericDistance / 1000).toFixed(2)} km`;
-}
-
 function getRouteColor(category) {
   if (category === 'best') return ROUTE_BEST_COLOR;
   if (category === 'available') return ROUTE_AVAILABLE_COLOR;

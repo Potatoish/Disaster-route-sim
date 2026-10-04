@@ -33,7 +33,6 @@ const LOADER_ROUTE_STAGE_RANGE = [22, 76];
 const THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 const HAZARD_SELECTION_CLASSES = ['flood', 'earthquake'];
 const EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE = 'Pinagbuhatan and Sta. Lucia';
-const EARTHQUAKE_SUPPORTED_BARANGAY_PROMPT = 'Pinagbuhatan or Sta. Lucia';
 const EARTHQUAKE_SUPPORTED_BARANGAY_KEYS = new Set([
   'pinagbuhatan',
   'sta lucia',
@@ -1650,29 +1649,11 @@ function formatFloodPeakRiskWithHazard(route) {
   return `${formatFloodPeakRisk(route)} (${getFloodPeakDepthRange(route)})`;
 }
 
-// One "peak severity" label for both hazard types, in the route safety
-// panel's wording.
-function formatRoutePeakRiskLabel(route) {
-  return isEarthquakeRouteRecord(route)
-    ? getRiskLevelLabelFromScore(route?.max_hazard)
-    : formatFloodPeakRiskWithHazard(route);
-}
-
 // The "peak" row of the route safety panel and the PDF report.
 function getPeakRiskRow(route, isEarthquake) {
   return isEarthquake
     ? { label: 'Peak road risk crossed', value: `${getRiskLevelLabelFromScore(route?.max_hazard)} road risk` }
     : { label: 'Peak flood level crossed', value: formatFloodPeakRiskWithHazard(route) };
-}
-
-function formatEarthquakeHazardSummary(route) {
-  const maxima = route?.hazard_maxima || {};
-  if (maxima.liquefaction == null && maxima.ground_shaking == null) {
-    return 'N/A';
-  }
-
-  return `Liquefaction: ${getRiskLevelLabelFromScore(maxima.liquefaction)}, `
-    + `Ground shaking: ${getRiskLevelLabelFromScore(maxima.ground_shaking)}`;
 }
 
 function getFloodOverlayConfig(mode = floodHazardOverlayMode) {
@@ -4793,12 +4774,6 @@ window.toggleRouteFocus = function toggleRouteFocus(routeNo, category) {
   const shouldClear = selectedRouteFocus && selectedRouteFocus.routeNo === routeNo;
   selectedRouteFocus = shouldClear ? null : { routeNo, category };
   applyRouteFocusState(shouldClear ? null : routeNo);
-};
-
-window.focusRouteSelection = function focusRouteSelection(routeNo, category) {
-  if (routeNo == null) return;
-  selectedRouteFocus = { routeNo, category };
-  applyRouteFocusState(routeNo);
 };
 
 // A click anywhere outside a pin input closes its "Choose on Map" menu.

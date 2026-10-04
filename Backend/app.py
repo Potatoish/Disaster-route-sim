@@ -558,10 +558,7 @@ def about_page():
 
 @app.route("/app", methods=["GET"])
 def simulator_app():
-    return render_template(
-        "index.html",
-        google_maps_api_key=os.environ.get("GOOGLE_MAPS_API_KEY", ""),
-    )
+    return render_template("index.html")
 
 if __name__ == "__main__":
     # Local dev only (gunicorn never runs this block): always revalidate static
