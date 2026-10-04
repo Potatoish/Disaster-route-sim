@@ -17,6 +17,8 @@ const ROUTE_TRAIL_GAP = 7;
 const ROUTE_BEST_COLOR = '#22c55e';
 // Slate gray, so the green best route is the one that stands out.
 const ROUTE_AVAILABLE_COLOR = '#64748b';
+// A best route through Medium flood water ("Walk with caution") is amber.
+const ROUTE_BEST_CAUTION_COLOR = '#f59e0b';
 // When no route is safe, the "Best" one is bright red and the other
 // eliminated routes a darker brick red, so the two read apart.
 const ROUTE_BEST_UNSAFE_COLOR = '#ef4444';
@@ -24,6 +26,7 @@ const ROUTE_ELIMINATED_COLOR = '#991b1b';
 const ROUTE_EDGE_COLORS = {
   [ROUTE_BEST_COLOR]: '#15803d',
   [ROUTE_AVAILABLE_COLOR]: '#334155',
+  [ROUTE_BEST_CAUTION_COLOR]: '#92400e',
   [ROUTE_BEST_UNSAFE_COLOR]: '#991b1b',
   [ROUTE_ELIMINATED_COLOR]: '#450a0a',
 };
@@ -186,6 +189,15 @@ function prefersReducedMotion() {
 // Wrap the options of any fitBounds/setView/panBy call.
 function mapMoveOptions(options = {}) {
   return prefersReducedMotion() ? { ...options, animate: false } : options;
+}
+
+// The best route's color is its verdict (getRouteSafetyTier in script.js).
+function getBestRouteColor(route) {
+  return {
+    safe: ROUTE_BEST_COLOR,
+    caution: ROUTE_BEST_CAUTION_COLOR,
+    unsafe: ROUTE_BEST_UNSAFE_COLOR,
+  }[getRouteSafetyTier(route)];
 }
 
 function getRouteColor(category) {
@@ -453,7 +465,7 @@ async function renderRoutesOnRoads({
       ? baseCfg
       : {
           ...baseCfg,
-          color: route.category === 'eliminated' ? ROUTE_BEST_UNSAFE_COLOR : baseCfg.color,
+          color: getBestRouteColor(route),
           weight: ROUTE_BEST_WEIGHT,
           opacity: 1,
           trail: false,

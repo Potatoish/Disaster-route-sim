@@ -2260,6 +2260,7 @@ body.dark .emergency-modal {
 .route-eta--best svg { color: #16a34a; }
 .route-eta--available svg { color: #475569; }
 .route-eta--eliminated svg { color: #dc2626; }
+.route-eta--caution svg { color: #d97706; }
 
 .route-eta-text {
   display: flex;
@@ -2291,6 +2292,8 @@ body.dark .emergency-modal {
 .route-eta--eliminated .route-eta-name { color: #b91c1c; }
 body.dark .route-eta--best .route-eta-name { color: #4ade80; }
 body.dark .route-eta--eliminated .route-eta-name { color: #f87171; }
+.route-eta--best.route-eta--caution .route-eta-name { color: #b45309; }
+body.dark .route-eta--best.route-eta--caution .route-eta-name { color: #fbbf24; }
 
 .leaflet-popup-content-wrapper {
   background: var(--map-ui-bg) !important;
@@ -3929,6 +3932,7 @@ body.dark .leaflet-popup-close-button {
 
 /* Solid with a thin darker edge, the best route heavier, like the map. */
 .mroute-swatch { box-shadow: 0 0 0 1px #15803d; }
+.mroute-swatch--best-caution { background: #f59e0b; box-shadow: 0 0 0 1px #92400e; }
 .mroute-swatch--best-unsafe { background: #ef4444; box-shadow: 0 0 0 1px #991b1b; }
 .mroute-swatch--available,
 .mroute-swatch--eliminated { height: 3px; }

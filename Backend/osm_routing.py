@@ -174,7 +174,7 @@ VAR_TO_HAZARD = {
 }
 FLOOD_VAR_RISK_LABELS = {
     1: "Low",
-    2: "Moderate",
+    2: "Medium",
     3: "High",
 }
 METERS_PER_DEGREE = 111_320.0
@@ -1495,7 +1495,7 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
     eliminated = False
     hazard_breakdown = {}
     # Metres per hazard level: the results say how much of a route is in
-    # Moderate water, which is passable but not safe for everyone.
+    # Medium water, which is passable but not safe for everyone.
     hazard_distances = {}
     flood_vars_encountered = set()
     threshold_exceedance_count = 0

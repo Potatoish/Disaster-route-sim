@@ -649,15 +649,17 @@
   }
 
   // The worst hazard a route crosses: its peak level, how much of a flood
-  // route is in Moderate water, and how much is above the safety limit.
+  // route is in Medium water, and how much is above the safety limit.
   function describeRouteRisk(route) {
     const isEarthquake = isEarthquakeRouteRecord(route);
     const label = isEarthquake ? getRiskLevelLabelFromScore(route?.max_hazard) : formatFloodPeakRisk(route);
-    const moderate = isEarthquake ? 0 : getModerateFloodDistance(route);
+    const medium = isEarthquake ? 0 : getMediumFloodDistance(route);
     const unsafe = Number(route?.unsafe_distance) || 0;
-    const parts = [`${label} ${isEarthquake ? 'road risk' : 'flooding'}`];
-    if (moderate > 0) parts.push(`${formatDistanceCompact(moderate)} moderate`);
+    // "Medium flooding for 193 m"; with unsafe parts too, both lengths.
+    const mediumFor = medium > 0 && unsafe === 0 ? ` for ${formatDistanceCompact(medium)}` : '';
+    const parts = [`${label} ${isEarthquake ? 'road risk' : 'flooding'}${mediumFor}`];
     if (unsafe > 0) parts.push(`${formatDistanceCompact(unsafe)} unsafe`);
+    if (medium > 0 && unsafe > 0) parts.push(`${formatDistanceCompact(medium)} medium`);
     return { level: label.toLowerCase(), text: parts.join(' · ') };
   }
 
@@ -692,7 +694,7 @@
     const routeNo = route.display_route_no ?? index + 1;
     const isBest = route === best;
     const swatch = isBest
-      ? (route.category === 'eliminated' ? 'best-unsafe' : 'best')
+      ? { safe: 'best', caution: 'best-caution', unsafe: 'best-unsafe' }[getRouteSafetyTier(route)]
       : route.category === 'available' ? 'available' : 'eliminated';
     const tag = isBest ? ' · best' : route.category === 'eliminated' ? ' · eliminated' : '';
     const risk = describeRouteRisk(route);
@@ -737,7 +739,7 @@
     $('msimVerdictTitle').textContent = ROUTE_VERDICTS[tier].title;
     const VERDICT_SUBS = {
       safe: `${peak.label}: ${peak.value}`,
-      caution: `${describeModerateFloodCrossing(best)} ${MODERATE_FLOOD_WARNING}`,
+      caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
       unsafe: `${peak.label}: ${peak.value}. Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'}, so be extra careful.`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];

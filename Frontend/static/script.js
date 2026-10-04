@@ -1571,7 +1571,8 @@ function buildRouteEtaLabel(route) {
   const name = route?.display_route_no != null
     ? `Route ${route.display_route_no}${tag ? ` · ${tag}` : ''}`
     : tag;
-  return `<div class="route-eta route-eta--${category}">
+  const caution = isBest && getRouteSafetyTier(route) === 'caution' ? ' route-eta--caution' : '';
+  return `<div class="route-eta route-eta--${category}${caution}">
     ${safetyIcon('walk')}
     <div class="route-eta-text">
       ${name ? `<em class="route-eta-name">${escapeHtml(name)}</em>` : ''}
@@ -1591,7 +1592,7 @@ function getFloodRiskLabelFromVar(varValue) {
     case 3:
       return 'High';
     case 2:
-      return 'Moderate';
+      return 'Medium';
     case 1:
     default:
       return 'Low';
@@ -1612,7 +1613,10 @@ function formatFloodPeakRisk(route) {
     return getFloodRiskLabelFromVar(Math.max(...vars));
   }
 
-  return getRiskLevelLabelFromScore(route?.max_hazard);
+  // Project NOAH's class names: Medium, not the earthquake scale's Moderate.
+  const score = Number(route?.max_hazard);
+  if (!Number.isFinite(score)) return 'Unknown';
+  return score >= 5 ? 'High' : score >= 3 ? 'Medium' : 'Low';
 }
 
 // Project NOAH's flood depth classes (Var 1/2/3). The layers carry only the
@@ -1649,7 +1653,7 @@ function formatFloodPeakRiskWithHazard(route) {
 }
 
 // A flood route has three outcomes, not two. High water (over 1.5 m) rules
-// it out. Moderate water (0.5–1.5 m) is not called safe either: it is unsafe
+// it out. Medium water (0.5–1.5 m) is not called safe either: it is unsafe
 // for children and older adults past 0.5 m and for anyone past 1.2 m (AIDR
 // Flood Hazard Guideline 7-3, 2017, classes H3/H4), so the route is passable
 // only with caution. Earthquake routes are safe or not.
@@ -1665,17 +1669,17 @@ const ROUTE_VERDICTS = {
   unsafe: { title: 'No safe route', card: 'danger', icon: 'alert' },
 };
 
-function getModerateFloodDistance(route) {
+function getMediumFloodDistance(route) {
   return Number(route?.hazard_distances?.['3']) || 0;
 }
 
-const MODERATE_FLOOD_WARNING = 'Not safe for children, older adults, PWDs or pregnant women, or where the water is flowing.';
+const MEDIUM_FLOOD_WARNING = 'Not safe for children, older adults, PWDs or pregnant women, or where the water is flowing.';
 
-function describeModerateFloodCrossing(route) {
-  const distance = getModerateFloodDistance(route);
+function describeMediumFloodCrossing(route) {
+  const distance = getMediumFloodDistance(route);
   return distance > 0
-    ? `The best route walks through about ${formatDistanceCompact(distance)} of moderate flooding (0.5–1.5 m deep).`
-    : 'The best route walks through moderate flooding (0.5–1.5 m deep).';
+    ? `The best route walks through about ${formatDistanceCompact(distance)} of medium flooding (0.5–1.5 m deep).`
+    : 'The best route walks through medium flooding (0.5–1.5 m deep).';
 }
 
 // The "peak" row of the route safety panel and the PDF report.
@@ -2579,8 +2583,9 @@ function hydrateActiveEarthquakeView(viewKey = activeEarthquakeView) {
 }
 
 // The map legend's route rows (flood here, earthquake in earthquake.js).
-// When no route is safe, the best route is the least risky eliminated one,
-// drawn solid red (createRouteGroup in osm.js), and the legend says so.
+// The best route's swatch takes its line's color (getBestRouteColor in
+// osm.js): amber through Medium water, and when no route is safe, the least
+// risky eliminated one in solid red, with no available routes.
 function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   const row = (swatch, label) => `<div class="legend-row">${swatch}<span style="font-size:.78rem;">${label}</span></div>`;
   // Like the lines on the map (osm.js): solid, with a thin darker edge, and
@@ -2588,12 +2593,13 @@ function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   // (mobile-sim.js) drop the rows for routes not on the map.
   const line = (color, kind = '') => `<div class="legend-line${kind ? ` legend-line--${kind}` : ''}" style="${routeLegendSwatchStyle(color, kind)}"></div>`;
   const eliminatedRow = row(line(ROUTE_ELIMINATED_COLOR, 'eliminated'), 'Eliminated route');
-  const noSafeRoute = routes.length > 0 && routes.every(route => route.category === 'eliminated');
+  const best = getBestRoute(routes);
+  const bestRow = row(line(best ? getBestRouteColor(best) : ROUTE_BEST_COLOR), 'Best route');
 
-  if (noSafeRoute) {
-    return row(line(ROUTE_BEST_UNSAFE_COLOR), 'Best route') + eliminatedRow;
+  if (best && getRouteSafetyTier(best) === 'unsafe') {
+    return bestRow + eliminatedRow;
   }
-  return row(line(ROUTE_BEST_COLOR), 'Best route')
+  return bestRow
     + row(line(ROUTE_AVAILABLE_COLOR, 'available'), 'Available route')
     + eliminatedRow;
 }
@@ -4002,7 +4008,7 @@ function renderRouteSafetyPanel(result) {
   const unsafeParts = Number(best?.display_unsafe_segment_count ?? best?.threshold_exceedance_count ?? 0);
   const peakScore = Number(best?.max_hazard || 0);
   const { label: peakLabel, value: peakValue } = getPeakRiskRow(best, isEarthquake);
-  // Danger/red once it's actually High; amber/warning for Moderate; neutral for Low.
+  // Danger/red once it's actually High; amber/warning for Medium; neutral for Low.
   const peakClass = peakScore >= 5 ? 'danger' : peakScore >= 3 ? 'warning' : '';
   const tier = getRouteSafetyTier(best);
   const verdict = ROUTE_VERDICTS[tier];
@@ -4022,11 +4028,11 @@ function renderRouteSafetyPanel(result) {
       antSearchNote || 'The safest route is always shown first.',
     );
   } else if (tier === 'caution') {
-    // Routes with less Moderate water rank first, so when the best one has
+    // Routes with less Medium water rank first, so when the best one has
     // some, every route shown does.
     notes.push(
-      `We checked ${routeCountLabel} — none avoid moderate flooding; ${safe.length} avoid${safe.length === 1 ? 's' : ''} high flooding.`,
-      `${describeModerateFloodCrossing(best)} ${MODERATE_FLOOD_WARNING}`,
+      `We checked ${routeCountLabel} — none avoid medium flooding; ${safe.length} avoid${safe.length === 1 ? 's' : ''} high flooding.`,
+      `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
     );
     if (antSearchNote) notes.push(antSearchNote);
   } else {
@@ -4114,14 +4120,14 @@ function buildRouteModalCard(route, index) {
   const risk = isEarthquake
     ? getRiskLevelLabelFromScore(route.max_hazard)
     : formatFloodPeakRiskWithHazard(route);
-  const moderate = isEarthquake ? 0 : getModerateFloodDistance(route);
+  const medium = isEarthquake ? 0 : getMediumFloodDistance(route);
   const isActive = selectedRouteFocus
     && String(selectedRouteFocus.routeNo) === String(routeNo)
     && (selectedRouteFocus.category || '') === (route.category || '');
   const stats = [
     route.display_distance || 'Distance unavailable',
     risk,
-    ...(moderate > 0 ? [`${formatDistanceCompact(moderate)} in moderate water`] : []),
+    ...(medium > 0 ? [`${formatDistanceCompact(medium)} in medium water`] : []),
     `${unsafe} unsafe part${unsafe === 1 ? '' : 's'}`,
   ];
 
@@ -4148,7 +4154,7 @@ function openRouteListModal() {
   const countTier = tier => moreRoutes.filter(route => getRouteSafetyTier(route) === tier).length;
   const CAUTION_TEXT = {
     safe: '',
-    caution: `No route without moderate flooding was found. The routes below avoid high flooding but cross water 0.5–1.5 m deep. ${MODERATE_FLOOD_WARNING}`,
+    caution: `No route without medium flooding was found. The routes below avoid high flooding but cross water 0.5–1.5 m deep. ${MEDIUM_FLOOD_WARNING}`,
     unsafe: 'No fully safe route was found. Every route below still passes through a risky area, so treat them as backup options and review each one carefully.',
   };
   const cautionText = CAUTION_TEXT[getRouteSafetyTier(getBestRoute(routes))];
@@ -4593,7 +4599,7 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
 
   // Same slim line as the map (addRouteCasing in osm.js): a thin edge in a
   // darker shade of the route color, not a wide band covering the road.
-  const routeColor = route?.category === 'eliminated' ? ROUTE_BEST_UNSAFE_COLOR : ROUTE_BEST_COLOR;
+  const routeColor = getBestRouteColor(route);
   ctx.strokeStyle = getRouteEdgeColor(routeColor);
   ctx.lineWidth = 7;
   tracePath();
@@ -4709,8 +4715,8 @@ async function downloadSimulationReport() {
       ['Best route distance', best?.display_distance || 'Unavailable'],
       ['Estimated time to destination', best?.display_duration || 'Unavailable'],
       [peakLabel, peakValue],
-      ...(!isEq && getModerateFloodDistance(best) > 0
-        ? [['Moderate flooding crossed', `About ${formatDistanceCompact(getModerateFloodDistance(best))} (0.5–1.5 m deep). ${MODERATE_FLOOD_WARNING}`]]
+      ...(!isEq && getMediumFloodDistance(best) > 0
+        ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),
       ['Routes checked', `${routes.length} (${countTier('safe')} safe, ${cautionCount ? `${cautionCount} with caution, ` : ''}${countTier('unsafe')} not recommended)`],
       ['Best route found by', ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
