@@ -3171,11 +3171,15 @@ function buildRouteInfoHtml() {
     if (!earthquakeEvacSitesVisible) {
       return 'Location pinned. Now click <strong>Show Evacuation Sites</strong> to load the available evacuation shelters.';
     }
-    return `The system will compare routes from <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the evacuation sites that can still be reached. Click <strong>Run Earthquake Simulation</strong> to view the results.`;
+    return `The system will compare routes from <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the evacuation sites that can still be reached.<br>Click <strong>Run Earthquake Simulation</strong> to view the results.`;
   }
 
   if (startPin && endPin) {
-    return `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to <strong>${escapeHtml(describePinPlace(endPin))}</strong>. Click <strong>Run Simulation</strong>.`;
+    // The box is justified, and the wide monospace names leave "Click" only a
+    // word or two of company on its line, so the spaces there stretch wide.
+    // The <br> starts the instruction on a fresh line; the line before a
+    // forced break isn't stretched.
+    return `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to <strong>${escapeHtml(describePinPlace(endPin))}</strong>.<br>Click <strong>Run Simulation</strong>.`;
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
   if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;
