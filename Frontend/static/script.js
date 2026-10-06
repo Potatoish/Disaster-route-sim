@@ -1794,8 +1794,8 @@ const ROUTE_FOUND_BY_TEXT = {
   backup_search: 'Backup search',
 };
 
-// Where a result's hazard levels and roads come from. The results panels and
-// the PDF report link to these and to the About page's full list
+// Where a result's hazard levels and roads come from. The results panels link
+// to these; the PDF report also links to the About page's full list
 // (#data-sources in about.html, which lists the same links).
 const DATA_SOURCES_PAGE_PATH = '/about#data-sources';
 const DATA_SOURCES = {
@@ -1814,10 +1814,9 @@ function buildSourceLink(text, url) {
 // simulator would drop the simulation.
 function buildHazardSourceNoteHtml(isEarthquake) {
   const { noah, phivolcs, hazardHunter } = DATA_SOURCES;
-  const source = isEarthquake
+  return isEarthquake
     ? `These hazard levels are traced from ${buildSourceLink(phivolcs.name, phivolcs.url)} maps on ${buildSourceLink(hazardHunter.name, hazardHunter.url)}.`
     : `These hazard levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood hazard map, a modeled scenario, not live conditions.`;
-  return `${source} ${buildSourceLink('All data sources', DATA_SOURCES_PAGE_PATH)}`;
 }
 
 // The PDF report's sources: what this simulation used, each with its link.
