@@ -39,29 +39,29 @@
   ],
   "sta lucia": [
     {
-      "id": "de-castro-elementary-school",
-      "name": "De Castro Elementary School",
-      "lat": 14.58708753759616,
-      "lng": 121.09845942417452,
-      "address": "De Castro Elementary School, Sta. Lucia, Pasig City",
+      "id": "1-east-bank-road",
+      "name": "1 East Bank Road",
+      "lat": 14.588797662452732,
+      "lng": 121.09389844474939,
+      "address": "1 East Bank Road, Sta. Lucia, Pasig City",
       "site_setup": "Open-area assembly point",
       "surroundings": "No tall buildings nearby"
     },
     {
-      "id": "sta-lucia-bliss-multipurpose-hall",
-      "name": "Sta. Lucia Bliss Multipurpose Hall",
-      "lat": 14.588174499166966,
-      "lng": 121.09952699543236,
-      "address": "Sta. Lucia Bliss Multipurpose Hall, Sta. Lucia, Pasig City",
+      "id": "super-8-grocery-warehouse-ortigas-ext",
+      "name": "Super 8 Grocery Warehouse Ortigas Ext.",
+      "lat": 14.588195452187648,
+      "lng": 121.10273900580614,
+      "address": "Super 8 Grocery Warehouse, Ortigas Ext., Sta. Lucia, Pasig City",
       "site_setup": "Open-area assembly point",
       "surroundings": "No tall buildings nearby"
     },
     {
-      "id": "countryside-multipurpose-center",
-      "name": "Countryside Multipurpose Center",
-      "lat": 14.587375171199472,
-      "lng": 121.10118527828448,
-      "address": "Countryside Multipurpose Center, Sta. Lucia, Pasig City",
+      "id": "sm-city-east-ortigas",
+      "name": "SM City East Ortigas",
+      "lat": 14.588133154480003,
+      "lng": 121.10597911434877,
+      "address": "SM City East Ortigas, Sta. Lucia, Pasig City",
       "site_setup": "Open-area assembly point",
       "surroundings": "No tall buildings nearby"
     }
