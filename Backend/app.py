@@ -23,12 +23,8 @@ from osm_routing import (
 )
 from simulation_progress import get_progress, reset_progress
 
-# The pages and their CSS/JS/images live in Frontend/, next to Backend/.
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "Frontend"
 
-# /health never renders a page, so a deploy that left Frontend/ out would pass
-# Railway's health check and go live with every page broken. Refuse to start
-# instead, which keeps the previous deploy serving.
 if not (FRONTEND_DIR / "templates" / "index.html").is_file():
     raise RuntimeError(
         f"Frontend not found at {FRONTEND_DIR}. Build and deploy from the "
@@ -43,13 +39,8 @@ app = Flask(
 )
 CORS(app)
 
-
 @app.url_defaults
 def _version_static_urls(endpoint, values):
-    # Production sends static files with no Cache-Control, so phones fall back
-    # to heuristic caching and can keep serving an old home.css/script.js for
-    # hours after a deploy. Stamping every url_for('static', ...) with the
-    # file's mtime changes the URL whenever the file does, forcing a refetch.
     if endpoint != "static" or "v" in values:
         return
     filename = values.get("filename")
