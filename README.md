@@ -18,7 +18,7 @@ The visitor picks a barangay and a hazard, pins a start point (and, for floods, 
 
 - **ACO route search** — every route comes from ant colonies: a main colony finds the best route, then four smaller colonies, each steered away from the roads already chosen, find genuinely different alternatives. A shortest-path search (Dijkstra) that ranks routes the same safety-first way is run as a check: its route is added only when it is strictly safer than every route the ants found, and the result says which search found the best route.
 - **Safety-first ranking** — a route that crosses any road above the safe hazard threshold is ruled out and placed below every safe route, however much shorter it is. Safe routes are ranked by hazard exposure first and distance last.
-- **Three flood verdicts** — High water (over 1.5 m) rules a route out. Medium water (0.5–1.5 m) is unsafe for children and older adults and, past 1.2 m, for anyone (AIDR Flood Hazard Guideline 7-3, 2017), so a route through it is shown as "Walk with caution" with the metres of Medium water it crosses, drawn as an amber line, never as safe. Only a route entirely in Low water (up to 0.5 m) is a "Safe route found", and such a route always ranks first.
+- **Three flood verdicts** — High water (over 1.5 m) rules a route out. Medium water (0.5–1.5 m) is unsafe for children and older adults and, past 1.2 m, for anyone (AIDR Flood Hazard Guideline 7-3, 2017), so a route through it is shown as a "Risky route" with the metres of Medium water it crosses, drawn as an amber line, never as safe. Only a route entirely in Low water (up to 0.5 m) is a "Safe route found", and such a route always ranks first.
 - **Missing data is never "safe"** — routes stay on roads inside the area the hazard data covers; a road without a hazard reading is treated as high hazard.
 - **Routes on the street** — routes start and end where each pin meets the nearest road, never drawn through buildings.
 - **Results** — a verdict (safe route found or not), each route's distance, estimated walking time (at 5 km/h), highest hazard level crossed and turn-by-turn steps, up to five routes on the map, and a downloadable PDF report.
@@ -41,11 +41,15 @@ The visitor picks a barangay and a hazard, pins a start point (and, for floods, 
 
 | Data | Source | Files |
 |---|---|---|
-| Flood hazard levels | Project NOAH | `Backend/data/flood_classes/` |
-| Liquefaction and ground shaking | PHIVOLCS (HazardHunterPH) | `Backend/data/earthquake/liquefaction.geojson`, `ground_shaking.geojson` |
+| Flood hazard levels | [Project NOAH](https://noah.up.edu.ph/) 25-year flood hazard map (a modeled scenario) | `Backend/data/flood_classes/` |
+| Liquefaction and ground shaking | [PHIVOLCS](https://www.phivolcs.dost.gov.ph/) maps on [HazardHunterPH](https://hazardhunter.georisk.gov.ph/), traced by the team | `Backend/data/earthquake/liquefaction.geojson`, `ground_shaking.geojson` |
 | Evacuation sites | Pinagbuhatan (4), Sta. Lucia (3) | `Backend/data/earthquake/evacuation_sites.json` |
-| Road network | OpenStreetMap, via OSMnx | `Backend/data/graphs/` |
+| Road network | [OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL), via [OSMnx](https://osmnx.readthedocs.io/) | `Backend/data/graphs/` |
+| Walking limits in flood water | [AIDR Flood Hazard Guideline 7-3](https://knowledge.aidr.org.au/media/3518/adr-guideline-7-3.pdf) | — |
+| Body heights in the flood scene | [DOST-FNRI](https://www.fnri.dost.gov.ph/) | — |
 | Barangay boundaries | — | `Backend/data/boundaries/` |
+
+The About page lists the same sources (`#data-sources`); the homepage, the simulator results and the PDF report link to it.
 
 ## Screenshots
 

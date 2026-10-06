@@ -17,7 +17,7 @@
       <div>
         <div class="panel">
           <h3>Project overview</h3>
-          <p>AGNAS helps you plan safer walking routes in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City. Using official flood and earthquake hazard maps from Project NOAH and PHIVOLCS, it shows which routes avoid high-risk streets, with the safest ones listed first. Use it to plan ahead before a disaster, not during an emergency.</p>
+          <p>AGNAS helps you plan safer walking routes in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City. Using official flood and earthquake hazard maps from <a class="src-link" href="https://noah.up.edu.ph/" target="_blank" rel="noopener">Project NOAH</a> and <a class="src-link" href="https://www.phivolcs.dost.gov.ph/" target="_blank" rel="noopener">PHIVOLCS</a>, it shows which routes avoid high-risk streets, with the safest ones listed first. Use it to plan ahead before a disaster, not during an emergency.</p>
         </div>
         <div class="panel">
           <h3>Architecture</h3>
@@ -26,11 +26,31 @@
           <div class="credit-row"><b>Service</b><span>Flask, OSMnx, ACO engine</span></div>
           <div class="credit-row"><b>Data</b><span>Offline multi-hazard datasets</span></div>
         </div>
-        <div class="panel">
-          <h3>Data credit</h3>
-          <div class="credit-row"><b>Flood hazard levels</b><span>Project NOAH</span></div>
-          <div class="credit-row"><b>Liquefaction &amp; ground shaking</b><span>Hazard Hunter PH</span></div>
-          <div class="credit-row"><b>Road network</b><span>OpenStreetMap / OSMnx</span></div>
+        {# Linked from the homepage, the simulator results and the PDF report. #}
+        <div class="panel" id="data-sources">
+          <h3>Data sources</h3>
+          <ul class="source-list">
+            <li>
+              <b>Flood hazard levels</b>
+              <p><a class="src-link" href="https://noah.up.edu.ph/" target="_blank" rel="noopener">Project NOAH</a> 25-year flood hazard map. It is a modeled flood scenario, not live flood conditions.</p>
+            </li>
+            <li>
+              <b>Liquefaction &amp; ground shaking</b>
+              <p><a class="src-link" href="https://www.phivolcs.dost.gov.ph/" target="_blank" rel="noopener">PHIVOLCS</a> hazard maps on <a class="src-link" href="https://hazardhunter.georisk.gov.ph/" target="_blank" rel="noopener">HazardHunterPH</a>, traced by the team.</p>
+            </li>
+            <li>
+              <b>Road network</b>
+              <p><a class="src-link" href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a> contributors, under the <a class="src-link" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Open Database License</a>. Downloaded with <a class="src-link" href="https://osmnx.readthedocs.io/" target="_blank" rel="noopener">OSMnx</a>.</p>
+            </li>
+            <li>
+              <b>Walking limits in flood water</b>
+              <p><a class="src-link" href="https://knowledge.aidr.org.au/media/3518/adr-guideline-7-3.pdf" target="_blank" rel="noopener">AIDR Flood Hazard Guideline 7-3 (PDF)</a>: water past 0.5 m is unsafe for children and older adults, and past 1.2 m for anyone.</p>
+            </li>
+            <li>
+              <b>Body heights in the flood scene</b>
+              <p><a class="src-link" href="https://www.fnri.dost.gov.ph/" target="_blank" rel="noopener">DOST-FNRI</a> standard Filipino adult height (163 cm).</p>
+            </li>
+          </ul>
         </div>
       </div>
 

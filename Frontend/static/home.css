@@ -352,6 +352,18 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .credit-row:first-of-type{ border-top:none; padding-top:0; }
 .credit-row b{ color:var(--text); }
 .credit-row span{ color:var(--muted); font-family:var(--font-meta); font-size:11.5px; }
+/* Data sources (About page): each source names what it feeds, then links to it.
+   Other pages link to #data-sources, so it clears the sticky nav. */
+#data-sources{ scroll-margin-top:90px; }
+.source-list{ list-style:none; margin:0; padding:0; }
+.source-list li{ display:grid; gap:3px; padding-block:10px; border-top:1px dashed var(--border); }
+.source-list li:first-child{ border-top:none; padding-top:0; }
+.source-list li:last-child{ padding-bottom:0; }
+.source-list b{ font-size:13px; color:var(--text); }
+.source-list p{ margin:0; font-size:12.5px; }
+/* A link to a data source, in running text (About, homepage). */
+.src-link{ color:var(--accent); text-decoration:underline; text-underline-offset:2px; font-weight:600; }
+.src-link:hover{ text-decoration-thickness:2px; }
 
 /* ---------- RESEARCH TEAM ---------- */
 .research-panel{ margin-top:14px; }
@@ -911,6 +923,9 @@ body.dark .hz-section{
   .hz-depth input[type="range"]{ height:44px; }
   .form-row input, .fab-field select, .rate-row button{ min-height:44px; }
   .foot-links a{ display:inline-flex; align-items:center; min-height:44px; padding-block:0; padding-inline:6px; }
+  /* Source links sit in running text, so they keep the line and gain a band. */
+  .src-link{ position:relative; }
+  .src-link::after{ content:""; position:absolute; inset:calc((44px - 100%) / -2) 0; }
 
   .fab-panel-close, .tutorial-modal-close, .scope-modal-close{ position:relative; }
   .fab-panel-close::after, .tutorial-modal-close::after, .scope-modal-close::after{

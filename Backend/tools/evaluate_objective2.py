@@ -32,8 +32,8 @@ flood road's hazard factor is 0 (Low or no flood), 0.5 (Medium) or 1 (High), so
 Medium m = 2 x (risk distance - unsafe distance).
 
 Verdicts use the app's wording: "Safe route found" (Low or no flood water only),
-"Walk with caution" (Medium water, no High) and "No safe route" (High water).
-When the app renames "Walk with caution", change MEDIUM_VERDICT below and re-run
+"Risky route" (Medium water, no High) and "No safe route" (High water).
+When the app renames "Risky route", change MEDIUM_VERDICT below and re-run
 --summarize; verdicts are recomputed from the metres, so no simulation re-run.
 
 Run from the repository root:
@@ -88,7 +88,7 @@ COLUMNS = (
 )
 TOL = 0.01  # metres; route figures are rounded to 2 decimals
 SAFE_VERDICT = "Safe route found"
-MEDIUM_VERDICT = "Walk with caution"  # the app's label; change here if the app renames it
+MEDIUM_VERDICT = "Risky route"  # the app's label; change here if the app renames it
 UNSAFE_VERDICT = "No safe route"
 FLOOD_VERDICTS = (SAFE_VERDICT, MEDIUM_VERDICT, UNSAFE_VERDICT)
 EARTHQUAKE_VERDICTS = (SAFE_VERDICT, UNSAFE_VERDICT)

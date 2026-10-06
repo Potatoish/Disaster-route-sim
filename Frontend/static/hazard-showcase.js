@@ -18,10 +18,12 @@
   // to 0.5 m, Medium to 1.5 m, High above.
   const levelFor = d => (d <= 0.5 ? 'low' : d <= 1.5 ? 'medium' : 'high');
   // The readout's Walking row: AGNAS plans walking routes only, so it says
-  // whether a person can walk through, not whether a road is open. It follows
-  // the depth, not the class: past 1.2 m floodwater is unsafe for any adult
-  // (AIDR Flood Hazard Guideline 7-3, class H4), which is still Medium.
-  const walkFor = d => (d <= 0.5 ? ['safe', 'Walkable'] : d <= 1.2 ? ['risk', 'Walk with caution'] : ['elim', 'Not walkable']);
+  // whether a person can walk through, not whether a road is open. It uses the
+  // same classes as the routes (Medium water makes a "Risky route"), and past
+  // 1.2 m it adds that the water is unsafe even for adults (AIDR Flood Hazard
+  // Guideline 7-3, class H4), which Project NOAH still counts as Medium.
+  const walkFor = d => (d <= 0.5 ? ['safe', 'Walkable'] : d <= 1.5 ? ['risk', 'Risky'] : ['elim', 'Not walkable']);
+  const ADULT_LIMIT_DEPTH = 1.2;
 
   // Water depth (m) up to each body landmark, from standard proportions of
   // standing height: a 163 cm adult (DOST-FNRI) and a 130 cm child.
@@ -34,7 +36,7 @@
     [0.5, 'Walking is slower. Keep children close.'],
     [0.8, 'Hard to walk. Carry small children.'],
     [1.2, 'Hard to stay standing. Children can be swept away.'],
-    [1.5, 'Too deep to walk through.'],
+    [1.5, 'Even adults struggle to stay standing.'],
     [9, 'Too deep. Stay on higher ground.'],
   ];
 
@@ -72,7 +74,10 @@
     $('hzLevel').textContent = lvl.label;
     $('hzLevelNote').textContent = firstAtOrAbove(DEPTH_NOTES, depth);
     const [walkClass, walkText] = walkFor(depth);
-    $('hzRoad').innerHTML = `<span class="hz-chip hz-chip--${walkClass}">${walkText}</span>`;
+    const walkNote = walkClass === 'risk' && depth > ADULT_LIMIT_DEPTH
+      ? '<span class="hz-note">Past 1.2 m, unsafe even for adults.</span>'
+      : '';
+    $('hzRoad').innerHTML = `<span class="hz-chip hz-chip--${walkClass}">${walkText}</span>${walkNote}`;
   }
 
   cards.forEach(card => card.addEventListener('click', () => setDepth(LEVELS[card.dataset.level].preset)));

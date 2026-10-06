@@ -1655,8 +1655,9 @@ function formatFloodPeakRiskWithHazard(route) {
 // A flood route has three outcomes, not two. High water (over 1.5 m) rules
 // it out. Medium water (0.5–1.5 m) is not called safe either: it is unsafe
 // for children and older adults past 0.5 m and for anyone past 1.2 m (AIDR
-// Flood Hazard Guideline 7-3, 2017, classes H3/H4), so the route is passable
-// only with caution. Earthquake routes are safe or not.
+// Flood Hazard Guideline 7-3, 2017, classes H3/H4), so the route is a "Risky
+// route": passable, but not safe for everyone. "Risky" means Medium water
+// only; High water is a "high-hazard area". Earthquake routes are safe or not.
 function getRouteSafetyTier(route) {
   if (!route || route.category === 'eliminated') return 'unsafe';
   if (!isEarthquakeRouteRecord(route) && Number(route.max_hazard) >= 3) return 'caution';
@@ -1665,7 +1666,7 @@ function getRouteSafetyTier(route) {
 
 const ROUTE_VERDICTS = {
   safe: { title: 'Safe route found', card: 'success', icon: 'shield' },
-  caution: { title: 'Walk with caution', card: 'warning', icon: 'alert' },
+  caution: { title: 'Risky route', card: 'warning', icon: 'alert' },
   unsafe: { title: 'No safe route', card: 'danger', icon: 'alert' },
 };
 
@@ -1792,6 +1793,47 @@ const ROUTE_FOUND_BY_TEXT = {
   shortest_path: 'Shortest-path check',
   backup_search: 'Backup search',
 };
+
+// Where a result's hazard levels and roads come from. The results panels and
+// the PDF report link to these and to the About page's full list
+// (#data-sources in about.html, which lists the same links).
+const DATA_SOURCES_PAGE_PATH = '/about#data-sources';
+const DATA_SOURCES = {
+  noah: { name: 'Project NOAH', url: 'https://noah.up.edu.ph/' },
+  phivolcs: { name: 'PHIVOLCS', url: 'https://www.phivolcs.dost.gov.ph/' },
+  hazardHunter: { name: 'HazardHunterPH', url: 'https://hazardhunter.georisk.gov.ph/' },
+  aidr: { name: 'AIDR Flood Hazard Guideline 7-3', url: 'https://knowledge.aidr.org.au/media/3518/adr-guideline-7-3.pdf' },
+  osm: { name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/copyright' },
+};
+
+function buildSourceLink(text, url) {
+  return `<a class="src-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`;
+}
+
+// The results' source line, as HTML. New tab for every link: leaving the
+// simulator would drop the simulation.
+function buildHazardSourceNoteHtml(isEarthquake) {
+  const { noah, phivolcs, hazardHunter } = DATA_SOURCES;
+  const source = isEarthquake
+    ? `These hazard levels are traced from ${buildSourceLink(phivolcs.name, phivolcs.url)} maps on ${buildSourceLink(hazardHunter.name, hazardHunter.url)}.`
+    : `These hazard levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood hazard map, a modeled scenario, not live conditions.`;
+  return `${source} ${buildSourceLink('All data sources', DATA_SOURCES_PAGE_PATH)}`;
+}
+
+// The PDF report's sources: what this simulation used, each with its link.
+function getReportDataSources(isEarthquake) {
+  const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
+  const hazardRows = isEarthquake
+    ? [{ label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url }]
+    : [
+      { label: 'Flood hazard levels', text: 'Project NOAH 25-year flood hazard map (a modeled scenario, not live conditions)', url: noah.url },
+      { label: 'Walking limits in flood water', text: aidr.name, url: aidr.url },
+    ];
+  return [
+    ...hazardRows,
+    { label: 'Road network', text: 'OpenStreetMap contributors, under the Open Database License', url: osm.url },
+  ];
+}
 
 // The PDF's fuller account of the search (the report can be technical).
 function buildAcoReportSummary(result = simData) {
@@ -4038,18 +4080,14 @@ function renderRouteSafetyPanel(result) {
   } else {
     notes.push(
       `We checked ${routeCountLabel} — none are completely safe.`,
-      `Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'} — be extra careful.`,
+      `Best option still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'} — be extra careful.`,
     );
     if (antSearchNote) notes.push(antSearchNote);
   }
-  if (isEarthquake) {
-    if (result.active_view_label) {
-      notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
-    }
-    notes.push('These hazard levels are based on Hazard Hunter PH data.');
-  } else {
-    notes.push('These hazard levels are based on Project NOAH flood hazard maps.');
+  if (isEarthquake && result.active_view_label) {
+    notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
   }
+  const sourceNoteHtml = buildHazardSourceNoteHtml(isEarthquake);
 
   const bestTurnSteps = getRouteTurnSteps(best);
   const chipLabel = `${start} → ${end}`;
@@ -4100,7 +4138,7 @@ function renderRouteSafetyPanel(result) {
         <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div></div>
       </div>
     </div>
-    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>
+    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
@@ -4155,7 +4193,7 @@ function openRouteListModal() {
   const CAUTION_TEXT = {
     safe: '',
     caution: `No route without medium flooding was found. The routes below avoid high flooding but cross water 0.5–1.5 m deep. ${MEDIUM_FLOOD_WARNING}`,
-    unsafe: 'No fully safe route was found. Every route below still passes through a risky area, so treat them as backup options and review each one carefully.',
+    unsafe: 'No fully safe route was found. Every route below still passes through a high-hazard area, so treat them as backup options and review each one carefully.',
   };
   const cautionText = CAUTION_TEXT[getRouteSafetyTier(getBestRoute(routes))];
   const caution = cautionText
@@ -4167,7 +4205,7 @@ function openRouteListModal() {
     : '<div class="route-modal-empty">No other routes were found for this trip.</div>');
   if (count) {
     const parts = [`${moreRoutes.length} more route${moreRoutes.length === 1 ? '' : 's'}`, `${countTier('safe')} safe`];
-    if (countTier('caution')) parts.push(`${countTier('caution')} with caution`);
+    if (countTier('caution')) parts.push(`${countTier('caution')} risky`);
     count.textContent = parts.join(' · ');
   }
 
@@ -4718,7 +4756,7 @@ async function downloadSimulationReport() {
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),
-      ['Routes checked', `${routes.length} (${countTier('safe')} safe, ${cautionCount ? `${cautionCount} with caution, ` : ''}${countTier('unsafe')} not recommended)`],
+      ['Routes checked', `${routes.length} (${countTier('safe')} safe, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
       ['Best route found by', ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
     ];
     const acoSummary = buildAcoReportSummary(simData);
@@ -4744,10 +4782,54 @@ async function downloadSimulationReport() {
     doc.text(wrappedRanking, margin, y);
     y += wrappedRanking.length * 12 + 10;
 
+    // A block that would run off the page starts a new one.
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const ensureSpace = height => {
+      if (y + height > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+    const LINK_RGB = [29, 78, 216];
+
+    // Data sources: what this simulation used, each with a clickable link,
+    // then the About page's full list.
+    const sources = getReportDataSources(isEq);
+    doc.setFontSize(9);
+    const sourceRows = sources.map(source => ({ ...source, lines: doc.splitTextToSize(source.text, valueWidth) }));
+    ensureSpace(32 + sourceRows.reduce((total, row) => total + row.lines.length * 11 + 15, 0));
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text('Data sources', margin, y);
+    y += 15;
+    doc.setFontSize(9);
+    sourceRows.forEach(({ label, lines, url }) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0);
+      doc.text(label, margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.text(lines, margin + labelColWidth, y);
+      y += lines.length * 11;
+      doc.setTextColor(...LINK_RGB);
+      doc.textWithLink(url, margin + labelColWidth, y, { url });
+      y += 15;
+    });
+    const allSourcesUrl = new URL(DATA_SOURCES_PAGE_PATH, window.location.origin).href;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('All data sources', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...LINK_RGB);
+    doc.textWithLink(allSourcesUrl, margin + labelColWidth, y, { url: allSourcesUrl });
+    doc.setTextColor(0);
+    y += 20;
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(150);
     const wrappedDisclaimer = doc.splitTextToSize(SAFETY_DISCLAIMER_TEXT, pageWidth - margin * 2);
+    ensureSpace(wrappedDisclaimer.length * 11);
+    doc.setTextColor(150);
     doc.text(wrappedDisclaimer, margin, y);
     doc.setTextColor(0);
 

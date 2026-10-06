@@ -1830,6 +1830,9 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-notes { margin-top: 11px; padding: 10px 11px; border-left: 2px solid var(--border2); color: var(--muted); font-size: .79rem; line-height: 1.55; }
 .safety-notes em { color: var(--ink-strong); font-weight: 700; }
 .safety-notes ul { margin: 5px 0 0 15px; }
+/* A link to a data source in the results (desktop panel and mobile sheet). */
+.src-link { color: var(--accent); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.src-link:hover { text-decoration-thickness: 2px; }
 .safety-disclaimer { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border2); }
 .safety-disclaimer-label { display: block; margin-bottom: 3px; color: var(--ink-strong); font-weight: 700; }
 .safety-disclaimer-text { margin: 0; color: var(--text); font-size: .76rem; font-weight: 500; line-height: 1.55; }
@@ -2555,6 +2558,17 @@ body.dark .leaflet-popup-close-button {
     content: "";
     position: absolute;
     inset: calc((44px - 100%) / -2);
+  }
+
+  /* Source links sit in running text, so they keep the line and gain a band. */
+  .src-link {
+    position: relative;
+  }
+
+  .src-link::after {
+    content: "";
+    position: absolute;
+    inset: calc((44px - 100%) / -2) 0;
   }
 
   /* Leaflet's stock Map/Satellite radios are 13px; the label row is what

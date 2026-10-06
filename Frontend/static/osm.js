@@ -17,7 +17,7 @@ const ROUTE_TRAIL_GAP = 7;
 const ROUTE_BEST_COLOR = '#22c55e';
 // Slate gray, so the green best route is the one that stands out.
 const ROUTE_AVAILABLE_COLOR = '#64748b';
-// A best route through Medium flood water ("Walk with caution") is amber.
+// A best route through Medium flood water ("Risky route") is amber.
 const ROUTE_BEST_CAUTION_COLOR = '#f59e0b';
 // When no route is safe, the "Best" one is bright red and the other
 // eliminated routes a darker brick red, so the two read apart.

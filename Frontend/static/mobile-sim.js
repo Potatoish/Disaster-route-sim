@@ -740,7 +740,7 @@
     const VERDICT_SUBS = {
       safe: `${peak.label}: ${peak.value}`,
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: `${peak.label}: ${peak.value}. Best option still passes through ${unsafeParts || 'a few'} risky area${unsafeParts === 1 ? '' : 's'}, so be extra careful.`,
+      unsafe: `${peak.label}: ${peak.value}. Best option still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}, so be extra careful.`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
@@ -758,10 +758,10 @@
     $('msimRouteList').innerHTML = ordered.map((route, index) => buildRouteRow(route, index, best)).join('');
     syncRouteRows();
 
-    const source = isEarthquake
-      ? 'These hazard levels are based on Hazard Hunter PH data.'
-      : 'These hazard levels are based on Project NOAH flood hazard maps.';
-    $('msimSource').textContent = [buildAntSearchNote(result), source].filter(Boolean).join(' ');
+    const antNote = buildAntSearchNote(result);
+    $('msimSource').innerHTML = [antNote && escapeHtml(antNote), buildHazardSourceNoteHtml(isEarthquake)]
+      .filter(Boolean)
+      .join(' ');
     scheduleSync();
   }
 
