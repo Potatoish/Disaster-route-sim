@@ -28,3 +28,7 @@ AGNAS_RESPONSIVE_SPEC.md
 
 # Routing evaluation output (re-creatable with the same --seed)
 Backend/tools/evaluation_results/
+
+# Evaluation scripts, kept on the team's machines only
+Backend/tools/evaluate_routing.py
+Backend/tools/evaluate_objective2.py
