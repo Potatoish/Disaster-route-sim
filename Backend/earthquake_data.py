@@ -201,8 +201,10 @@ def _normalize_evacuation_sites(raw_sites, canonical_barangay):
             "lat": float(site["lat"]),
             "lng": float(site["lng"]),
             "address": site.get("address") or fallback_address,
-            "site_setup": site.get("site_setup") or "Open-area assembly point",
-            "surroundings": site.get("surroundings") or "No tall buildings nearby",
+            # No defaults: "No tall buildings nearby" is a safety claim, so it
+            # is shown only for a site someone has described.
+            "site_setup": site.get("site_setup"),
+            "surroundings": site.get("surroundings"),
         })
     return sites
 

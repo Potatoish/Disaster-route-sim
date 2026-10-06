@@ -3,7 +3,7 @@
     {
       "id": "nagpayong-covered-court",
       "name": "Nagpayong Covered Court",
-      "lat": 14.539336863770531, 
+      "lat": 14.539336863770531,
       "lng": 121.10195436852801,
       "address": "Nagpayong Covered Court, Pinagbuhatan, Pasig City",
       "site_setup": "Open-area assembly point",
@@ -43,27 +43,21 @@
       "name": "1 East Bank Road",
       "lat": 14.588797662452732,
       "lng": 121.09389844474939,
-      "address": "1 East Bank Road, Sta. Lucia, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "address": "1 East Bank Road, Sta. Lucia, Pasig City"
     },
     {
       "id": "super-8-grocery-warehouse-ortigas-ext",
       "name": "Super 8 Grocery Warehouse Ortigas Ext.",
       "lat": 14.588195452187648,
       "lng": 121.10273900580614,
-      "address": "Super 8 Grocery Warehouse, Ortigas Ext., Sta. Lucia, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "address": "Super 8 Grocery Warehouse, Ortigas Ext., Sta. Lucia, Pasig City"
     },
     {
       "id": "sm-city-east-ortigas",
       "name": "SM City East Ortigas",
       "lat": 14.588343,
       "lng": 121.104561,
-      "address": "SM City East Ortigas, Sta. Lucia, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "address": "SM City East Ortigas, Sta. Lucia, Pasig City"
     }
   ]
 }

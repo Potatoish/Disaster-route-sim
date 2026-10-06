@@ -89,14 +89,22 @@
     });
   }
 
+  // Setup and surroundings are safety claims, so a site without them in the
+  // data shows no row rather than a reassuring default.
+  function buildEvacDetailRow(label, value) {
+    return value
+      ? `<div class="popup-row"><span>${label}</span><span>${escapeHtml(value)}</span></div>`
+      : '';
+  }
+
   function buildEvacInfoContent(site, isHighlighted) {
     return `
       <div class="popup-shell">
         <div class="popup-title">${escapeHtml(site.name)}</div>
         <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Target evacuation site' : 'Evacuation site'}</span></div>
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pasig City')}</span></div>
-        <div class="popup-row"><span>Site Setup</span><span>${escapeHtml(site.site_setup || 'Open-area assembly point')}</span></div>
-        <div class="popup-row"><span>Surroundings</span><span>${escapeHtml(site.surroundings || 'No tall buildings nearby')}</span></div>
+        ${buildEvacDetailRow('Site Setup', site.site_setup)}
+        ${buildEvacDetailRow('Surroundings', site.surroundings)}
       </div>`;
   }
 
