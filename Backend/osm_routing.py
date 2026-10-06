@@ -1,4 +1,6 @@
 import hashlib
+import heapq
+import itertools
 import json
 import math
 import os
@@ -1623,11 +1625,9 @@ def summarize_candidate_routes(routes):
 
 
 def shortest_path_baseline(G, start_node, end_node):
-    """The conventional answer the colony is checked against: Dijkstra on the
-    same hazard-weighted cost (route_cost) the ants weigh roads by. It is not
-    a candidate route -- it only steps in when it is strictly safer than
-    everything the ants found, or when they found nothing (see
-    finish_candidate_pool), and either way the result says so."""
+    """Conventional Dijkstra on the same hazard-weighted cost (route_cost) the
+    ants weigh roads by: the yardstick the evaluation tools compare the
+    colony against. The app's own check is safety_first_path."""
     try:
         path = nx.shortest_path(G, start_node, end_node, weight="route_cost")
     except (nx.NetworkXNoPath, nx.NodeNotFound):
@@ -1637,6 +1637,65 @@ def shortest_path_baseline(G, start_node, end_node):
     if len(path) < 2:
         return None
     return evaluate_route(G, path, 0, include_coordinates=False)
+
+
+def safety_first_path(G, start_node, end_node):
+    """Dijkstra in the ranking's own order (unsafe metres, then risk
+    distance, then length) rather than on route_cost. route_cost blends
+    hazard and distance, so it can rate a short wade through Medium water
+    below a much longer dry detour that the ranking would put first; this
+    search cannot miss that route. It is not a candidate route -- it only
+    steps in when it is strictly safer than everything the ants found, or
+    when they found nothing (see finish_candidate_pool), and either way the
+    result says so.
+
+    Lexicographic Dijkstra is exact here because every component of the
+    cost is non-negative and adds up along the path. Each step uses the
+    parallel edge evaluate_route would pick, so the totals match the
+    route's evaluation."""
+    if start_node not in G or end_node not in G:
+        return None
+
+    best_cost = {start_node: (0.0, 0.0, 0.0)}
+    previous = {}
+    settled = set()
+    tie_breaker = itertools.count()
+    queue = [((0.0, 0.0, 0.0), next(tie_breaker), start_node)]
+
+    while queue:
+        cost, _, node = heapq.heappop(queue)
+        if node in settled:
+            continue
+        if node == end_node:
+            break
+        settled.add(node)
+
+        for neighbor, parallel_edges in G.adj[node].items():
+            if neighbor in settled:
+                continue
+            edge = min(parallel_edges.values(), key=edge_traversal_cost)
+            length, hazard, hazard_factor = edge_metrics(edge)
+            step = (
+                cost[0] + (length if hazard > HAZARD_THRESHOLD else 0.0),
+                cost[1] + length * hazard_factor,
+                cost[2] + length,
+            )
+            if neighbor not in best_cost or step < best_cost[neighbor]:
+                best_cost[neighbor] = step
+                previous[neighbor] = node
+                heapq.heappush(queue, (step, next(tie_breaker), neighbor))
+
+    if end_node not in best_cost or start_node == end_node:
+        return None
+
+    path = [end_node]
+    while path[-1] != start_node:
+        path.append(previous[path[-1]])
+    path.reverse()
+
+    route = evaluate_route(G, path, 0, include_coordinates=False)
+    route["found_by"] = "shortest_path"
+    return route
 
 
 def route_search_seed(*parts):
@@ -2120,7 +2179,7 @@ def start_aco(G, start_node, end_node, rng):
         return colony
 
     colony["step_limit"] = estimate_ant_step_limit(G, start_node, end_node)
-    colony["baseline"] = shortest_path_baseline(G, start_node, end_node)
+    colony["baseline"] = safety_first_path(G, start_node, end_node)
     debug_print(f"[ACO] Reachable nodes to destination: {len(colony['goal_distance_map'])}")
     debug_print(f"[ACO] Ant step limit: {colony['step_limit']}")
 
@@ -2208,8 +2267,8 @@ def compare_with_baseline(best, baseline):
 
 def finish_candidate_pool(colony):
     """The routes the results are picked from: every distinct route the ants
-    completed. The shortest-path baseline joins only when it is strictly safer
-    than all of them (or the ants found nothing), and the backup search only
+    completed. The safety-first shortest path joins only when it is strictly
+    safer than all of them (or the ants found nothing), and the backup search only
     tops the pool up to FINAL_ROUTES_TO_SHOW distinct routes -- both marked
     in found_by, and the comparison recorded in the stats."""
     G, start_node, end_node = colony["G"], colony["start"], colony["end"]

@@ -437,11 +437,17 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
         if not colony["routes"] and colony["baseline"] is None:
             continue
 
-        # Rank this site by its few safest routes (or its shortest path when
-        # no ant got there), evaluated the earthquake way.
+        # Rank this site by its few safest routes, evaluated the earthquake
+        # way. Its safety-first shortest path counts too, under the rule
+        # finish_candidate_pool adds it by (strictly safer, or no ant got
+        # there): ants bound for a far site can miss its safest road, and the
+        # site would then lose to a nearer, less safe one.
         shortlist = sorted(colony["routes"].values(), key=safety_sort_key)[:SITE_PICK_ROUTES_PER_SITE]
-        if not shortlist:
-            shortlist = [colony["baseline"]]
+        baseline = colony["baseline"]
+        if baseline is not None and (
+            not shortlist or safety_sort_key(baseline)[:3] < safety_sort_key(shortlist[0])[:3]
+        ):
+            shortlist.append(baseline)
         site_best = min(
             _evaluate_colony_routes(base_graph, shortlist, evacuation_site, view_key, colony["pheromone"]),
             key=display_sort_key,

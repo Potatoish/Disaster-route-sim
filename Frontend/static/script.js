@@ -1774,7 +1774,7 @@ function buildAntSearchNote(result = simData) {
   const ants = formatCount(aco.ants_sent_all_sites ?? aco.ants_sent);
   const best = getBestRoute(Array.isArray(result?.routes) ? result.routes : []);
   if (best?.found_by === 'shortest_path') {
-    return `${ants} virtual ants searched the streets; a standard map check found a slightly safer way, so it is shown first.`;
+    return `${ants} virtual ants searched the streets; a standard map check found a safer way, so it is shown first.`;
   }
   return `${ants} virtual ants searched the streets, and the safest route they found is shown first.`;
 }

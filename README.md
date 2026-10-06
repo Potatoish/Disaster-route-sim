@@ -16,7 +16,7 @@ The visitor picks a barangay and a hazard, pins a start point (and, for floods, 
 
 ## Key Features
 
-- **ACO route search** — every route comes from ant colonies: a main colony finds the best route, then four smaller colonies, each steered away from the roads already chosen, find genuinely different alternatives. A conventional shortest-path search (Dijkstra) is run only as a check, and the result says how the ants' best route compares with it.
+- **ACO route search** — every route comes from ant colonies: a main colony finds the best route, then four smaller colonies, each steered away from the roads already chosen, find genuinely different alternatives. A shortest-path search (Dijkstra) that ranks routes the same safety-first way is run as a check: its route is added only when it is strictly safer than every route the ants found, and the result says which search found the best route.
 - **Safety-first ranking** — a route that crosses any road above the safe hazard threshold is ruled out and placed below every safe route, however much shorter it is. Safe routes are ranked by hazard exposure first and distance last.
 - **Three flood verdicts** — High water (over 1.5 m) rules a route out. Medium water (0.5–1.5 m) is unsafe for children and older adults and, past 1.2 m, for anyone (AIDR Flood Hazard Guideline 7-3, 2017), so a route through it is shown as "Walk with caution" with the metres of Medium water it crosses, drawn as an amber line, never as safe. Only a route entirely in Low water (up to 0.5 m) is a "Safe route found", and such a route always ranks first.
 - **Missing data is never "safe"** — routes stay on roads inside the area the hazard data covers; a road without a hazard reading is treated as high hazard.
