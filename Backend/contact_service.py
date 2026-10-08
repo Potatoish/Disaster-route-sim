@@ -1,4 +1,5 @@
-"""Delivery for the About page's contact form and the feedback widget.
+"""Delivery for the About page's contact form and the feedback widget, and the
+homepage's visitor count.
 
 Contact messages are emailed to the team inbox through Resend's HTTPS API.
 Railway's Free/Hobby plans block outbound SMTP, so Flask-Mail with Gmail SMTP
@@ -8,6 +9,9 @@ Feedback is anonymous evaluation data, so it goes to a Google Sheet (one row
 per response) through an Apps Script web app -- tools/feedback_sheet.gs --
 instead of one email each. The sheet's URL stays on the server, so the page
 cannot be used to write to the sheet directly.
+
+The visitor count lives in the same sheet (its "Visitors" tab), because
+Railway wipes the server's files on every deploy.
 
 Configuration comes from the environment, so nothing secret is committed:
 
@@ -44,7 +48,13 @@ MAX_PAGE_LENGTH = 200
 RATE_LIMITS = {
     "contact": (5, 10 * 60),
     "feedback": (10, 10 * 60),
+    # Generous: phones on the same mobile network can share one IP.
+    "visit": (30, 60 * 60),
 }
+
+# How long the homepage's visitor count is reused before the sheet is asked
+# again, so each page view doesn't wait on Apps Script.
+VISITOR_COUNT_CACHE_SECONDS = 120
 
 FEEDBACK_RATINGS = {1: "Confusing", 2: "Okay", 3: "Clear"}
 FEEDBACK_ROLES = {
@@ -59,6 +69,9 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 _RECENT_SENDS_LOCK = Lock()
 _RECENT_SENDS = {}
+
+_VISITOR_COUNT_LOCK = Lock()
+_VISITOR_COUNT = {"count": None, "fetched_at": 0.0}
 
 
 def _clean_line(value, limit):
@@ -225,3 +238,69 @@ def record_feedback(data, client_ip=None):
         return _error("Your feedback couldn't be saved right now. Please try again later.", 502, "send_failed")
 
     return {"error": False, "message": "Thanks for the feedback!"}, 200
+
+
+def _ask_visitor_sheet(action):
+    """The sheet's visitor count after `action` ("visitors" reads it, "visit"
+    adds one), or None if the sheet can't give one.
+
+    GET, not POST: until the sheet's Apps Script is updated, a POST would land
+    in its feedback handler and add a blank feedback row, while an old script
+    has no doGet at all, so a GET just fails.
+    """
+    sheet_url = os.environ.get("FEEDBACK_SHEET_URL", "").strip()
+    try:
+        response = requests.get(sheet_url, params={"action": action}, timeout=UPSTREAM_TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        print(f"[visitors] Could not reach the feedback sheet: {exc}")
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    count = body.get("count") if isinstance(body, dict) and body.get("ok") is True else None
+    if isinstance(count, bool) or not isinstance(count, (int, float)) or count < 0:
+        print(
+            "[visitors] The feedback sheet gave no visitor count (is its Apps Script up to date?): "
+            f"HTTP {response.status_code} {' '.join(response.text[:200].split())}"
+        )
+        return None
+    return int(count)
+
+
+def _remember_visitor_count(count):
+    with _VISITOR_COUNT_LOCK:
+        _VISITOR_COUNT.update(count=count, fetched_at=time.monotonic())
+
+
+def get_visitor_count():
+    if not os.environ.get("FEEDBACK_SHEET_URL", "").strip():
+        return _error("The visitor count isn't set up yet.", 503, "not_configured")
+
+    with _VISITOR_COUNT_LOCK:
+        count = _VISITOR_COUNT["count"]
+        fetched_at = _VISITOR_COUNT["fetched_at"]
+    if not fetched_at or time.monotonic() - fetched_at >= VISITOR_COUNT_CACHE_SECONDS:
+        fetched = _ask_visitor_sheet("visitors")
+        # A failed read keeps the last number and still waits out the cache
+        # time, so an unreachable sheet isn't asked on every page view.
+        count = count if fetched is None else fetched
+        _remember_visitor_count(count)
+
+    if count is None:
+        return _error("The visitor count isn't available right now.", 502, "fetch_failed")
+    return {"error": False, "count": count}, 200
+
+
+def record_visitor(client_ip=None):
+    """Adds one visitor; the page asks once per browser (visitor-count.js)."""
+    if not os.environ.get("FEEDBACK_SHEET_URL", "").strip():
+        return _error("The visitor count isn't set up yet.", 503, "not_configured")
+    if _rate_limited("visit", client_ip):
+        return _too_many_requests()
+
+    count = _ask_visitor_sheet("visit")
+    if count is None:
+        return _error("The visit couldn't be counted right now.", 502, "send_failed")
+    _remember_visitor_count(count)
+    return {"error": False, "count": count}, 200

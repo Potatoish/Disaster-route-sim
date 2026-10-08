@@ -230,7 +230,9 @@ body.dark .theme-switch::before{ transform:translateX(30px); }
 
 /* ---------- STAT STRIP ---------- */
 .stats-section{ padding-block:64px; border-bottom:1px solid var(--border); }
-.stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+/* auto, not 1fr: each box widens to its text, so "Safety over distance" stays
+   on one line with four boxes across (equal quarters wrapped it). */
+.stats{ display:grid; grid-template-columns:repeat(4,auto); gap:16px; }
 /* Grid items default to min-width:auto (content-based), which can overflow
    a narrow 1fr track instead of wrapping — min-width:0 lets text wrap. */
 .stat{
@@ -239,6 +241,10 @@ body.dark .theme-switch::before{ transform:translateX(30px); }
 }
 .stat b{ display:block; font-family:var(--font-heading); font-size:26px; color:var(--accent); margin-bottom:4px; }
 .stat span{ font-size:12.5px; color:var(--muted); }
+/* The visitor count, with a person icon in front of the number. */
+.stat .stat-visitors{ display:flex; align-items:center; justify-content:center; gap:8px; }
+.stat .stat-visitors span{ font-size:inherit; color:inherit; }
+.stat-visitors svg{ width:.92em; height:.92em; flex:none; fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
 
 /* ---------- SECTIONS ---------- */
 section.block{ padding-block:64px; scroll-margin-top:90px; }
@@ -857,6 +863,8 @@ body.dark .hz-section{
   .hero-actions{ justify-content:center; }
 }
 @media (max-width:1023px){
+  /* Four across is too narrow for "Safety over distance" here: two by two. */
+  .stats{ grid-template-columns:repeat(2,1fr); }
   .stat{ padding:18px 14px; }
   .stat b{ font-size:22px; }
 }

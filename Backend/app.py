@@ -9,7 +9,7 @@ from threading import Condition, RLock, Thread
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from contact_service import record_feedback, send_contact_message
+from contact_service import get_visitor_count, record_feedback, record_visitor, send_contact_message
 from earthquake_service import (
     check_earthquake_pin,
     get_earthquake_evacuation_sites,
@@ -530,6 +530,20 @@ def contact():
 def feedback():
     try:
         payload, status_code = record_feedback(request.get_json(silent=True), _client_ip())
+        return jsonify(payload), status_code
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+@app.route("/visitors", methods=["GET", "POST"])
+def visitors():
+    try:
+        if request.method == "POST":
+            payload, status_code = record_visitor(_client_ip())
+        else:
+            payload, status_code = get_visitor_count()
         return jsonify(payload), status_code
     except Exception as e:
         return jsonify({

@@ -27,6 +27,7 @@ The visitor picks a barangay and a hazard, pins a start point (and, for floods, 
 - **Works on any screen** — desktop panels; on tablets a panel docked on the left of the map; on phones a bottom sheet with a center pin for choosing points. A small, foldable legend sits on the map on phones and tablets.
 - **Light/dark theme, guided "How to use" tutorial, and emergency hotlines** — including Pasig City DRRMO and both barangays' hotlines.
 - **Contact form and feedback** — the About page's contact form emails the team; the feedback button saves anonymous ratings to a Google Sheet for evaluating the system.
+- **Visitor count** — the homepage shows how many people have visited the site (each browser counted once), kept in the same Google Sheet so it survives redeploys.
 
 ## How the routing works
 
@@ -97,6 +98,7 @@ Disaster-route-sim/
 |       |-- home.css
 |       |-- nav-pill.js         # sliding nav highlight
 |       |-- hazard-showcase.js  # homepage flood/earthquake illustrations
+|       |-- visitor-count.js    # counts each browser once; fills the homepage's visitor box
 |       |-- vendor/leaflet/
 |       `-- assets/
 |-- Backend/
@@ -105,7 +107,7 @@ Disaster-route-sim/
 |   |-- osm_routing.py          # road graphs, hazard annotation, ACO, ranking
 |   |-- earthquake_service.py   # earthquake routing (reuses the ACO core)
 |   |-- earthquake_data.py      # earthquake layers and evacuation sites
-|   |-- contact_service.py      # contact form (Resend) and feedback (Google Sheet)
+|   |-- contact_service.py      # contact form (Resend), feedback and visitor count (Google Sheet)
 |   |-- simulation_progress.py  # progress counter for the loader
 |   |-- requirements.txt
 |   |-- data/
@@ -116,7 +118,7 @@ Disaster-route-sim/
 |   `-- tools/
 |       |-- route_batch_test.py # batch-test routing without the UI
 |       |-- reduce_flood_layers.py
-|       `-- feedback_sheet.gs   # Apps Script for the feedback sheet
+|       `-- feedback_sheet.gs   # Apps Script for the feedback sheet (and visitor count)
 |-- Dockerfile                  # built from the repo root (copies Backend/ and Frontend/)
 |-- railway.json
 `-- README.md
@@ -185,6 +187,11 @@ replace the code with `Backend/tools/feedback_sheet.gs`, then **Deploy → New d
 (Execute as: *Me*, Who has access: *Anyone*) and copy the web app URL. The script adds the header row
 itself.
 
+The homepage's visitor count uses the same sheet and URL: the script keeps it on a **Visitors** tab,
+which it creates on the first visit. After changing `feedback_sheet.gs`, paste it into the Apps Script
+editor again and publish it with **Deploy → Manage deployments → Edit → Version: New version**; until
+then the count shows a dash (the old script has no `doGet`, so nothing is written to the sheet).
+
 To try it locally, set the variables in the same PowerShell window before starting the server, e.g.
 `$env:RESEND_API_KEY = "re_..."`.
 
@@ -210,6 +217,7 @@ To try it locally, set the variables in the same PowerShell window before starti
 - `GET /simulation-status` — whether a simulation is running, and the queue length
 - `POST /contact` — About page contact form → email to the team inbox
 - `POST /feedback` — feedback widget → row in the team's Google Sheet
+- `GET /visitors` — the visitor count (cached for two minutes); `POST /visitors` — counts a new visitor
 
 ## Notes
 

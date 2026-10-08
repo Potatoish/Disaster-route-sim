@@ -1841,13 +1841,15 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-all-routes-btn { width: 100%; margin-top: 11px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft-bg); color: var(--accent); font: 700 .68rem var(--font-body); cursor: pointer; }
 .safety-all-routes-btn:hover { background: var(--accent); color: #fff; }
 
+/* New Simulation | Download PDF, side by side under the panel header. */
+.safety-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+
 .safety-download-btn {
   display: none;
   width: 100%;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-top: 8px;
   padding: 10px 12px;
   border: 1px solid var(--green);
   border-radius: 8px;
@@ -1918,7 +1920,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
   color: var(--muted);
   font: 600 .58rem var(--font-meta);
 }
-.route-safety-panel .reset-btn { margin: 8px 0 4px; padding: 9px 12px; border-width: 1px; border-radius: 8px; font: 700 .66rem var(--font-body); }
+.route-safety-panel .reset-btn { margin: 0; padding: 9px 12px; border-width: 1px; border-radius: 8px; font: 700 .66rem var(--font-body); }
 
 /* Flood severity filter control. */
 .flood-filter-hint { margin: 6px 2px 0; max-width: 168px; color: var(--map-ui-muted); font-size: .75rem; line-height: 1.45; }
@@ -3644,25 +3646,6 @@ body.dark .leaflet-popup-close-button {
   width: 100%;
 }
 
-.mbtn-link {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  margin-top: 4px;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: 700 .92rem var(--font-body);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.mbtn-link:disabled {
-  color: var(--muted);
-  cursor: progress;
-}
-
 .msheet-help {
   margin: 8px 2px 0;
   color: var(--muted);
@@ -4065,7 +4048,11 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   line-height: 1.55;
 }
 
-#msimNewSimBtn {
+#msimDetailActions {
+  margin-top: 0;
+}
+
+.msheet-details > .mhotlines {
   margin-top: 12px;
 }
 

@@ -8,12 +8,56 @@
  * POSTs one JSON object per response; this appends it as a row to the
  * sheet's first tab, adding the header row the first time.
  *
+ * It also keeps the homepage's visitor count on a "Visitors" tab (created
+ * the first time): the backend GETs ?action=visitors to read it and
+ * ?action=visit to add one (contact_service._ask_visitor_sheet).
+ *
  * After editing this script, publish the change with Deploy -> Manage
  * deployments -> Edit -> Version: New version, or the URL keeps running the
  * old code.
  */
 
 const HEADERS = ['Received', 'Page', 'Rating', 'Score (1-3)', 'Role', 'Comment'];
+const VISITORS_SHEET = 'Visitors';
+// The count is in A2 and the time of the last new visitor in B2.
+const VISITOR_HEADERS = ['Unique visitors', 'Last new visitor'];
+
+function doGet(e) {
+  const action = e && e.parameter ? e.parameter.action : '';
+  if (action === 'visitors') {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(VISITORS_SHEET);
+    return reply({ ok: true, count: sheet ? readVisitorCount(sheet) : 0 });
+  }
+  if (action === 'visit') {
+    return reply({ ok: true, count: addVisitor() });
+  }
+  return reply({ ok: false, error: 'Unknown action.' });
+}
+
+function addVisitor() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = spreadsheet.getSheetByName(VISITORS_SHEET);
+    if (!sheet) {
+      // Added last, so feedback rows stay on the first tab.
+      sheet = spreadsheet.insertSheet(VISITORS_SHEET, spreadsheet.getNumSheets());
+      sheet.getRange(1, 1, 1, 2).setValues([VISITOR_HEADERS]);
+      sheet.setFrozenRows(1);
+    }
+    const count = readVisitorCount(sheet) + 1;
+    sheet.getRange(2, 1, 1, 2).setValues([[count, new Date()]]);
+    return count;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readVisitorCount(sheet) {
+  const count = Math.floor(Number(sheet.getRange(2, 1).getValue()));
+  return count > 0 ? count : 0;
+}
 
 function doPost(e) {
   let data;

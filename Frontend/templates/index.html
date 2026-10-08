@@ -415,11 +415,12 @@
             </div>
 
             <div class="msheet-details">
-              <button class="mhotlines" type="button" onclick="openEmergencyContactModal(event)">
-                <svg class="mhotlines-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
-                <span>Emergency hotlines</span>
-                <svg class="mhotlines-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
-              </button>
+              {# First in the details, so starting over or saving the report
+                 needs no scrolling; the hotlines close the sheet instead. #}
+              <div class="msheet-actions" id="msimDetailActions">
+                <button class="mbtn" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
+                <button class="mbtn" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download PDF</button>
+              </div>
 
               <div class="msheet-label-row">
                 <h3 class="msheet-label">Routes</h3>
@@ -437,8 +438,11 @@
                 <p id="msimDisclaimerText"></p>
               </details>
 
-              <button class="mbtn mbtn--primary mbtn--block" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
-              <button class="mbtn-link" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download report (PDF)</button>
+              <button class="mhotlines" type="button" onclick="openEmergencyContactModal(event)">
+                <svg class="mhotlines-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
+                <span>Emergency hotlines</span>
+                <svg class="mhotlines-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+              </button>
             </div>
           </div>
 
@@ -540,14 +544,18 @@
     {# Short viewports only (style.css): results is a full-screen panel there,
        so this goes back to setup. #}
     <button class="safety-edit-setup-btn" type="button" onclick="openSetupDrawerFromResults()">Edit setup</button>
+    {# At the top, so starting over or saving the report needs no scrolling
+       past the results; the emergency numbers stay in the disclaimer below. #}
+    <div class="safety-actions">
+      <button class="reset-btn" id="resetBtn" type="button" onclick="startNewSimulation()">
+        New Simulation
+      </button>
+      <button class="safety-download-btn" id="safetyDownloadBtn" type="button" onclick="downloadSimulationReport()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
+        Download PDF
+      </button>
+    </div>
     <div id="routeSafetyContent" hidden></div>
-    <button class="safety-download-btn" id="safetyDownloadBtn" type="button" onclick="downloadSimulationReport()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
-      Download Report (PDF)
-    </button>
-    <button class="reset-btn" id="resetBtn" type="button" onclick="startNewSimulation()">
-      New Simulation
-    </button>
   </aside>
 </div>
 
@@ -598,6 +606,7 @@
 {# Started here rather than on <body onload>, which waits for every font,
    image and CDN script, so the map tiles began loading late. #}
 <script>initTheme(); initMap();</script>
+<script src="{{ url_for('static', filename='visitor-count.js') }}"></script>
 
 </body>
 </html>
