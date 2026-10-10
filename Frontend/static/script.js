@@ -1602,7 +1602,7 @@ function getFloodRiskLabelFromVar(varValue) {
 function getRiskLevelLabelFromScore(hazardValue) {
   const numericHazard = Number(hazardValue);
   if (!Number.isFinite(numericHazard)) return 'Unknown';
-  if (numericHazard >= 5) return 'High';
+  if (numericHazard >= 4) return 'High';
   if (numericHazard >= 3) return 'Moderate';
   return 'Low';
 }
