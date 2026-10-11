@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>AGNAS</title>
+  {% if survey_url %}<meta name="survey-url" content="{{ survey_url }}">{% endif %}
   {# Home <-> simulator cross-fade opt-in (styled in style.css). Inline and
      first: from a stylesheet, Chrome sometimes skipped it. #}
   <style>
@@ -430,6 +431,7 @@
               <ul class="mroutes" id="msimRouteList"></ul>
               <button class="mroutes-more" id="msimRoutesMore" type="button" onclick="toggleMobileMoreRoutes()" aria-controls="msimRouteList" aria-expanded="false" hidden></button>
               <p class="msheet-source" id="msimSource"></p>
+              <div id="msimSurvey"></div>
 
               <details class="maccordion" id="msimDisclaimer">
                 <summary>

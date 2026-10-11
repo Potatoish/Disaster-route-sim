@@ -744,7 +744,7 @@
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
-    const duration = best?.display_duration || formatWalkingDuration(best?.distance);
+    const duration = best?.display_duration || formatRouteWalkingDuration(best);
     const distance = best?.display_distance || formatDistanceCompact(best?.distance);
     $('msimSummaryMain').innerHTML = `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
     $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
@@ -759,9 +759,10 @@
     syncRouteRows();
 
     const antNote = buildAntSearchNote(result);
-    $('msimSource').innerHTML = [antNote && escapeHtml(antNote), buildHazardSourceNoteHtml(isEarthquake)]
+    $('msimSource').innerHTML = [antNote && escapeHtml(antNote), buildWadingNoteHtml(best), buildHazardSourceNoteHtml(isEarthquake)]
       .filter(Boolean)
       .join(' ');
+    $('msimSurvey').innerHTML = buildSurveyLinkHtml();
     scheduleSync();
   }
 

@@ -1509,6 +1509,9 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
     # Metres per hazard level: the results say how much of a route is in
     # Medium water, which is passable but not safe for everyone.
     hazard_distances = {}
+    # Metres per flood class (Var 1/2/3). Hazard level 1 also covers dry
+    # roads, so this is what tells the walking time how much is wading.
+    flood_var_distances = {}
     flood_vars_encountered = set()
     threshold_exceedance_count = 0
     threshold_exceedance_vars = set()
@@ -1542,6 +1545,7 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
         if flood_var is not None:
             flood_var = int(flood_var)
             flood_vars_encountered.add(flood_var)
+            flood_var_distances[str(flood_var)] = flood_var_distances.get(str(flood_var), 0.0) + length
 
         if hazard > HAZARD_THRESHOLD:
             eliminated = True
@@ -1567,6 +1571,10 @@ def evaluate_route(G, route, candidate_route_no, include_coordinates=False):
             for level, distance in sorted(hazard_distances.items(), key=lambda item: int(item[0]))
         },
         "flood_vars_encountered": sorted(flood_vars_encountered),
+        "flood_var_distances": {
+            flood_var: round(distance, 1)
+            for flood_var, distance in sorted(flood_var_distances.items(), key=lambda item: int(item[0]))
+        },
         "threshold_exceedance_count": threshold_exceedance_count,
         "threshold_exceedance_vars": sorted(threshold_exceedance_vars),
         "hazard_data_coverage": summarize_hazard_data_coverage(covered_distance, uncovered_distance),

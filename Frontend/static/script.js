@@ -1536,17 +1536,57 @@ function formatDistanceCompact(distanceMeters, fallback = 'N/A') {
   return `${(numericDistance / 1000).toFixed(2)} km`;
 }
 
-// Every route here is walked (GRAPH_NETWORK_TYPE is 'walk' on the backend),
-// so one average walking pace works for both flood and earthquake results.
+// Every route here is walked (GRAPH_NETWORK_TYPE is 'walk' on the backend):
+// an average walking pace on dry roads, for flood and earthquake results.
 const WALKING_SPEED_METERS_PER_MINUTE = 5000 / 60; // 5 km/h
 
-function formatWalkingDuration(distanceMeters, fallback = 'N/A') {
-  const numericDistance = Number(distanceMeters);
-  if (!Number.isFinite(numericDistance) || numericDistance < 0) {
+// Wading is slower. Mean speeds of 188 adults in Li et al. (2026), Table 1:
+// 1.69 m/s on dry ground, 0.99 m/s in 0.35 m of water (below the knee, for
+// Low, up to 0.5 m) and 0.79 m/s at 0.90 m (waist deep, the deepest they
+// tested, for Medium and High). Each class walks at that share of the dry
+// pace. They were young adults told to hurry, in still, clear water, so real
+// evacuees will be slower still.
+const FLOOD_WALKING_PACE_SHARE_BY_VAR = {
+  1: 0.99 / 1.69,
+  2: 0.79 / 1.69,
+  3: 0.79 / 1.69,
+};
+
+// Metres of a flood route in each flood class it crosses; none for an
+// earthquake route or a result from before the backend sent them.
+function getRouteWadingDistances(route) {
+  if (isEarthquakeRouteRecord(route)) return {};
+  const distances = route?.flood_var_distances;
+  return distances && typeof distances === 'object' ? distances : {};
+}
+
+function getRouteWalkingMinutes(route) {
+  const distance = Number(route?.distance);
+  if (!Number.isFinite(distance) || distance < 0) return null;
+  let minutes = distance / WALKING_SPEED_METERS_PER_MINUTE;
+  Object.entries(getRouteWadingDistances(route)).forEach(([floodVar, meters]) => {
+    const share = FLOOD_WALKING_PACE_SHARE_BY_VAR[floodVar];
+    const wading = Number(meters);
+    if (share && wading > 0) {
+      minutes += (wading / WALKING_SPEED_METERS_PER_MINUTE) * (1 / share - 1);
+    }
+  });
+  return minutes;
+}
+
+function routeHasWadingTime(route) {
+  return Object.values(getRouteWadingDistances(route)).some(meters => Number(meters) > 0);
+}
+
+function formatRouteWalkingDuration(route, fallback = 'N/A') {
+  return formatWalkingMinutes(getRouteWalkingMinutes(route), fallback);
+}
+
+function formatWalkingMinutes(totalMinutes, fallback = 'N/A') {
+  if (!Number.isFinite(totalMinutes) || totalMinutes < 0) {
     return fallback;
   }
 
-  const totalMinutes = numericDistance / WALKING_SPEED_METERS_PER_MINUTE;
   if (totalMinutes < 1) {
     return '< 1 min';
   }
@@ -1563,7 +1603,7 @@ function formatWalkingDuration(distanceMeters, fallback = 'N/A') {
 // The map label on a route line (bindRouteEtaLabel in osm.js): the same
 // "Route N" as the results panel, then walking time over distance.
 function buildRouteEtaLabel(route) {
-  const duration = route?.display_duration || formatWalkingDuration(route?.distance, '');
+  const duration = route?.display_duration || formatRouteWalkingDuration(route, '');
   if (!duration) return '';
   const category = ['best', 'available', 'eliminated'].includes(route?.category) ? route.category : 'eliminated';
   const isBest = route === getBestRoute(Array.isArray(simData?.routes) ? simData.routes : []);
@@ -1910,6 +1950,7 @@ const DATA_SOURCES = {
   phivolcs: { name: 'PHIVOLCS', url: 'https://www.phivolcs.dost.gov.ph/' },
   hazardHunter: { name: 'HazardHunterPH', url: 'https://hazardhunter.georisk.gov.ph/' },
   aidr: { name: 'AIDR Flood Hazard Guideline 7-3', url: 'https://knowledge.aidr.org.au/media/3518/adr-guideline-7-3.pdf' },
+  wading: { name: 'Li et al., 2026', url: 'https://doi.org/10.14311/APP.2026.57.0226' },
   osm: { name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/copyright' },
 };
 
@@ -1926,14 +1967,52 @@ function buildHazardSourceNoteHtml(isEarthquake) {
     : `Flood levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood map. They are estimates, not live conditions.`;
 }
 
+function formatWalkingPaceKmh(share = 1) {
+  const kmh = (WALKING_SPEED_METERS_PER_MINUTE * 60 / 1000) * share;
+  return `${Number(kmh.toFixed(1))} km/h`;
+}
+
+// Why a flood route's walking time is longer than its length suggests, as
+// HTML: the paces of the flood classes it crosses (getRouteWalkingMinutes).
+function buildWadingNoteHtml(route) {
+  if (!routeHasWadingTime(route)) return '';
+  const distances = getRouteWadingDistances(route);
+  const crosses = floodVar => Number(distances[floodVar]) > 0;
+  const deeper = [crosses(2) && 'medium', crosses(3) && 'high'].filter(Boolean);
+  const paces = [
+    crosses(1) && `about ${formatWalkingPaceKmh(FLOOD_WALKING_PACE_SHARE_BY_VAR[1])} in low water`,
+    deeper.length && `about ${formatWalkingPaceKmh(FLOOD_WALKING_PACE_SHARE_BY_VAR[2])} in ${deeper.join(' and ')} water`,
+  ].filter(Boolean);
+  const { wading } = DATA_SOURCES;
+  return `The walking time is slower through flood water: ${paces.join(' and ')}, against ${formatWalkingPaceKmh()} on dry roads (${buildSourceLink(wading.name, wading.url)}).`;
+}
+
+// The evaluation survey, linked under the results once SURVEY_URL is set on
+// the server (index.html's survey-url meta). New tab: leaving the simulator
+// would drop the simulation.
+function getSurveyUrl() {
+  return document.querySelector('meta[name="survey-url"]')?.content?.trim() || '';
+}
+
+function buildSurveyLinkHtml() {
+  const url = getSurveyUrl();
+  if (!url) return '';
+  return `<a class="survey-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+      <svg class="survey-link-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M15 5h3v16H6V5h3"/><path d="m9 14 2 2 4-4"/></svg>
+      <span class="survey-link-text"><span class="survey-link-title">Rate AGNAS</span><span class="survey-link-sub">Answer our short survey (opens in a new tab)</span></span>
+      <svg class="survey-link-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
+    </a>`;
+}
+
 // The PDF report's sources: what this simulation used, each with its link.
 function getReportDataSources(isEarthquake) {
-  const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
+  const { noah, hazardHunter, aidr, wading, osm } = DATA_SOURCES;
   const hazardRows = isEarthquake
     ? [{ label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url }]
     : [
       { label: 'Flood hazard levels', text: 'Project NOAH 25-year flood hazard map (a modeled scenario, not live conditions)', url: noah.url },
       { label: 'Walking limits in flood water', text: aidr.name, url: aidr.url },
+      { label: 'Walking pace in flood water', text: `${wading.name}: mean wading speeds by water depth`, url: wading.url },
     ];
   return [
     ...hazardRows,
@@ -1964,7 +2043,7 @@ function decorateRouteForDisplay(route) {
   return {
     ...route,
     display_distance: formatDistanceCompact(route?.distance),
-    display_duration: formatWalkingDuration(route?.distance),
+    display_duration: formatRouteWalkingDuration(route),
     display_unsafe_distance: formatDistanceCompact(route?.unsafe_distance, '0 m'),
     display_flood_classes: formatFloodClasses(route),
     display_route_summary: buildRouteStreetSummary(route),
@@ -4227,6 +4306,7 @@ function renderRouteSafetyPanel(result) {
     notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
   }
   const sourceNoteHtml = buildHazardSourceNoteHtml(isEarthquake);
+  const wadingNoteHtml = buildWadingNoteHtml(best);
 
   const bestTurnSteps = getRouteTurnSteps(best);
   const chipLabel = `${start} → ${end}`;
@@ -4270,21 +4350,22 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div></div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${wadingNoteHtml ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
       </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
         <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div>${peakDetail ? `<div class="safety-card-sub">${escapeHtml(peakDetail)}</div>` : ''}</div>
       </div>
     </div>
-    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
+    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}${wadingNoteHtml ? `<li>${wadingNoteHtml}</li>` : ''}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
         <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
       </div>
     </div>
-    ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}`;
+    ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}
+    ${buildSurveyLinkHtml()}`;
   window.mobileSim?.renderResults(result);
 }
 
@@ -4894,7 +4975,9 @@ async function downloadSimulationReport() {
       ['Destination', isEq ? (endLabel || 'Unknown') : withPinCoordinates(endLabel || 'Unknown', 'end')],
       ['Overall verdict', getRouteVerdictTitle(best)],
       [`${getTopRouteTitle(best)} distance`, best?.display_distance || 'Unavailable'],
-      ['Estimated time to destination', best?.display_duration || 'Unavailable'],
+      ['Estimated time to destination', routeHasWadingTime(best)
+        ? `${best?.display_duration || 'Unavailable'} (slower pace through flood water)`
+        : best?.display_duration || 'Unavailable'],
       [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
