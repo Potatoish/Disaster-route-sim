@@ -1567,7 +1567,7 @@ function buildRouteEtaLabel(route) {
   if (!duration) return '';
   const category = ['best', 'available', 'eliminated'].includes(route?.category) ? route.category : 'eliminated';
   const isBest = route === getBestRoute(Array.isArray(simData?.routes) ? simData.routes : []);
-  const tag = isBest ? 'Best' : category === 'eliminated' ? 'Unsafe' : '';
+  const tag = isBest ? getTopRouteName(route) : category === 'eliminated' ? 'Unsafe' : '';
   const name = route?.display_route_no != null
     ? `Route ${route.display_route_no}${tag ? ` · ${tag}` : ''}`
     : tag;
@@ -1664,6 +1664,13 @@ function getRouteSafetyTier(route) {
   return 'safe';
 }
 
+// Route 1's name. With no safe route it is only the one with the least
+// dangerous road (the ranking is safety first), not a recommendation, and
+// often not the shortest either, so it is "Least risky", never "Best".
+function getTopRouteName(route) {
+  return getRouteSafetyTier(route) === 'unsafe' ? 'Least risky' : 'Best';
+}
+
 const ROUTE_VERDICTS = {
   safe: { title: 'Safe route found', card: 'success', icon: 'shield' },
   caution: { title: 'Risky route', card: 'warning', icon: 'alert' },
@@ -1725,11 +1732,12 @@ function buildRouteReason(route) {
     : '';
 
   if (route?.category === 'eliminated') {
-    // The backend labels the top eliminated route "Best" only when no route is safe.
+    // The backend labels the top eliminated route "Best" only when no route
+    // is safe; residents see it as "Least risky" (getTopRouteName).
     if (route?.status === 'Best') {
       return unsafeSections > 0
-        ? `Best backup route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
-        : `Best backup route${destinationNote}, but some road parts are above the safety limit.`;
+        ? `Least risky route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
+        : `Least risky route${destinationNote}, but some road parts are above the safety limit.`;
     }
 
     return unsafeSections > 0
@@ -1846,7 +1854,8 @@ function buildAcoReportSummary(result = simData) {
     parts.push(`${formatCount(aco.ants_sent_all_sites)} ants across ${aco.sites_searched} evacuation sites`);
   }
   const comparison = ACO_BASELINE_COMPARISON_TEXT[aco.best_vs_shortest_path];
-  if (comparison) parts.push(`best route: ${comparison}`);
+  const best = getBestRoute(Array.isArray(result?.routes) ? result.routes : []);
+  if (comparison) parts.push(`${getTopRouteName(best).toLowerCase()} route: ${comparison}`);
   return `${parts.join('; ')}.`;
 }
 
@@ -2648,7 +2657,7 @@ function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   const line = (color, kind = '') => `<div class="legend-line${kind ? ` legend-line--${kind}` : ''}" style="${routeLegendSwatchStyle(color, kind)}"></div>`;
   const eliminatedRow = row(line(ROUTE_ELIMINATED_COLOR, 'eliminated'), 'Eliminated route');
   const best = getBestRoute(routes);
-  const bestRow = row(line(best ? getBestRouteColor(best) : ROUTE_BEST_COLOR), 'Best route');
+  const bestRow = row(line(best ? getBestRouteColor(best) : ROUTE_BEST_COLOR), `${best ? getTopRouteName(best) : 'Best'} route`);
 
   if (best && getRouteSafetyTier(best) === 'unsafe') {
     return bestRow + eliminatedRow;
@@ -4095,7 +4104,7 @@ function renderRouteSafetyPanel(result) {
   } else {
     notes.push(
       `${checkedLabel} ${single ? 'It is not' : 'None are'} safe.`,
-      `The best route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
+      `The least risky route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
     );
     if (antSearchNote) notes.push(antSearchNote);
   }
@@ -4146,7 +4155,7 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">Best route distance</div><div class="safety-card-value">${escapeHtml(best?.display_distance || 'Unavailable')}</div></div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteName(best))} route distance</div><div class="safety-card-value">${escapeHtml(best?.display_distance || 'Unavailable')}</div></div>
       </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon('droplet')}</div>
@@ -4765,14 +4774,14 @@ async function downloadSimulationReport() {
       ['Start', withPinCoordinates(start || 'Unknown', 'start')],
       ['Destination', isEq ? (endLabel || 'Unknown') : withPinCoordinates(endLabel || 'Unknown', 'end')],
       ['Overall verdict', ROUTE_VERDICTS[getRouteSafetyTier(best)].title],
-      ['Best route distance', best?.display_distance || 'Unavailable'],
+      [`${getTopRouteName(best)} route distance`, best?.display_distance || 'Unavailable'],
       ['Estimated time to destination', best?.display_duration || 'Unavailable'],
       [peakLabel, peakValue],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),
       ['Routes checked', `${routes.length} (${countTier('safe')} safe, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
-      ['Best route found by', ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
+      [`${getTopRouteName(best)} route found by`, ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
     ];
     const acoSummary = buildAcoReportSummary(simData);
     if (acoSummary) rows.push(['Ant colony search', acoSummary]);

@@ -696,7 +696,7 @@
     const swatch = isBest
       ? { safe: 'best', caution: 'best-caution', unsafe: 'best-unsafe' }[getRouteSafetyTier(route)]
       : route.category === 'available' ? 'available' : 'eliminated';
-    const tag = isBest ? ' · best' : route.category === 'eliminated' ? ' · eliminated' : '';
+    const tag = isBest ? ` · ${getTopRouteName(route).toLowerCase()}` : route.category === 'eliminated' ? ' · eliminated' : '';
     const risk = describeRouteRisk(route);
     const destination = isEarthquakeRouteRecord(route) && route.destination_name
       ? `<span class="mroute-dest">To ${escapeHtml(route.destination_name)}</span>`
@@ -740,14 +740,14 @@
     const VERDICT_SUBS = {
       safe: `${peak.label}: ${peak.value}`,
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: `${peak.label}: ${peak.value}. The best route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
+      unsafe: `${peak.label}: ${peak.value}. The least risky route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
     const duration = best?.display_duration || formatWalkingDuration(best?.distance);
     const distance = best?.display_distance || formatDistanceCompact(best?.distance);
     $('msimSummaryMain').innerHTML = `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
-    $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · best`;
+    $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
 
     const destination = $('msimSummaryDest');
     destination.hidden = !(isEarthquake && best?.destination_name);

@@ -3793,11 +3793,14 @@ body.dark .leaflet-popup-close-button {
   line-height: 1.4;
 }
 
+/* Wraps at 320px when a long walk ("1 hr 5 min · 4.6 km") meets
+   "Route 1 · least risky": the route label drops to its own line. */
 .msummary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 2px 10px;
   margin-top: 8px;
 }
 
