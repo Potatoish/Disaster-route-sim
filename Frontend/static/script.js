@@ -1674,13 +1674,13 @@ function getMediumFloodDistance(route) {
   return Number(route?.hazard_distances?.['3']) || 0;
 }
 
-const MEDIUM_FLOOD_WARNING = 'Not safe for children, older adults, PWDs or pregnant women, or where the water is flowing.';
+const MEDIUM_FLOOD_WARNING = 'Not safe for children, older adults, PWDs, pregnant women, or in flowing water.';
 
 function describeMediumFloodCrossing(route) {
   const distance = getMediumFloodDistance(route);
   return distance > 0
-    ? `The best route walks through about ${formatDistanceCompact(distance)} of medium flooding (0.5–1.5 m deep).`
-    : 'The best route walks through medium flooding (0.5–1.5 m deep).';
+    ? `The best route has about ${formatDistanceCompact(distance)} of medium flood water (0.5–1.5 m deep).`
+    : 'The best route has some medium flood water (0.5–1.5 m deep).';
 }
 
 // The "peak" row of the route safety panel and the PDF report.
@@ -1775,9 +1775,9 @@ function buildAntSearchNote(result = simData) {
   const ants = formatCount(aco.ants_sent_all_sites ?? aco.ants_sent);
   const best = getBestRoute(Array.isArray(result?.routes) ? result.routes : []);
   if (best?.found_by === 'shortest_path') {
-    return `${ants} virtual ants searched the streets; a standard map check found a safer way, so it is shown first.`;
+    return `${ants} virtual ants searched the streets, but a regular map search found a safer route, so that one is shown first.`;
   }
-  return `${ants} virtual ants searched the streets, and the safest route they found is shown first.`;
+  return `${ants} virtual ants searched the streets. The safest route is shown first.`;
 }
 
 const ACO_BASELINE_COMPARISON_TEXT = {
@@ -1815,8 +1815,8 @@ function buildSourceLink(text, url) {
 function buildHazardSourceNoteHtml(isEarthquake) {
   const { noah, phivolcs, hazardHunter } = DATA_SOURCES;
   return isEarthquake
-    ? `These hazard levels are traced from ${buildSourceLink(phivolcs.name, phivolcs.url)} maps on ${buildSourceLink(hazardHunter.name, hazardHunter.url)}.`
-    : `These hazard levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood hazard map, a modeled scenario, not live conditions.`;
+    ? `Earthquake risk levels come from ${buildSourceLink(phivolcs.name, phivolcs.url)} maps on ${buildSourceLink(hazardHunter.name, hazardHunter.url)}.`
+    : `Flood levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood map. They are estimates, not live conditions.`;
 }
 
 // The PDF report's sources: what this simulation used, each with its link.
@@ -4035,7 +4035,6 @@ function renderRouteSafetyPanel(result) {
   }
 
   const isEarthquake = isEarthquakeSimulationResult(result);
-  const safe = routes.filter(route => route.category !== 'eliminated');
   const best = getBestRoute(routes);
   const bestRouteNo = best?.display_route_no ?? 1;
   const bestCategory = best?.category || '';
@@ -4060,26 +4059,30 @@ function renderRouteSafetyPanel(result) {
 
   // Plain wording: barangay residents read this panel, so no "ACO",
   // "evaluated" or "hazard lens".
-  const routeCountLabel = `${routes.length} route${routes.length === 1 ? '' : 's'}`;
+  const single = routes.length === 1;
+  const checkedLabel = `We checked ${routes.length} route${single ? '' : 's'}.`;
   const antSearchNote = buildAntSearchNote(result);
   const notes = [];
   if (tier === 'safe') {
+    const safeCountLabel = single ? 'It is safe.'
+      : fullySafeCount === routes.length ? 'All are safe.'
+      : `${fullySafeCount} ${fullySafeCount === 1 ? 'is' : 'are'} safe.`;
     notes.push(
-      `We checked ${routeCountLabel} — ${fullySafeCount} ${fullySafeCount === 1 ? 'is' : 'are'} completely safe.`,
-      antSearchNote || 'The safest route is always shown first.',
+      `${checkedLabel} ${safeCountLabel}`,
+      antSearchNote || 'The safest route is shown first.',
     );
   } else if (tier === 'caution') {
     // Routes with less Medium water rank first, so when the best one has
     // some, every route shown does.
     notes.push(
-      `We checked ${routeCountLabel} — none avoid medium flooding; ${safe.length} avoid${safe.length === 1 ? 's' : ''} high flooding.`,
+      `${checkedLabel} ${single ? 'It is not' : 'None are'} fully safe.`,
       `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
     );
     if (antSearchNote) notes.push(antSearchNote);
   } else {
     notes.push(
-      `We checked ${routeCountLabel} — none are completely safe.`,
-      `Best option still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'} — be extra careful.`,
+      `${checkedLabel} ${single ? 'It is not' : 'None are'} safe.`,
+      `The best route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
     );
     if (antSearchNote) notes.push(antSearchNote);
   }

@@ -740,7 +740,7 @@
     const VERDICT_SUBS = {
       safe: `${peak.label}: ${peak.value}`,
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: `${peak.label}: ${peak.value}. Best option still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}, so be extra careful.`,
+      unsafe: `${peak.label}: ${peak.value}. The best route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
