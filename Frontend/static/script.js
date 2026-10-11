@@ -4603,15 +4603,6 @@ function bringRouteGroupToFront(group) {
   if (group.hitLayer) group.hitLayer.bringToFront();
 }
 
-// The best route's time label (permanent, see bindRouteEtaLabel) steps aside
-// while another route is picked and comes back with the best route.
-function syncBestRouteEtaLabel(group, shown) {
-  const tooltip = group?.hitLayer?.getTooltip();
-  if (!tooltip?.options.permanent) return;
-  if (shown && !tooltip.isOpen()) group.hitLayer.openTooltip();
-  else if (!shown && tooltip.isOpen()) group.hitLayer.closeTooltip();
-}
-
 function applyRouteFocusState(routeNo) {
   const groups = Array.isArray(mapLayers.routeGroups) ? mapLayers.routeGroups : [];
   const hasFocus = routeNo != null;
@@ -4627,7 +4618,6 @@ function applyRouteFocusState(routeNo) {
     // Routes past the first few (MAP_ROUTES_SHOWN) are on the map only
     // while picked.
     if (group.hiddenByDefault) setRouteGroupShown(group, gMap, isFocused);
-    syncBestRouteEtaLabel(group, !hasFocus || isFocused);
     // A picked route shows its whole path, shared roads included.
     showRouteGroupFullPath(group, isFocused);
     applyRouteGroupVisual(group, visual);

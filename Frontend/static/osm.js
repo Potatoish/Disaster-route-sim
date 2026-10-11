@@ -386,15 +386,14 @@ function setRouteGroupShown(group, gMap, shown) {
   });
 }
 
-// A map-app style time + distance label on the route line: always shown on
-// the best route (at the line's middle), and for every other one while the
-// pointer is on it (following the pointer, so it never lands on the best
-// route's label) or where it was tapped.
-function bindRouteEtaLabel(hitLayer, content, permanent) {
+// A map-app style time + distance label on a route line, only while the
+// pointer is on it (following the pointer) or where it was tapped: the
+// results panel already shows route 1's time and distance, so no label sits
+// on the map for good.
+function bindRouteEtaLabel(hitLayer, content) {
   if (!content) return;
   hitLayer.bindTooltip(content, {
-    permanent,
-    sticky: !permanent,
+    sticky: true,
     direction: 'top',
     offset: [0, -6],
     opacity: 1,
@@ -516,10 +515,9 @@ async function renderRoutesOnRoads({
   });
   stackRouteGroups(shownGroups);
 
-  // After the fit: a permanent label opens where the line's middle is then.
   if (typeof buildEtaLabel === 'function') {
     mapLayers.routeGroups.forEach(group => {
-      bindRouteEtaLabel(group.hitLayer, buildEtaLabel(group.route), group.route === bestRoute);
+      bindRouteEtaLabel(group.hitLayer, buildEtaLabel(group.route));
     });
   }
 
