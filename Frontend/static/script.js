@@ -1685,21 +1685,29 @@ function getRouteSafetyTier(route) {
   return 'safe';
 }
 
-// Route 1's name says how risky it is, never "Best". Even a green route can
-// cross Low water (up to 0.5 m) or, for an earthquake, Moderate-risk roads,
-// so it is named by the highest risk it meets: "Low risk" or "Moderate
-// risk". Through Medium water it is "Risky", like its amber line and verdict.
-// With no safe route it is only the one with the least dangerous road (the
-// ranking is safety first), often not the shortest either: "Least risky".
+// A flood route that touches no flood zone at all. Earthquake routes never
+// are: every road in the coverage area has a shaking and liquefaction level.
+function isFloodFreeRoute(route) {
+  return !isEarthquakeRouteRecord(route) && getFloodPeakVar(route) === 0;
+}
+
+// Route 1's name says how risky it is. Only a flood route that touches no
+// flood zone is "Best". A green route that crosses Low water (up to 0.5 m)
+// or, for an earthquake, Moderate-risk roads is named by the highest risk it
+// meets: "Low risk" or "Moderate risk". Through Medium water it is "Risky",
+// like its amber line and verdict. With no safe route it is only the one
+// with the least dangerous road (the ranking is safety first), often not the
+// shortest either: "Least risky".
 function getTopRouteName(route) {
   const tier = getRouteSafetyTier(route);
   if (tier === 'caution') return 'Risky';
   if (tier === 'unsafe') return 'Least risky';
+  if (isFloodFreeRoute(route)) return 'Best';
   return isEarthquakeRouteRecord(route) && Number(route?.max_hazard) >= 3 ? 'Moderate risk' : 'Low risk';
 }
 
-// The name in front of "route": "Low-risk route", "Risky route", "Least
-// risky route".
+// The name in front of "route": "Best route", "Low-risk route", "Risky
+// route", "Least risky route".
 function getTopRouteTitle(route) {
   return `${getTopRouteName(route).replace(/ risk$/, '-risk')} route`;
 }
@@ -1718,15 +1726,18 @@ function getRouteVerdictTitle(route) {
 }
 
 // How many routes are green, in words that don't call them "safe" either:
-// "low risk" for flood; for an earthquake, where green allows Moderate-risk
-// roads, "no high-risk roads".
-function describeGreenRouteCount(count, isEarthquake, { total = null } = {}) {
+// "low risk" for flood, or "no flood zone" when none of them touches one
+// (dryCount, isFloodFreeRoute); for an earthquake, where green allows
+// Moderate-risk roads, "no high-risk roads".
+function describeGreenRouteCount(count, isEarthquake, { total = null, dryCount = 0 } = {}) {
   const one = count === 1;
   if (isEarthquake) {
     if (total === 1) return 'It has no high-risk roads.';
     if (total === count) return 'None of them has high-risk roads.';
     return `${count} ${one ? 'has' : 'have'} no high-risk roads.`;
   }
+  if (total === 1 && dryCount === 1) return 'It crosses no flood zone.';
+  if (total === count && dryCount === count) return 'None of them crosses a flood zone.';
   if (total === 1) return 'It is low risk.';
   if (total === count) return 'All are low risk.';
   return `${count} ${one ? 'is' : 'are'} low risk.`;
@@ -2784,13 +2795,16 @@ function buildPinLegendRow(role) {
   return `<div class="legend-row">${pin}<span style="font-size:.78rem;">${label}</span></div>`;
 }
 
+// Route rows only once a result is on the map: while pinning there are no
+// route lines for them to explain.
 function setFloodLegendContent() {
   const body = document.getElementById('mapLegendBody');
   if (!body) return;
 
+  const showRouteKeys = hasFloodSimulationResult();
   body.innerHTML = `
-    ${buildRouteLegendRows()}
-    <div style="margin-top:5px;">
+    ${showRouteKeys ? buildRouteLegendRows() : ''}
+    <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
       ${buildPinLegendRow('start')}
       ${buildPinLegendRow('end')}
       ${buildBoundaryLegendRow()}
@@ -2829,6 +2843,7 @@ function clearSimulationOutput() {
     syncEarthquakeViewSelector();
   } else {
     syncFloodHazardOverlay();
+    setFloodLegendContent();
   }
 
   drawBarangayBoundary();
@@ -3234,7 +3249,7 @@ async function selectBarangay(name) {
   syncRouteInfoBox();
 }
 
-// Legend while pinning, before any result: flood shows the route/pin key;
+// Legend while pinning, before any result: flood shows the pin key;
 // earthquake shows nothing until the evacuation sites are revealed.
 function showPinningLegend() {
   if (selectedHazard === 'Flood') {
@@ -4172,6 +4187,7 @@ function renderRouteSafetyPanel(result) {
   const tier = getRouteSafetyTier(best);
   const verdict = { ...ROUTE_VERDICTS[tier], title: getRouteVerdictTitle(best) };
   const fullySafeCount = routes.filter(route => getRouteSafetyTier(route) === 'safe').length;
+  const dryCount = routes.filter(route => getRouteSafetyTier(route) === 'safe' && isFloodFreeRoute(route)).length;
   // The list button covers only the routes not already on the map; none off
   // the map, no button.
   const offMapCount = getRoutesOffMap(routes).length;
@@ -4184,7 +4200,7 @@ function renderRouteSafetyPanel(result) {
   const notes = [];
   if (tier === 'safe') {
     notes.push(
-      `${checkedLabel} ${describeGreenRouteCount(fullySafeCount, isEarthquake, { total: routes.length })}`,
+      `${checkedLabel} ${describeGreenRouteCount(fullySafeCount, isEarthquake, { total: routes.length, dryCount })}`,
       antSearchNote || 'The safest route is shown first.',
     );
   } else if (tier === 'caution') {
