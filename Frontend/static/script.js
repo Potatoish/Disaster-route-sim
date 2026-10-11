@@ -1705,10 +1705,36 @@ function getTopRouteTitle(route) {
 }
 
 const ROUTE_VERDICTS = {
-  safe: { title: 'Safe route found', card: 'success', icon: 'shield' },
+  safe: { title: 'Low-risk route found', card: 'success', icon: 'shield' },
   caution: { title: 'Risky route', card: 'warning', icon: 'alert' },
   unsafe: { title: 'No safe route', card: 'danger', icon: 'alert' },
 };
+
+// The verdict a result's route 1 gets. A green route is "found" under its
+// own name, so an earthquake one over Moderate-risk roads says so.
+function getRouteVerdictTitle(route) {
+  const tier = getRouteSafetyTier(route);
+  return tier === 'safe' ? `${getTopRouteTitle(route)} found` : ROUTE_VERDICTS[tier].title;
+}
+
+// How many routes are green, in words that don't call them "safe" either:
+// "low risk" for flood; for an earthquake, where green allows Moderate-risk
+// roads, "no high-risk roads".
+function describeGreenRouteCount(count, isEarthquake, { total = null } = {}) {
+  const one = count === 1;
+  if (isEarthquake) {
+    if (total === 1) return 'It has no high-risk roads.';
+    if (total === count) return 'None of them has high-risk roads.';
+    return `${count} ${one ? 'has' : 'have'} no high-risk roads.`;
+  }
+  if (total === 1) return 'It is low risk.';
+  if (total === count) return 'All are low risk.';
+  return `${count} ${one ? 'is' : 'are'} low risk.`;
+}
+
+function formatGreenRouteTally(count, isEarthquake) {
+  return `${count} ${isEarthquake ? 'without high-risk roads' : 'low risk'}`;
+}
 
 function getMediumFloodDistance(route) {
   return Number(route?.hazard_distances?.['3']) || 0;
@@ -4144,7 +4170,7 @@ function renderRouteSafetyPanel(result) {
     .filter(Boolean)
     .join(' · ');
   const tier = getRouteSafetyTier(best);
-  const verdict = ROUTE_VERDICTS[tier];
+  const verdict = { ...ROUTE_VERDICTS[tier], title: getRouteVerdictTitle(best) };
   const fullySafeCount = routes.filter(route => getRouteSafetyTier(route) === 'safe').length;
   // The list button covers only the routes not already on the map; none off
   // the map, no button.
@@ -4157,11 +4183,8 @@ function renderRouteSafetyPanel(result) {
   const antSearchNote = buildAntSearchNote(result);
   const notes = [];
   if (tier === 'safe') {
-    const safeCountLabel = single ? 'It is safe.'
-      : fullySafeCount === routes.length ? 'All are safe.'
-      : `${fullySafeCount} ${fullySafeCount === 1 ? 'is' : 'are'} safe.`;
     notes.push(
-      `${checkedLabel} ${safeCountLabel}`,
+      `${checkedLabel} ${describeGreenRouteCount(fullySafeCount, isEarthquake, { total: routes.length })}`,
       antSearchNote || 'The safest route is shown first.',
     );
   } else if (tier === 'caution') {
@@ -4300,7 +4323,10 @@ function openRouteListModal() {
     ? moreRoutes.map((route, index) => buildRouteModalCard(route, index)).join('')
     : '<div class="route-modal-empty">No other routes were found for this trip.</div>');
   if (count) {
-    const parts = [`${moreRoutes.length} more route${moreRoutes.length === 1 ? '' : 's'}`, `${countTier('safe')} safe`];
+    const parts = [
+      `${moreRoutes.length} more route${moreRoutes.length === 1 ? '' : 's'}`,
+      formatGreenRouteTally(countTier('safe'), isEarthquakeSimulationResult(simData)),
+    ];
     if (countTier('caution')) parts.push(`${countTier('caution')} risky`);
     count.textContent = parts.join(' · ');
   }
@@ -4845,14 +4871,14 @@ async function downloadSimulationReport() {
       ['Disaster type', hazard || 'Unknown'],
       ['Start', withPinCoordinates(start || 'Unknown', 'start')],
       ['Destination', isEq ? (endLabel || 'Unknown') : withPinCoordinates(endLabel || 'Unknown', 'end')],
-      ['Overall verdict', ROUTE_VERDICTS[getRouteSafetyTier(best)].title],
+      ['Overall verdict', getRouteVerdictTitle(best)],
       [`${getTopRouteTitle(best)} distance`, best?.display_distance || 'Unavailable'],
       ['Estimated time to destination', best?.display_duration || 'Unavailable'],
       [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),
-      ['Routes checked', `${routes.length} (${countTier('safe')} safe, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
+      ['Routes checked', `${routes.length} (${formatGreenRouteTally(countTier('safe'), isEq)}, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
       [`${getTopRouteTitle(best)} found by`, ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
     ];
     const acoSummary = buildAcoReportSummary(simData);

@@ -57,7 +57,7 @@
     const fill = isHighlighted ? '#22c55e' : '#f59e0b';
     const stroke = isHighlighted ? '#14532d' : '#9a3412';
     const accent = isHighlighted ? '#166534' : '#b45309';
-    const label = isHighlighted ? 'BEST' : 'EVAC';
+    const label = isHighlighted ? 'CHOSEN' : 'EVAC';
     const halo = isHighlighted
       ? `<circle cx="46" cy="38" r="33" fill="rgba(34,197,94,0.18)" />`
       : '';
@@ -292,7 +292,7 @@
           : liquefactionRow + groundShakingRow;
 
     // Pin icons match the markers (buildEvacMarkerIcon): after a run the
-    // chosen site is the green "BEST" one.
+    // chosen site is the green "CHOSEN" one.
     const pinRow = (fill, stroke, glyph, label) => (
       `<div class="legend-row">${window.buildLegendPinSvg(fill, stroke, glyph)}<span style="font-size:.78rem;">${label}</span></div>`
     );
@@ -301,7 +301,7 @@
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
         ${window.buildPinLegendRow('start')}
-        ${showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Best evacuation site') : ''}
+        ${showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen evacuation site') : ''}
         ${pinRow('#f59e0b', '#9a3412', 'house', 'Evacuation site')}
         ${typeof window.buildBoundaryLegendRow === 'function' ? window.buildBoundaryLegendRow() : ''}
         ${hazardLegend}

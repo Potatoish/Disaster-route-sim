@@ -736,7 +736,7 @@
     verdict.classList.toggle('is-safe', tier === 'safe');
     verdict.classList.toggle('is-caution', tier === 'caution');
     verdict.classList.toggle('is-danger', tier === 'unsafe');
-    $('msimVerdictTitle').textContent = ROUTE_VERDICTS[tier].title;
+    $('msimVerdictTitle').textContent = getRouteVerdictTitle(best);
     const VERDICT_SUBS = {
       safe: formatPeakRiskSentence(peak),
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
