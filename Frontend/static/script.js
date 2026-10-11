@@ -1930,11 +1930,24 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = SIMULATION_SU
   }
 }
 
+// Random per tab: the backend caps unfinished runs per tab, not per IP, so a
+// class on one Wi-Fi can all simulate at once (app.py's queue limits).
+const SIMULATION_CLIENT_ID = (() => {
+  const key = 'agnas-sim-client-id';
+  try {
+    const saved = sessionStorage.getItem(key);
+    if (saved) return saved;
+  } catch (err) {}
+  const id = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try { sessionStorage.setItem(key, id); } catch (err) {}
+  return id;
+})();
+
 async function submitSimulationJob(endpoint, payload) {
   const { response, data } = await fetchJsonWithTimeout(window.BACKEND_BASE + endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...payload, async: true }),
+    body: JSON.stringify({ ...payload, async: true, client_id: SIMULATION_CLIENT_ID }),
   });
   if (!response.ok || data?.error === true || !data?.job_id) {
     throw buildBackendRequestError(response, data, 'Could not start the simulation.');

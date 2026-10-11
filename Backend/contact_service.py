@@ -59,12 +59,15 @@ MAX_PAGE_LENGTH = 200
 # validation count, so a visitor fixing a typo isn't locked out.
 RATE_LIMITS = {
     "contact": (5, 10 * 60),
-    "feedback": (10, 10 * 60),
+    # Generous: a class or group evaluating the system on one Wi-Fi shares
+    # one IP. The form token and duplicate check stop bots instead.
+    "feedback": (60, 10 * 60),
     # Generous: phones on the same mobile network can share one IP.
     "visit": (30, 60 * 60),
     # All visitors together: spam from many IPs must not use up Resend's
-    # free daily quota (100 emails).
+    # free daily quota (100 emails) or flood the feedback sheet.
     "contact_all": (50, 24 * 60 * 60),
+    "feedback_all": (500, 60 * 60),
 }
 ALL_VISITORS = "*"
 
@@ -350,6 +353,12 @@ def record_feedback(data, client_ip=None):
 
     if _rate_limited("feedback", client_ip):
         return _too_many_requests()
+    if _rate_limited("feedback_all", ALL_VISITORS):
+        return _error(
+            "We're getting a lot of feedback right now. Please try again in a while.",
+            429,
+            "busy",
+        )
 
     # No IP or other identifying detail goes to the sheet: the widget promises
     # anonymous responses.

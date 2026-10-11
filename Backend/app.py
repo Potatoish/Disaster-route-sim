@@ -151,10 +151,14 @@ JOB_RESULT_TTL_SECONDS = 30 * 60
 MAX_KEPT_JOBS = 40
 SYNC_WAIT_TIMEOUT_SECONDS = 300
 # One worker runs every simulation, so a script sending new pins in a loop
-# would make everyone else wait behind it. Generous per IP: phones on the
-# same mobile network can share one.
-MAX_ACTIVE_JOBS_PER_CLIENT = 3
-MAX_QUEUED_JOBS = 20
+# would make everyone else wait behind it. A person runs one at a time (the
+# page sends a per-tab client_id), but a class on one Wi-Fi, or phones on one
+# mobile network, share an IP, so the per-IP cap is much higher. A run takes
+# a few seconds, so a full queue clears in a few minutes.
+MAX_ACTIVE_JOBS_PER_BROWSER = 2
+MAX_ACTIVE_JOBS_PER_IP = 40
+MAX_QUEUED_JOBS = 60
+MAX_CLIENT_ID_LENGTH = 64
 
 _JOBS_LOCK = Condition()
 _JOBS = OrderedDict()
@@ -214,16 +218,20 @@ def _ensure_job_worker_locked():
 
 
 def _job_refusal_locked(client):
-    """(payload, status) when this client may not queue another job."""
-    active = sum(
-        1 for job in _JOBS.values()
-        if job["client"] == client and job["state"] in ("queued", "running")
-    )
-    if active >= MAX_ACTIVE_JOBS_PER_CLIENT:
+    """(payload, status) when this client, an (ip, client_id) pair, may not
+    queue another job."""
+    active = [job["client"] for job in _JOBS.values() if job["state"] in ("queued", "running")]
+    if active.count(client) >= MAX_ACTIVE_JOBS_PER_BROWSER:
         return {
             "error": True,
             "code": "too_many_simulations",
-            "message": "You already have simulations waiting. Let them finish, then try again.",
+            "message": "You already have a simulation waiting. Let it finish, then try again.",
+        }, 429
+    if sum(1 for ip, _ in active if ip == client[0]) >= MAX_ACTIVE_JOBS_PER_IP:
+        return {
+            "error": True,
+            "code": "too_many_simulations",
+            "message": "Many simulations from your network are waiting. Please try again in a minute.",
         }, 429
     if len(_JOB_QUEUE) >= MAX_QUEUED_JOBS:
         return {
@@ -323,8 +331,11 @@ def _job_public_view(job):
     return view
 
 
-def _run_simulation_request(mode, request_summary, work, wait_async):
-    job, refusal = _submit_simulation_job(mode, request_summary, work, _client_ip())
+def _run_simulation_request(mode, request_summary, work, data):
+    client_id = data.get("client_id")
+    client_id = client_id[:MAX_CLIENT_ID_LENGTH] if isinstance(client_id, str) else ""
+    wait_async = data.get("async") is True
+    job, refusal = _submit_simulation_job(mode, request_summary, work, (_client_ip(), client_id))
     if refusal is not None:
         payload, status_code = refusal
         return jsonify(payload), status_code
@@ -506,7 +517,7 @@ def run_simulation():
         def work():
             return simulate(start, end, hazard, barangay=barangay)
 
-        return _run_simulation_request("flood", request_summary, work, data.get("async") is True)
+        return _run_simulation_request("flood", request_summary, work, data)
     except Exception as e:
         return jsonify({
             "error": True,
@@ -542,7 +553,7 @@ def run_earthquake():
         def work():
             return simulate_earthquake(start, barangay)
 
-        return _run_simulation_request("earthquake", request_summary, work, data.get("async") is True)
+        return _run_simulation_request("earthquake", request_summary, work, data)
     except Exception as e:
         return jsonify({
             "error": True,
