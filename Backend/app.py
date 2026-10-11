@@ -664,16 +664,9 @@ def about_page():
     return render_template("about.html", active_page="about")
 
 
-def _survey_url():
-    """The evaluation survey linked under the results (SURVEY_URL, e.g. a
-    Google Form); no link unless it is set to an https URL."""
-    url = os.environ.get("SURVEY_URL", "").strip()
-    return url if url.startswith("https://") else ""
-
-
 @app.route("/app", methods=["GET"])
 def simulator_app():
-    return render_template("index.html", survey_url=_survey_url())
+    return render_template("index.html")
 
 def _warm_caches():
     """Builds, right after startup, what the first visitor would otherwise

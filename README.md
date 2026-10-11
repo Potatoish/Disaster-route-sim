@@ -181,7 +181,6 @@ SMTP.
 | `CONTACT_TO_EMAIL` | The team Gmail. Without a verified domain, Resend only delivers to the address the Resend account was created with. |
 | `CONTACT_FROM_EMAIL` | Optional sender, default `AGNAS Contact Form <onboarding@resend.dev>` |
 | `FEEDBACK_SHEET_URL` | The `/exec` URL of the Apps Script in `Backend/tools/feedback_sheet.gs` |
-| `SURVEY_URL` | Optional: the evaluation survey (e.g. a Google Form, `https://` only). When set, a "Rate AGNAS" link appears under the simulation results. |
 
 Feedback sheet setup: create a Google Sheet with the team account, open **Extensions → Apps Script**,
 replace the code with `Backend/tools/feedback_sheet.gs`, then **Deploy → New deployment → Web app**

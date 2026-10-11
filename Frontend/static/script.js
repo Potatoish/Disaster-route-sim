@@ -1966,43 +1966,6 @@ function buildHazardSourceNoteHtml(isEarthquake) {
     : `Flood levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood map. They are estimates, not live conditions.`;
 }
 
-function formatWalkingPaceKmh(share = 1) {
-  const kmh = (WALKING_SPEED_METERS_PER_MINUTE * 60 / 1000) * share;
-  return `${Number(kmh.toFixed(1))} km/h`;
-}
-
-// Why a flood route's walking time is longer than its length suggests: the
-// paces of the flood classes it crosses (getRouteWalkingMinutes). Plain
-// text, with no citation link: residents read it.
-function buildWadingNote(route) {
-  if (!routeHasWadingTime(route)) return '';
-  const distances = getRouteWadingDistances(route);
-  const crosses = floodVar => Number(distances[floodVar]) > 0;
-  const deeper = [crosses(2) && 'medium', crosses(3) && 'high'].filter(Boolean);
-  const paces = [
-    crosses(1) && `about ${formatWalkingPaceKmh(FLOOD_WALKING_PACE_SHARE_BY_VAR[1])} in low water`,
-    deeper.length && `about ${formatWalkingPaceKmh(FLOOD_WALKING_PACE_SHARE_BY_VAR[2])} in ${deeper.join(' and ')} water`,
-  ].filter(Boolean);
-  return `The walking time is slower through flood water: ${paces.join(' and ')}, against ${formatWalkingPaceKmh()} on dry roads.`;
-}
-
-// The evaluation survey, linked under the results once SURVEY_URL is set on
-// the server (index.html's survey-url meta). New tab: leaving the simulator
-// would drop the simulation.
-function getSurveyUrl() {
-  return document.querySelector('meta[name="survey-url"]')?.content?.trim() || '';
-}
-
-function buildSurveyLinkHtml() {
-  const url = getSurveyUrl();
-  if (!url) return '';
-  return `<a class="survey-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">
-      <svg class="survey-link-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M15 5h3v16H6V5h3"/><path d="m9 14 2 2 4-4"/></svg>
-      <span class="survey-link-text"><span class="survey-link-title">Rate AGNAS</span><span class="survey-link-sub">Answer our short survey (opens in a new tab)</span></span>
-      <svg class="survey-link-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
-    </a>`;
-}
-
 // The PDF report's sources: what this simulation used, each with its link.
 function getReportDataSources(isEarthquake) {
   const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
@@ -4303,8 +4266,6 @@ function renderRouteSafetyPanel(result) {
     notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
   }
   const sourceNoteHtml = buildHazardSourceNoteHtml(isEarthquake);
-  const wadingNote = buildWadingNote(best);
-  if (wadingNote) notes.push(wadingNote);
 
   const bestTurnSteps = getRouteTurnSteps(best);
   const chipLabel = `${start} → ${end}`;
@@ -4348,7 +4309,7 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${wadingNote ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${routeHasWadingTime(best) ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
       </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
@@ -4362,8 +4323,7 @@ function renderRouteSafetyPanel(result) {
         <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
       </div>
     </div>
-    ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}
-    ${buildSurveyLinkHtml()}`;
+    ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}`;
   window.mobileSim?.renderResults(result);
 }
 
