@@ -1950,7 +1950,6 @@ const DATA_SOURCES = {
   phivolcs: { name: 'PHIVOLCS', url: 'https://www.phivolcs.dost.gov.ph/' },
   hazardHunter: { name: 'HazardHunterPH', url: 'https://hazardhunter.georisk.gov.ph/' },
   aidr: { name: 'AIDR Flood Hazard Guideline 7-3', url: 'https://knowledge.aidr.org.au/media/3518/adr-guideline-7-3.pdf' },
-  wading: { name: 'Li et al., 2026', url: 'https://doi.org/10.14311/APP.2026.57.0226' },
   osm: { name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/copyright' },
 };
 
@@ -1972,9 +1971,10 @@ function formatWalkingPaceKmh(share = 1) {
   return `${Number(kmh.toFixed(1))} km/h`;
 }
 
-// Why a flood route's walking time is longer than its length suggests, as
-// HTML: the paces of the flood classes it crosses (getRouteWalkingMinutes).
-function buildWadingNoteHtml(route) {
+// Why a flood route's walking time is longer than its length suggests: the
+// paces of the flood classes it crosses (getRouteWalkingMinutes). Plain
+// text, with no citation link: residents read it.
+function buildWadingNote(route) {
   if (!routeHasWadingTime(route)) return '';
   const distances = getRouteWadingDistances(route);
   const crosses = floodVar => Number(distances[floodVar]) > 0;
@@ -1983,8 +1983,7 @@ function buildWadingNoteHtml(route) {
     crosses(1) && `about ${formatWalkingPaceKmh(FLOOD_WALKING_PACE_SHARE_BY_VAR[1])} in low water`,
     deeper.length && `about ${formatWalkingPaceKmh(FLOOD_WALKING_PACE_SHARE_BY_VAR[2])} in ${deeper.join(' and ')} water`,
   ].filter(Boolean);
-  const { wading } = DATA_SOURCES;
-  return `The walking time is slower through flood water: ${paces.join(' and ')}, against ${formatWalkingPaceKmh()} on dry roads (${buildSourceLink(wading.name, wading.url)}).`;
+  return `The walking time is slower through flood water: ${paces.join(' and ')}, against ${formatWalkingPaceKmh()} on dry roads.`;
 }
 
 // The evaluation survey, linked under the results once SURVEY_URL is set on
@@ -2006,14 +2005,12 @@ function buildSurveyLinkHtml() {
 
 // The PDF report's sources: what this simulation used, each with its link.
 function getReportDataSources(isEarthquake) {
-  const { noah, hazardHunter, aidr, wading, osm } = DATA_SOURCES;
+  const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
   const hazardRows = isEarthquake
     ? [{ label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url }]
     : [
       { label: 'Flood hazard levels', text: 'Project NOAH 25-year flood hazard map (a modeled scenario, not live conditions)', url: noah.url },
-      { label: 'Walking limits in flood water', text: aidr.name, url: aidr.url },
-      { label: 'Walking pace in flood water', text: `${wading.name}: mean wading speeds by water depth`, url: wading.url },
-    ];
+      { label: 'Walking limits in flood water', text: aidr.name, url: aidr.url },    ];
   return [
     ...hazardRows,
     { label: 'Road network', text: 'OpenStreetMap contributors, under the Open Database License', url: osm.url },
@@ -4306,7 +4303,8 @@ function renderRouteSafetyPanel(result) {
     notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
   }
   const sourceNoteHtml = buildHazardSourceNoteHtml(isEarthquake);
-  const wadingNoteHtml = buildWadingNoteHtml(best);
+  const wadingNote = buildWadingNote(best);
+  if (wadingNote) notes.push(wadingNote);
 
   const bestTurnSteps = getRouteTurnSteps(best);
   const chipLabel = `${start} → ${end}`;
@@ -4350,14 +4348,14 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${wadingNoteHtml ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${wadingNote ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
       </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
         <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div>${peakDetail ? `<div class="safety-card-sub">${escapeHtml(peakDetail)}</div>` : ''}</div>
       </div>
     </div>
-    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}${wadingNoteHtml ? `<li>${wadingNoteHtml}</li>` : ''}<li>${sourceNoteHtml}</li></ul>
+    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>

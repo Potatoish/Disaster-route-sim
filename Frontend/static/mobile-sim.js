@@ -759,9 +759,8 @@
     syncRouteRows();
 
     const antNote = buildAntSearchNote(result);
-    $('msimSource').innerHTML = [antNote && escapeHtml(antNote), buildWadingNoteHtml(best), buildHazardSourceNoteHtml(isEarthquake)]
-      .filter(Boolean)
-      .join(' ');
+    const notes = [antNote, buildWadingNote(best)].filter(Boolean).map(note => escapeHtml(note));
+    $('msimSource').innerHTML = [...notes, buildHazardSourceNoteHtml(isEarthquake)].join(' ');
     $('msimSurvey').innerHTML = buildSurveyLinkHtml();
     scheduleSync();
   }
