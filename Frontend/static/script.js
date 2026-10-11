@@ -1690,6 +1690,19 @@ function describeMediumFloodCrossing(route) {
     : 'The best route has some medium flood water (0.5–1.5 m deep).';
 }
 
+// How much of a no-safe-route result's route 1 is above the safety limit, in
+// meters like the route rows ("485 m unsafe"), not a count of road pieces:
+// one street can be one piece or eight, depending on how OpenStreetMap
+// splits it.
+function describeUnsafeCrossing(route) {
+  const unsafe = Number(route?.unsafe_distance) || 0;
+  const total = Number(route?.distance) || 0;
+  if (unsafe <= 0) return 'The least risky route still passes through a high-hazard area. Be extra careful.';
+  return total > 0 && unsafe >= total * 0.98
+    ? `The whole least risky route (${formatDistanceCompact(total)}) is in a high-hazard area. Be extra careful.`
+    : `The least risky route still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area. Be extra careful.`;
+}
+
 // The "peak" row of the route safety panel and the PDF report.
 function getPeakRiskRow(route, isEarthquake) {
   return isEarthquake
@@ -2656,15 +2669,19 @@ function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   // (mobile-sim.js) drop the rows for routes not on the map.
   const line = (color, kind = '') => `<div class="legend-line${kind ? ` legend-line--${kind}` : ''}" style="${routeLegendSwatchStyle(color, kind)}"></div>`;
   const eliminatedRow = row(line(ROUTE_ELIMINATED_COLOR, 'eliminated'), 'Eliminated route');
+  const availableRow = row(line(ROUTE_AVAILABLE_COLOR, 'available'), 'Available route');
   const best = getBestRoute(routes);
   const bestRow = row(line(best ? getBestRouteColor(best) : ROUTE_BEST_COLOR), `${best ? getTopRouteName(best) : 'Best'} route`);
+  if (!best) return bestRow + availableRow + eliminatedRow;
 
-  if (best && getRouteSafetyTier(best) === 'unsafe') {
-    return bestRow + eliminatedRow;
-  }
+  // Only the kinds of line on the map (the first MAP_ROUTES_SHOWN routes,
+  // osm.js) besides the best one: a safe result has no eliminated line, so
+  // listing one was wrong. The phone legend already drops them the same way.
+  const offMap = new Set(getRoutesOffMap(routes));
+  const shownKinds = new Set(routes.filter(route => route !== best && !offMap.has(route)).map(route => route.category));
   return bestRow
-    + row(line(ROUTE_AVAILABLE_COLOR, 'available'), 'Available route')
-    + eliminatedRow;
+    + (shownKinds.has('available') ? availableRow : '')
+    + (shownKinds.has('eliminated') ? eliminatedRow : '');
 }
 
 // Legend row for the barangay outline, in its current (hazard) colors.
@@ -3940,6 +3957,7 @@ function safetyIcon(name) {
     shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>',
     ruler: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16 12-12 4 4-12 12H4v-4Z"/><path d="m12 8 4 4m-7 0 2 2m1-7 2 2"/></svg>',
     droplet: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s6 6.5 6 11a6 6 0 1 1-12 0c0-4.5 6-11 6-11Z"/></svg>',
+    quake: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/></svg>',
     road: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20 9 4m6 16-4-16M12 6v2m0 3v2m0 3v2"/></svg>',
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><path d="M12 10h.01"/></svg>',
     clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
@@ -3949,7 +3967,7 @@ function safetyIcon(name) {
   return icons[name] || icons.alert;
 }
 
-// "New Simulation" and "Download Report" in the safety aside share one
+// "New simulation" and "Download PDF" in the safety aside share one
 // show/hide lifecycle -- both only make sense once a simulation has run.
 function setResultsSidebarActionsVisible(visible) {
   document.getElementById('resetBtn')?.classList.toggle('show', visible);
@@ -4067,11 +4085,15 @@ function renderRouteSafetyPanel(result) {
     || getReadyPin('end')?.label
     || PIN_ROLE_COPY.end.fallbackLabel;
 
-  const unsafeParts = Number(best?.display_unsafe_segment_count ?? best?.threshold_exceedance_count ?? 0);
   const peakScore = Number(best?.max_hazard || 0);
   const { label: peakLabel, value: peakValue } = getPeakRiskRow(best, isEarthquake);
-  // Danger/red once it's actually High; amber/warning for Medium; neutral for Low.
-  const peakClass = peakScore >= 5 ? 'danger' : peakScore >= 3 ? 'warning' : '';
+  // Danger/red once it's actually High; amber/warning for Medium; neutral for
+  // Low. "High" starts at 4 for earthquake (getRiskLevelLabelFromScore) and
+  // at 5 for flood (High water).
+  const peakClass = peakScore >= (isEarthquake ? 4 : 5) ? 'danger' : peakScore >= 3 ? 'warning' : '';
+  const bestDistanceText = [best?.display_distance || 'Unavailable', best?.display_duration && `${best.display_duration} walk`]
+    .filter(Boolean)
+    .join(' · ');
   const tier = getRouteSafetyTier(best);
   const verdict = ROUTE_VERDICTS[tier];
   const fullySafeCount = routes.filter(route => getRouteSafetyTier(route) === 'safe').length;
@@ -4104,7 +4126,7 @@ function renderRouteSafetyPanel(result) {
   } else {
     notes.push(
       `${checkedLabel} ${single ? 'It is not' : 'None are'} safe.`,
-      `The least risky route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
+      describeUnsafeCrossing(best),
     );
     if (antSearchNote) notes.push(antSearchNote);
   }
@@ -4155,10 +4177,10 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteName(best))} route distance</div><div class="safety-card-value">${escapeHtml(best?.display_distance || 'Unavailable')}</div></div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteName(best))} route</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div></div>
       </div>
       <div class="safety-result-card ${peakClass}">
-        <div class="safety-icon-box">${safetyIcon('droplet')}</div>
+        <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
         <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div></div>
       </div>
     </div>
@@ -4166,7 +4188,7 @@ function renderRouteSafetyPanel(result) {
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
-        <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Click here for emergency contact information</button>
+        <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
       </div>
     </div>
     ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}`;
@@ -4177,10 +4199,11 @@ let routeListModalReturnFocus = null;
 
 function buildRouteModalCard(route, index) {
   const routeNo = route.display_route_no ?? index + 1;
-  const unsafe = Number(route.display_unsafe_segment_count ?? route.threshold_exceedance_count ?? 0);
+  // Unsafe length in meters, as on the phone's route rows.
+  const unsafe = Number(route.unsafe_distance) || 0;
   const isEarthquake = isEarthquakeRouteRecord(route);
   const risk = isEarthquake
-    ? getRiskLevelLabelFromScore(route.max_hazard)
+    ? `${getRiskLevelLabelFromScore(route.max_hazard)} road risk`
     : formatFloodPeakRiskWithHazard(route);
   const medium = isEarthquake ? 0 : getMediumFloodDistance(route);
   const isActive = selectedRouteFocus
@@ -4190,7 +4213,7 @@ function buildRouteModalCard(route, index) {
     route.display_distance || 'Distance unavailable',
     risk,
     ...(medium > 0 ? [`${formatDistanceCompact(medium)} in medium water`] : []),
-    `${unsafe} unsafe part${unsafe === 1 ? '' : 's'}`,
+    ...(unsafe > 0 ? [`${formatDistanceCompact(unsafe)} unsafe`] : []),
   ];
 
   return `<article class="route-modal-card${isActive ? ' is-active' : ''}" tabindex="0" role="button"

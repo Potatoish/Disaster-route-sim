@@ -729,7 +729,6 @@
     const best = getBestRoute(routes);
     const tier = getRouteSafetyTier(best);
     const peak = getPeakRiskRow(best, isEarthquake);
-    const unsafeParts = Number(best?.display_unsafe_segment_count ?? best?.threshold_exceedance_count ?? 0);
 
     // Same wording as the desktop results panel (renderRouteSafetyPanel).
     const verdict = $('msimVerdict');
@@ -740,7 +739,7 @@
     const VERDICT_SUBS = {
       safe: `${peak.label}: ${peak.value}`,
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: `${peak.label}: ${peak.value}. The least risky route still passes through ${unsafeParts || 'a few'} high-hazard area${unsafeParts === 1 ? '' : 's'}. Be extra careful.`,
+      unsafe: `${peak.label}: ${peak.value}. ${describeUnsafeCrossing(best)}`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
