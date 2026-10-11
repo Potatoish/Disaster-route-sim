@@ -49,6 +49,11 @@ from simulation_progress import bump_progress, reset_progress
 # Each site's main colony is compared on its few safest routes, evaluated the
 # earthquake way, to pick the site; only that site gets alternative colonies.
 SITE_PICK_ROUTES_PER_SITE = 5
+# A layer above the safety limit on at least this share of a barangay's road
+# length is area-wide there: no route can avoid it, so the results say so
+# instead of a bare "No safe route" (PHIVOLCS rates the ground shaking of each
+# barangay as one high zone).
+AREA_WIDE_HIGH_RISK_ROAD_SHARE = 0.95
 
 _EARTHQUAKE_GRAPH_CACHE = {}
 _EARTHQUAKE_GRAPH_LOCK = RLock()
@@ -198,9 +203,37 @@ def _annotate_graph_with_earthquake_hazards(graph, dataset):
         for u, v, key, edge_data in graph.edges(keys=True, data=True):
             _stamp_earthquake_hazards(edge_data, get_edge_geometry(graph, u, v, edge_data), dataset)
 
+        graph.graph["earthquake_high_risk_road_share"] = _high_risk_road_share(graph)
         graph.graph["earthquake_dataset"] = dataset["canonical_barangay"]
         debug_print(f"[EQ] Hazard annotation complete in {time.perf_counter() - annotation_started:.2f}s")
     return graph
+
+
+def _high_risk_road_share(graph):
+    """Per layer, the share of the covered road length above the safety
+    limit."""
+    totals = {"liquefaction": 0.0, "ground_shaking": 0.0}
+    covered = 0.0
+    for _, _, _, edge_data in graph.edges(keys=True, data=True):
+        if not edge_data.get("hazard_coverage"):
+            continue
+        length = float(edge_data.get("length", 0))
+        covered += length
+        for layer in totals:
+            if _edge_layer_level(edge_data, f"eq_{layer}") > HAZARD_THRESHOLD:
+                totals[layer] += length
+    return {layer: (high / covered if covered else 0.0) for layer, high in totals.items()}
+
+
+def _area_wide_high_risk(base_graph, view_key):
+    """{layer: road share} for the area-wide layers a view's routing uses:
+    both for the overall view, its own layer for the others."""
+    shares = base_graph.graph.get("earthquake_high_risk_road_share") or {}
+    return {
+        layer: round(share, 3)
+        for layer, share in shares.items()
+        if share >= AREA_WIDE_HIGH_RISK_ROAD_SHARE and view_key in ("overall", layer)
+    }
 
 
 def _add_earthquake_road_access_nodes(base_graph, points, dataset):
@@ -662,6 +695,9 @@ def simulate_earthquake(start, barangay_name):
                 view_key,
                 aco_stats,
             )
+            area_wide = _area_wide_high_risk(base_graph, view_key)
+            for route in views[view_key]["routes"]:
+                route["area_wide_high_risk"] = area_wide
             debug_print(
                 f"[EQ]   View complete: {view_label} in {time.perf_counter() - view_started:.2f}s "
                 f"(routes={len(views[view_key]['routes'])})"

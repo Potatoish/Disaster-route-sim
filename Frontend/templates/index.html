@@ -218,7 +218,7 @@
           <button type="button" data-flood-filter="high" onclick="setFloodHazardOverlayMode('high')"><span class="swatch" style="background:rgba(225,29,72,.94)"></span>High</button>
           <button type="button" data-flood-filter="all" onclick="setFloodHazardOverlayMode('all')">All</button>
         </div>
-        <div class="flood-filter-hint" id="floodFilterHint">All levels shown. Click one to highlight it.</div>
+        <div class="flood-filter-hint" id="floodFilterHint">Click a level to highlight it on the map. Routes always check every level.</div>
       </div>
 
       <div class="map-pin-hint" id="mapPinHint" role="status" aria-live="polite" hidden>
@@ -473,6 +473,7 @@
             <button type="button" data-flood-filter="moderate" onclick="setFloodHazardOverlayMode('moderate')"><span class="swatch" style="background:rgba(249,115,22,.90)"></span>Medium</button>
             <button type="button" data-flood-filter="high" onclick="setFloodHazardOverlayMode('high')"><span class="swatch" style="background:rgba(225,29,72,.94)"></span>High</button>
           </div>
+          <p class="msheet-help">Highlights a level on the map only. Routes always check every level.</p>
         </div>
 
         <button class="mbtn mbtn--primary mbtn--block msim-layers-done" type="button" onclick="closeMobileLayers()">Done</button>

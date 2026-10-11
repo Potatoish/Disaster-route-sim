@@ -670,11 +670,13 @@ function syncFloodFilterControl() {
     button.setAttribute('aria-pressed', String(active));
   });
 
+  // The filter only restyles the map, but a level button reads like a route
+  // setting, so the hint says the routes still check every level.
   if (hint) {
     const overlayConfig = getFloodOverlayConfig(floodHazardOverlayMode);
     hint.textContent = overlayConfig.focusVar
-      ? `${overlayConfig.label} highlighted. Click again to show all.`
-      : 'All levels shown. Click one to highlight it.';
+      ? `${overlayConfig.label} highlighted on the map. Routes still check every level. Click again to show all.`
+      : 'Click a level to highlight it on the map. Routes always check every level.';
   }
   window.mobileSim?.scheduleSync();
 }
@@ -1759,10 +1761,49 @@ const ROUTE_VERDICTS = {
 };
 
 // The verdict a result's route 1 gets. A green route is "found" under its
-// own name, so an earthquake one over Moderate-risk roads says so.
+// own name, so an earthquake one over Moderate-risk roads says so. When the
+// risk covers the whole barangay, "No safe route" alone reads like a fault,
+// so the verdict names the cause.
 function getRouteVerdictTitle(route) {
   const tier = getRouteSafetyTier(route);
-  return tier === 'safe' ? `${getTopRouteTitle(route)} found` : ROUTE_VERDICTS[tier].title;
+  if (tier === 'safe') return `${getTopRouteTitle(route)} found`;
+  return isAreaWideHighRisk(route) ? 'High risk on every route' : ROUTE_VERDICTS[tier].title;
+}
+
+const AREA_WIDE_LAYER_NAMES = {
+  ground_shaking: 'ground shaking',
+  liquefaction: 'liquefaction risk',
+};
+
+// The earthquake layers above the safety limit on (almost) every road of the
+// barangay, for this route's view, with their share of the road length
+// (area_wide_high_risk, earthquake_service.py). PHIVOLCS rates each
+// barangay's ground shaking as one high zone, so no route avoids it.
+function getAreaWideHighRisk(route) {
+  if (!isEarthquakeRouteRecord(route)) return {};
+  const layers = route?.area_wide_high_risk;
+  return layers && typeof layers === 'object' ? layers : {};
+}
+
+function isAreaWideHighRisk(route) {
+  return getRouteSafetyTier(route) === 'unsafe'
+    && Object.keys(getAreaWideHighRisk(route)).some(layer => AREA_WIDE_LAYER_NAMES[layer]);
+}
+
+// "High ground shaking covers every road in Brgy. Sta. Lucia, so no route
+// can avoid it."
+function describeAreaWideHighRisk(route, barangay = selectedBarangay) {
+  const layers = Object.entries(getAreaWideHighRisk(route)).filter(([layer]) => AREA_WIDE_LAYER_NAMES[layer]);
+  const names = layers.map(([layer]) => AREA_WIDE_LAYER_NAMES[layer]);
+  const several = names.length > 1;
+  const everyRoad = layers.every(([, share]) => Number(share) >= 0.995) ? 'every road' : 'almost every road';
+  const place = barangay ? `Brgy. ${barangay}` : 'this barangay';
+  return `High ${names.join(' and high ')} ${several ? 'cover' : 'covers'} ${everyRoad} in ${place}, so no route can avoid ${several ? 'them' : 'it'}.`;
+}
+
+function describeLeastExposedRoute(route) {
+  const destination = route?.destination_name ? ` to ${route.destination_name}` : '';
+  return `Route ${route?.display_route_no ?? 1} is the least exposed way${destination}. Once the shaking stops, watch for falling debris and damaged buildings on the way.`;
 }
 
 // How many routes are green, in words that don't call them "safe" either:
@@ -4255,6 +4296,12 @@ function renderRouteSafetyPanel(result) {
       `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
     );
     if (antSearchNote) notes.push(antSearchNote);
+  } else if (isAreaWideHighRisk(best)) {
+    notes.push(
+      `${checkedLabel} ${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)}`,
+      describeLeastExposedRoute(best),
+    );
+    if (antSearchNote) notes.push(antSearchNote);
   } else {
     notes.push(
       `${checkedLabel} ${single ? 'It is not' : 'None are'} safe.`,
@@ -4939,6 +4986,9 @@ async function downloadSimulationReport() {
       [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
+        : []),
+      ...(isAreaWideHighRisk(best)
+        ? [['Why every route is high risk', `${describeAreaWideHighRisk(best, barangay)} ${describeLeastExposedRoute(best)}`]]
         : []),
       ['Routes checked', `${routes.length} (${formatGreenRouteTally(countTier('safe'), isEq)}, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
       [`${getTopRouteTitle(best)} found by`, ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],

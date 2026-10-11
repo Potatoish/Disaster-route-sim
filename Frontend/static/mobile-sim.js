@@ -740,7 +740,9 @@
     const VERDICT_SUBS = {
       safe: formatPeakRiskSentence(peak),
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: `${formatPeakRiskSentence(peak)} ${describeUnsafeCrossing(best)}`,
+      unsafe: isAreaWideHighRisk(best)
+        ? `${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)} ${describeLeastExposedRoute(best)}`
+        : `${formatPeakRiskSentence(peak)} ${describeUnsafeCrossing(best)}`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
