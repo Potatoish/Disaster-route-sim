@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import time
@@ -23,8 +24,10 @@ from earthquake_service import (
 )
 from main import simulate
 from osm_routing import (
+    BARANGAY_BOUNDARY_FILES,
     build_flood_hazard_layer_payload,
     check_flood_pin,
+    get_barangay_boundary,
     get_barangay_boundary_payload,
 )
 from simulation_progress import get_progress, reset_progress
@@ -45,6 +48,24 @@ app = Flask(
 )
 CORS(app)
 
+# Static URLs carry a hash of the file's content (?v=...), so browsers can
+# keep them for a year without asking again: a changed file gets a new URL.
+# Without this every page view re-asked the server about each file, a full
+# round trip each before the page could use its cached CSS. The hash is of
+# the content, not the mtime, because Railway gives every file the commit's
+# time, so one deploy would have re-downloaded every unchanged file too.
+STATIC_CACHE_SECONDS = 365 * 24 * 60 * 60
+_STATIC_HASHES = {}
+
+def _static_file_hash(filename):
+    path = os.path.join(app.static_folder, filename)
+    stat = os.stat(path)
+    key = (filename, stat.st_mtime_ns, stat.st_size)
+    if key not in _STATIC_HASHES:
+        with open(path, "rb") as file:
+            _STATIC_HASHES[key] = hashlib.sha256(file.read()).hexdigest()[:12]
+    return _STATIC_HASHES[key]
+
 @app.url_defaults
 def _version_static_urls(endpoint, values):
     if endpoint != "static" or "v" in values:
@@ -53,9 +74,15 @@ def _version_static_urls(endpoint, values):
     if not filename:
         return
     try:
-        values["v"] = int(os.stat(os.path.join(app.static_folder, filename)).st_mtime)
+        values["v"] = _static_file_hash(filename)
     except OSError:
         pass
+
+@app.after_request
+def _cache_versioned_static(response):
+    if request.endpoint == "static" and request.args.get("v") and response.status_code in (200, 304):
+        response.headers["Cache-Control"] = f"public, max-age={STATIC_CACHE_SECONDS}, immutable"
+    return response
 
 @app.context_processor
 def _inject_form_token():
@@ -442,10 +469,16 @@ def flood_hazard_layers():
                 "message": f"No flood hazard layers found for '{barangay or 'Pasig City'}'"
             }), 404
 
-        return jsonify({
+        # A few hundred KB that only changes with a deploy: the browser keeps
+        # it and asks with its ETag, and an unchanged layer answers 304 with
+        # no body.
+        response = jsonify({
             "error": False,
             **payload,
         })
+        response.headers["Cache-Control"] = "no-cache"
+        response.add_etag()
+        return response.make_conditional(request)
     except Exception as e:
         return jsonify({
             "error": True,
@@ -626,6 +659,32 @@ def about_page():
 @app.route("/app", methods=["GET"])
 def simulator_app():
     return render_template("index.html")
+
+def _warm_caches():
+    """Builds, right after startup, what the first visitor would otherwise
+    wait for: each barangay's flood map layer and the graphs behind the pin
+    check (seconds each on Railway, after every deploy)."""
+    started = time.time()
+    for name in BARANGAY_BOUNDARY_FILES:
+        boundary = get_barangay_boundary(name)
+        if boundary is None:
+            continue
+        point = boundary["geometry"].representative_point()
+        steps = (
+            lambda: build_flood_hazard_layer_payload(name, clip_scope="barangay_buffer"),
+            lambda: check_flood_pin(name, point.y, point.x),
+            lambda: check_earthquake_pin(name, point.y, point.x),
+        )
+        for step in steps:
+            try:
+                step()
+            except ValueError:
+                pass  # e.g. no earthquake data for this barangay
+            except Exception as exc:
+                print(f"[warm-up] {name}: {exc}")
+    print(f"[warm-up] caches ready in {time.time() - started:.1f}s")
+
+Thread(target=_warm_caches, name="cache-warm-up", daemon=True).start()
 
 if __name__ == "__main__":
     # Local dev only (gunicorn never runs this block): always revalidate static

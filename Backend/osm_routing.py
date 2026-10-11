@@ -184,6 +184,9 @@ FLOOD_LAYER_BUFFER_METERS = 800.0
 FLOOD_LAYER_SIMPLIFY_TOLERANCE = 0.00003
 FLOOD_LAYER_SIMPLIFY_TOLERANCE_BUFFER = 0.00008
 FLOOD_LAYER_SIMPLIFY_TOLERANCE_CITY = 0.00018
+# The map layer only: 6 decimals is about 0.1 m, far below a pixel at any
+# zoom, and the full 15-digit coordinates more than doubled the download.
+FLOOD_LAYER_COORDINATE_DECIMALS = 6
 
 def debug_print(*args):
     if DEBUG:
@@ -514,6 +517,10 @@ def build_flood_hazard_layer_payload(name=None, vars_filter=None, clip_scope="ba
         )
         if simplified_geometry.is_empty:
             simplified_geometry = clipped_geometry
+        simplified_geometry = shapely.transform(
+            simplified_geometry,
+            lambda coords: np.round(coords, FLOOD_LAYER_COORDINATE_DECIMALS),
+        )
 
         var_value = zone_var
         features.append({
