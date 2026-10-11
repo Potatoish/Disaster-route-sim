@@ -290,7 +290,7 @@
 
         <div class="hz-stack">
           <div class="hz-scene">
-            <svg class="hz-cross gs-on" id="hzCross" viewBox="0 0 520 240" preserveAspectRatio="xMidYMax meet" role="img" aria-labelledby="hzCrossLabel">
+            <svg class="hz-cross gs-on" id="hzCross" viewBox="0 0 520 240" role="img" aria-labelledby="hzCrossLabel">
               <title id="hzCrossLabel">Street built on loose, wet sand beside a river, shown with the ground cut away</title>
               <defs>
                 <linearGradient id="hzCrossSky" x1="0" y1="0" x2="0" y2="1">
@@ -306,12 +306,8 @@
                   <circle cx="6" cy="10.5" r=".8" style="fill: var(--sand-grain)"/>
                 </pattern>
               </defs>
-              {# Sky above the frame: shown only when the card is taller than
-                 the drawing (home.css, side-by-side cards), where the drawing
-                 sits at the bottom and these fill the space above it. #}
-              <rect y="-600" width="520" height="602" style="fill: var(--sky-top)"/>
               <rect width="520" height="240" fill="url(#hzCrossSky)"/>
-              <rect class="gs-wash" y="-600" width="520" height="750" style="fill: var(--gs)"/>
+              <rect class="gs-wash" width="520" height="150" style="fill: var(--gs)"/>
               <g class="cross-shake">
                 <rect y="150" width="520" height="14" style="fill: var(--soil-top)"/>
                 <rect y="164" width="520" height="51" style="fill: var(--sand)"/>

@@ -609,23 +609,10 @@ body.dark .hz-section{
   --safe-ink:#4ade80; --risk-ink:#fbbf24; --elim-ink:#f87171;
 }
 .hz-section p{ margin:0; }
+/* Each card keeps its own height: stretching the shorter earthquake card
+   only moved the flood card's extra height into empty space inside it. */
 .hz-grid{ display:grid; gap:20px; align-items:start; }
-/* Side by side, the two cards share one height and the earthquake readout
-   sits at the bottom, level with the flood one. The cross-section takes up
-   the flood card's extra height as more sky: its frame grows (never below
-   the drawing's own proportions), the SVG fills it with the drawing pinned to
-   the bottom (xMidYMax), and the sky rects drawn above y = 0 in home.html
-   fill the space, in the same colors and tint as the sky below. */
-@media (min-width:1000px){
-  .hz-grid{ grid-template-columns:1fr 1fr; align-items:stretch; }
-  #hzQuake{ display:flex; flex-direction:column; }
-  #hzQuake .hz-stack{ flex:1; grid-template-rows:1fr; }
-  /* The spacer holds the drawing's 520:240 shape as a minimum (padding % is
-     of the width); aspect-ratio would stop the frame stretching taller. */
-  #hzQuake .hz-scene{ position:relative; }
-  #hzQuake .hz-scene::before{ content:""; display:block; padding-top:calc(240 / 520 * 100%); }
-  #hzQuake .hz-scene svg{ position:absolute; inset:0; height:100%; }
-}
+@media (min-width:1000px){ .hz-grid{ grid-template-columns:1fr 1fr; } }
 
 .hz-module{
   min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:14px;
