@@ -1685,15 +1685,23 @@ function getRouteSafetyTier(route) {
   return 'safe';
 }
 
-// Route 1's name follows its verdict: "Best" only when it is safe. Through
-// Medium water it is "Risky", like its amber line and verdict. With no safe
-// route it is only the one with the least dangerous road (the ranking is
-// safety first), not a recommendation, and often not the shortest either, so
-// it is "Least risky".
-const TOP_ROUTE_NAMES = { safe: 'Best', caution: 'Risky', unsafe: 'Least risky' };
-
+// Route 1's name says how risky it is, never "Best". Even a green route can
+// cross Low water (up to 0.5 m) or, for an earthquake, Moderate-risk roads,
+// so it is named by the highest risk it meets: "Low risk" or "Moderate
+// risk". Through Medium water it is "Risky", like its amber line and verdict.
+// With no safe route it is only the one with the least dangerous road (the
+// ranking is safety first), often not the shortest either: "Least risky".
 function getTopRouteName(route) {
-  return TOP_ROUTE_NAMES[getRouteSafetyTier(route)];
+  const tier = getRouteSafetyTier(route);
+  if (tier === 'caution') return 'Risky';
+  if (tier === 'unsafe') return 'Least risky';
+  return isEarthquakeRouteRecord(route) && Number(route?.max_hazard) >= 3 ? 'Moderate risk' : 'Low risk';
+}
+
+// The name in front of "route": "Low-risk route", "Risky route", "Least
+// risky route".
+function getTopRouteTitle(route) {
+  return `${getTopRouteName(route).replace(/ risk$/, '-risk')} route`;
 }
 
 const ROUTE_VERDICTS = {
@@ -1804,7 +1812,7 @@ function buildRouteReason(route) {
   }
 
   if (route?.category === 'best') {
-    return `${getTopRouteName(route)} route${destinationNote}. It is the top choice in this result.`;
+    return `${getTopRouteTitle(route)}${destinationNote}. It is the top choice in this result.`;
   }
 
   if (route?.category === 'available') {
@@ -1909,7 +1917,7 @@ function buildAcoReportSummary(result = simData) {
   }
   const comparison = ACO_BASELINE_COMPARISON_TEXT[aco.best_vs_shortest_path];
   const best = getBestRoute(Array.isArray(result?.routes) ? result.routes : []);
-  if (comparison) parts.push(`${getTopRouteName(best).toLowerCase()} route: ${comparison}`);
+  if (comparison) parts.push(`${getTopRouteTitle(best).toLowerCase()}: ${comparison}`);
   return `${parts.join('; ')}.`;
 }
 
@@ -2712,7 +2720,7 @@ function buildRouteLegendRows(routes = getCurrentDisplayRoutes()) {
   const eliminatedRow = row(line(ROUTE_ELIMINATED_COLOR, 'eliminated'), 'Eliminated route');
   const availableRow = row(line(ROUTE_AVAILABLE_COLOR, 'available'), 'Available route');
   const best = getBestRoute(routes);
-  const bestRow = row(line(best ? getBestRouteColor(best) : ROUTE_BEST_COLOR), `${best ? getTopRouteName(best) : 'Best'} route`);
+  const bestRow = row(line(best ? getBestRouteColor(best) : ROUTE_BEST_COLOR), best ? getTopRouteTitle(best) : 'Low-risk route');
   if (!best) return bestRow + availableRow + eliminatedRow;
 
   // Only the kinds of line on the map (the first MAP_ROUTES_SHOWN routes,
@@ -4218,7 +4226,7 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteName(best))} route</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div></div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div></div>
       </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
@@ -4838,14 +4846,14 @@ async function downloadSimulationReport() {
       ['Start', withPinCoordinates(start || 'Unknown', 'start')],
       ['Destination', isEq ? (endLabel || 'Unknown') : withPinCoordinates(endLabel || 'Unknown', 'end')],
       ['Overall verdict', ROUTE_VERDICTS[getRouteSafetyTier(best)].title],
-      [`${getTopRouteName(best)} route distance`, best?.display_distance || 'Unavailable'],
+      [`${getTopRouteTitle(best)} distance`, best?.display_distance || 'Unavailable'],
       ['Estimated time to destination', best?.display_duration || 'Unavailable'],
       [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),
       ['Routes checked', `${routes.length} (${countTier('safe')} safe, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
-      [`${getTopRouteName(best)} route found by`, ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
+      [`${getTopRouteTitle(best)} found by`, ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
     ];
     const acoSummary = buildAcoReportSummary(simData);
     if (acoSummary) rows.push(['Ant colony search', acoSummary]);
