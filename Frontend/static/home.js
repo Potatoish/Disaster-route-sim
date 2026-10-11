@@ -96,16 +96,41 @@ function setSending(button, sending) {
   button.textContent = sending ? 'Sending…' : button.dataset.label;
 }
 
+// Spam check: the backend takes a form only with the token this page was
+// served with, and quietly drops one sent within seconds of that (bots fill
+// forms instantly), so a very quick send waits out the gap first. A server
+// restart or a page left open for a day voids the token ("form_expired"):
+// then a fresh one is fetched and the send retried once.
+const FORM_MIN_WAIT_MS = 3500;
+let formToken = document.querySelector('meta[name="form-token"]')?.content || '';
+let formTokenAt = Date.now();
+
+async function refreshFormToken() {
+  const res = await fetch(`${window.BACKEND_BASE}/form-token`, { cache: 'no-store' });
+  const data = await res.json();
+  if (!res.ok || !data.token) throw new Error('No form token');
+  formToken = data.token;
+  formTokenAt = Date.now();
+}
+
 async function postHomeForm(path, body) {
   try {
-    const res = await fetch(`${window.BACKEND_BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.error === false) return { ok: true, message: data.message };
-    return { ok: false, message: data.message || 'Something went wrong. Please try again.' };
+    for (let attempt = 0; ; attempt += 1) {
+      const wait = formTokenAt + FORM_MIN_WAIT_MS - Date.now();
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      const res = await fetch(`${window.BACKEND_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, form_token: formToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.error === false) return { ok: true, message: data.message };
+      if (data.code === 'form_expired' && attempt === 0) {
+        await refreshFormToken();
+        continue;
+      }
+      return { ok: false, message: data.message || 'Something went wrong. Please try again.' };
+    }
   } catch (err) {
     return { ok: false, message: "Couldn't reach the server. Check your connection and try again." };
   }

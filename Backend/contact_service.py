@@ -21,13 +21,25 @@ Configuration comes from the environment, so nothing secret is committed:
                         the Resend account was created with, so use that one.
     CONTACT_FROM_EMAIL  optional sender, default DEFAULT_CONTACT_FROM_EMAIL
     FEEDBACK_SHEET_URL  the Apps Script web app URL (ends in /exec)
+    FORM_TOKEN_SECRET   optional key for signing form tokens. Without it a
+                        random key is made at startup, so each restart makes
+                        open pages fetch a new token (home.js does that).
+
+Spam checks, cheapest first: the hidden "website" field, a form token the
+page got when it was served (no token means the page was never loaded; a
+token only seconds old means a bot filled the form), a limit on links,
+dropping a message already delivered, then the per-visitor and daily limits.
+Signs of a bot get a fake "sent", so it has no reason to retry.
 
 Each function returns (payload, status_code) in the app's usual
 {"error": bool, "message": str} shape and never raises.
 """
 
+import hashlib
+import hmac
 import os
 import re
+import secrets
 import time
 from threading import Lock
 
@@ -50,7 +62,27 @@ RATE_LIMITS = {
     "feedback": (10, 10 * 60),
     # Generous: phones on the same mobile network can share one IP.
     "visit": (30, 60 * 60),
+    # All visitors together: spam from many IPs must not use up Resend's
+    # free daily quota (100 emails).
+    "contact_all": (50, 24 * 60 * 60),
 }
+ALL_VISITORS = "*"
+
+# A person needs more than a few seconds to fill in a form; a bot doesn't.
+FORM_TOKEN_MIN_AGE_SECONDS = 3
+FORM_TOKEN_MAX_AGE_SECONDS = 24 * 60 * 60
+_FORM_TOKEN_SECRET = (
+    os.environ.get("FORM_TOKEN_SECRET", "").strip().encode() or secrets.token_bytes(32)
+)
+
+MAX_LINKS = 3
+_LINK_PATTERN = re.compile(r"https?://|www\.|<a\s|\[url", re.IGNORECASE)
+
+# The same text again within this time is dropped: spam campaigns repeat one
+# message from many IPs, which the per-visitor limits can't see.
+DUPLICATE_WINDOW_SECONDS = 24 * 60 * 60
+# Short feedback ("Good", "Nice") legitimately repeats.
+MIN_DUPLICATE_CHECK_LENGTH = 20
 
 # How long the homepage's visitor count is reused before the sheet is asked
 # again, so each page view doesn't wait on Apps Script.
@@ -69,6 +101,9 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 _RECENT_SENDS_LOCK = Lock()
 _RECENT_SENDS = {}
+
+_RECENT_TEXTS_LOCK = Lock()
+_RECENT_TEXTS = {}
 
 _VISITOR_COUNT_LOCK = Lock()
 _VISITOR_COUNT = {"count": None, "fetched_at": 0.0}
@@ -95,7 +130,9 @@ def _rate_limited(kind, client_ip):
     key = (kind, client_ip or "unknown")
     with _RECENT_SENDS_LOCK:
         if len(_RECENT_SENDS) > 1000:
-            for stale_key in [k for k, sent in _RECENT_SENDS.items() if now - sent[-1] >= window]:
+            for stale_key in [
+                k for k, sent in _RECENT_SENDS.items() if now - sent[-1] >= RATE_LIMITS[k[0]][1]
+            ]:
                 del _RECENT_SENDS[stale_key]
         recent = [sent_at for sent_at in _RECENT_SENDS.get(key, ()) if now - sent_at < window]
         limited = len(recent) >= limit
@@ -104,6 +141,64 @@ def _rate_limited(kind, client_ip):
         if recent:
             _RECENT_SENDS[key] = recent
         return limited
+
+
+def _sign(issued):
+    return hmac.new(_FORM_TOKEN_SECRET, str(issued).encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def issue_form_token():
+    """Put in each page (site_base.html) and returned by GET /form-token."""
+    issued = int(time.time())
+    return f"{issued}.{_sign(issued)}"
+
+
+def _form_token_problem(token):
+    """None for a good token, "too_fast" or "expired" otherwise."""
+    issued, _, signature = (token if isinstance(token, str) else "").partition(".")
+    if not (issued.isascii() and issued.isdigit()):
+        return "expired"
+    if not hmac.compare_digest(signature.encode(), _sign(int(issued)).encode()):
+        return "expired"
+    age = time.time() - int(issued)
+    if age > FORM_TOKEN_MAX_AGE_SECONDS:
+        return "expired"
+    if age < FORM_TOKEN_MIN_AGE_SECONDS:
+        return "too_fast"
+    return None
+
+
+def _count_links(text):
+    return len(_LINK_PATTERN.findall(text))
+
+
+def _text_key(kind, text):
+    if len(text) < MIN_DUPLICATE_CHECK_LENGTH:
+        return None
+    normalized = " ".join(text.lower().split())
+    return kind, hashlib.sha256(normalized.encode()).hexdigest()
+
+
+def _already_delivered(kind, text):
+    key = _text_key(kind, text)
+    if key is None:
+        return False
+    now = time.monotonic()
+    with _RECENT_TEXTS_LOCK:
+        sent_at = _RECENT_TEXTS.get(key)
+        return sent_at is not None and now - sent_at < DUPLICATE_WINDOW_SECONDS
+
+
+def _remember_delivered(kind, text):
+    key = _text_key(kind, text)
+    if key is None:
+        return
+    now = time.monotonic()
+    with _RECENT_TEXTS_LOCK:
+        if len(_RECENT_TEXTS) > 1000:
+            for stale_key in [k for k, sent in _RECENT_TEXTS.items() if now - sent >= DUPLICATE_WINDOW_SECONDS]:
+                del _RECENT_TEXTS[stale_key]
+        _RECENT_TEXTS[key] = now
 
 
 def _error(message, status_code, code=None):
@@ -121,12 +216,34 @@ def _too_many_requests():
     )
 
 
+def _too_many_links():
+    return _error(f"Please include at most {MAX_LINKS} links.", 400, "too_many_links")
+
+
+def _bot_check(data, sent_message):
+    """The answer for a bot (a fake "sent") or a page without a valid form
+    token, or None when the request looks like a person's."""
+    # Hidden "website" field: people never see it, form-filling bots do.
+    if _clean_line(data.get("website"), 200):
+        return {"error": False, "message": sent_message}, 200
+    problem = _form_token_problem(data.get("form_token"))
+    if problem == "too_fast":
+        return {"error": False, "message": sent_message}, 200
+    if problem == "expired":
+        return _error(
+            "This page has been open a long time. Please reload it and send again.",
+            400,
+            "form_expired",
+        )
+    return None
+
+
 def send_contact_message(data, client_ip=None):
     data = data if isinstance(data, dict) else {}
-    # Hidden "website" field: people never see it, form-filling bots do.
-    # Pretend it worked so the bot has no reason to retry.
-    if _clean_line(data.get("website"), 200):
-        return {"error": False, "message": "Message sent."}, 200
+    sent_message = "Message sent. We'll reply by email."
+    bot_answer = _bot_check(data, sent_message)
+    if bot_answer:
+        return bot_answer
 
     name = _clean_line(data.get("name"), MAX_NAME_LENGTH)
     email = _clean_line(data.get("email"), MAX_EMAIL_LENGTH + 1)
@@ -136,6 +253,12 @@ def send_contact_message(data, client_ip=None):
         return _error("Please fill in your name, email, and message.", 400, "missing_fields")
     if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_PATTERN.match(email):
         return _error("Please enter a valid email address.", 400, "invalid_email")
+    if _count_links(name):
+        return _error("Please enter just your name, without links.", 400, "invalid_name")
+    if _count_links(message) > MAX_LINKS:
+        return _too_many_links()
+    if _already_delivered("contact", message):
+        return {"error": False, "message": sent_message}, 200
 
     api_key = os.environ.get("RESEND_API_KEY", "").strip()
     to_email = os.environ.get("CONTACT_TO_EMAIL", "").strip()
@@ -147,8 +270,16 @@ def send_contact_message(data, client_ip=None):
             "not_configured",
         )
 
+    # Per visitor first, so one spammer's blocked tries don't use up the
+    # shared daily allowance.
     if _rate_limited("contact", client_ip):
         return _too_many_requests()
+    if _rate_limited("contact_all", ALL_VISITORS):
+        return _error(
+            "The contact form has had too many messages today. Please try again tomorrow.",
+            429,
+            "daily_limit",
+        )
 
     from_email = os.environ.get("CONTACT_FROM_EMAIL", "").strip() or DEFAULT_CONTACT_FROM_EMAIL
     body = (
@@ -180,13 +311,16 @@ def send_contact_message(data, client_ip=None):
         print(f"[contact] Resend rejected the message: HTTP {response.status_code} {response.text[:500]}")
         return _error("Your message couldn't be sent right now. Please try again later.", 502, "send_failed")
 
-    return {"error": False, "message": "Message sent. We'll reply by email."}, 200
+    _remember_delivered("contact", message)
+    return {"error": False, "message": sent_message}, 200
 
 
 def record_feedback(data, client_ip=None):
     data = data if isinstance(data, dict) else {}
-    if _clean_line(data.get("website"), 200):
-        return {"error": False, "message": "Thanks for the feedback!"}, 200
+    sent_message = "Thanks for the feedback!"
+    bot_answer = _bot_check(data, sent_message)
+    if bot_answer:
+        return bot_answer
 
     try:
         rating = int(data.get("rating"))
@@ -200,6 +334,10 @@ def record_feedback(data, client_ip=None):
 
     if rating is None and not comment:
         return _error("Pick a rating or write a comment first.", 400, "missing_fields")
+    if _count_links(comment) > MAX_LINKS:
+        return _too_many_links()
+    if _already_delivered("feedback", comment):
+        return {"error": False, "message": sent_message}, 200
 
     sheet_url = os.environ.get("FEEDBACK_SHEET_URL", "").strip()
     if not sheet_url:
@@ -237,7 +375,8 @@ def record_feedback(data, client_ip=None):
     if not saved:
         return _error("Your feedback couldn't be saved right now. Please try again later.", 502, "send_failed")
 
-    return {"error": False, "message": "Thanks for the feedback!"}, 200
+    _remember_delivered("feedback", comment)
+    return {"error": False, "message": sent_message}, 200
 
 
 def _ask_visitor_sheet(action):

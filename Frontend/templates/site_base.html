@@ -4,6 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>{% block title %}AGNAS{% endblock %}</title>
+  {# Sent with the feedback and contact forms (home.js), see contact_service.py. #}
+  <meta name="form-token" content="{{ form_token() }}">
   {# Home <-> About cross-fade opt-in (styled in home.css). Inline and first:
      from home.css, Chrome sometimes skipped it. #}
   <style>

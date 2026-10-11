@@ -9,7 +9,13 @@ from threading import Condition, RLock, Thread
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from contact_service import get_visitor_count, record_feedback, record_visitor, send_contact_message
+from contact_service import (
+    get_visitor_count,
+    issue_form_token,
+    record_feedback,
+    record_visitor,
+    send_contact_message,
+)
 from earthquake_service import (
     check_earthquake_pin,
     get_earthquake_evacuation_sites,
@@ -50,6 +56,10 @@ def _version_static_urls(endpoint, values):
         values["v"] = int(os.stat(os.path.join(app.static_folder, filename)).st_mtime)
     except OSError:
         pass
+
+@app.context_processor
+def _inject_form_token():
+    return {"form_token": issue_form_token}
 
 _SIMULATION_STATE_LOCK = RLock()
 _SIMULATION_STATE = {
@@ -140,6 +150,11 @@ def _mark_simulation_finished():
 JOB_RESULT_TTL_SECONDS = 30 * 60
 MAX_KEPT_JOBS = 40
 SYNC_WAIT_TIMEOUT_SECONDS = 300
+# One worker runs every simulation, so a script sending new pins in a loop
+# would make everyone else wait behind it. Generous per IP: phones on the
+# same mobile network can share one.
+MAX_ACTIVE_JOBS_PER_CLIENT = 3
+MAX_QUEUED_JOBS = 20
 
 _JOBS_LOCK = Condition()
 _JOBS = OrderedDict()
@@ -198,17 +213,43 @@ def _ensure_job_worker_locked():
         _JOB_WORKER.start()
 
 
-def _submit_simulation_job(mode, request_summary, work):
+def _job_refusal_locked(client):
+    """(payload, status) when this client may not queue another job."""
+    active = sum(
+        1 for job in _JOBS.values()
+        if job["client"] == client and job["state"] in ("queued", "running")
+    )
+    if active >= MAX_ACTIVE_JOBS_PER_CLIENT:
+        return {
+            "error": True,
+            "code": "too_many_simulations",
+            "message": "You already have simulations waiting. Let them finish, then try again.",
+        }, 429
+    if len(_JOB_QUEUE) >= MAX_QUEUED_JOBS:
+        return {
+            "error": True,
+            "code": "queue_full",
+            "message": "The simulator is busy right now. Please try again in a few minutes.",
+        }, 503
+    return None
+
+
+def _submit_simulation_job(mode, request_summary, work, client):
+    """(job, None), or (None, (payload, status)) when the job is refused."""
     key = _job_request_key(mode, request_summary)
     with _JOBS_LOCK:
         _prune_jobs_locked()
         existing = _reusable_job_locked(key)
         if existing is not None:
-            return existing
+            return existing, None
+        refusal = _job_refusal_locked(client)
+        if refusal is not None:
+            return None, refusal
 
         job = {
             "id": uuid.uuid4().hex,
             "key": key,
+            "client": client,
             "mode": mode,
             "summary": request_summary,
             "work": work,
@@ -223,7 +264,7 @@ def _submit_simulation_job(mode, request_summary, work):
         _JOB_QUEUE.append(job["id"])
         _ensure_job_worker_locked()
         _JOBS_LOCK.notify_all()
-        return job
+        return job, None
 
 
 def _job_worker_loop():
@@ -283,7 +324,10 @@ def _job_public_view(job):
 
 
 def _run_simulation_request(mode, request_summary, work, wait_async):
-    job = _submit_simulation_job(mode, request_summary, work)
+    job, refusal = _submit_simulation_job(mode, request_summary, work, _client_ip())
+    if refusal is not None:
+        payload, status_code = refusal
+        return jsonify(payload), status_code
     if wait_async:
         return jsonify(_job_public_view(job)), 202
 
@@ -514,6 +558,13 @@ def _client_ip():
     if forwarded.strip():
         return forwarded.split(",")[-1].strip()
     return request.remote_addr
+
+@app.route("/form-token", methods=["GET"])
+def form_token():
+    """A fresh token for a page whose own one stopped working (home.js)."""
+    response = jsonify({"error": False, "token": issue_form_token()})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 @app.route("/contact", methods=["POST"])
 def contact():
