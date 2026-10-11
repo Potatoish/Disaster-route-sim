@@ -1627,8 +1627,28 @@ const FLOOD_DEPTH_RANGE_BY_VAR = {
   3: 'over 1.5 m',
 };
 
+// The same classes against a person, as on the homepage's flood-depth scene
+// (a 163 cm adult: knees at about 0.46 m, neck at about 1.42 m).
+const FLOOD_DEPTH_ON_ADULT_BY_VAR = {
+  1: 'Up to knee-deep on an adult',
+  2: 'Knee- to neck-deep on an adult',
+  3: 'Above neck height on an adult',
+};
+
 function getFloodDepthRangeFromVar(varValue) {
   return FLOOD_DEPTH_RANGE_BY_VAR[Number(varValue)] || FLOOD_DEPTH_RANGE_BY_VAR[1];
+}
+
+// The worst flood class a route crosses: 1-3, or 0 when it touches no flood
+// zone at all. A road outside every zone is level 1 too, but there the flood
+// model shows no water, so calling it "Low, up to 0.5 m" would overstate it.
+// A road with no hazard data (level 5) counts as High.
+function getFloodPeakVar(route) {
+  const vars = Array.isArray(route?.flood_vars_encountered) ? route.flood_vars_encountered.map(Number) : [];
+  if (vars.length) return Math.max(...vars);
+  const score = Number(route?.max_hazard);
+  if (!Number.isFinite(score)) return null;
+  return score >= 5 ? 3 : score >= 3 ? 2 : 0;
 }
 
 function getFloodDepthRangeFromHazard(hazardValue) {
@@ -1649,6 +1669,7 @@ function getFloodPeakDepthRange(route) {
 }
 
 function formatFloodPeakRiskWithHazard(route) {
+  if (getFloodPeakVar(route) === 0) return 'No flooding';
   return `${formatFloodPeakRisk(route)} (${getFloodPeakDepthRange(route)})`;
 }
 
@@ -1664,11 +1685,15 @@ function getRouteSafetyTier(route) {
   return 'safe';
 }
 
-// Route 1's name. With no safe route it is only the one with the least
-// dangerous road (the ranking is safety first), not a recommendation, and
-// often not the shortest either, so it is "Least risky", never "Best".
+// Route 1's name follows its verdict: "Best" only when it is safe. Through
+// Medium water it is "Risky", like its amber line and verdict. With no safe
+// route it is only the one with the least dangerous road (the ranking is
+// safety first), not a recommendation, and often not the shortest either, so
+// it is "Least risky".
+const TOP_ROUTE_NAMES = { safe: 'Best', caution: 'Risky', unsafe: 'Least risky' };
+
 function getTopRouteName(route) {
-  return getRouteSafetyTier(route) === 'unsafe' ? 'Least risky' : 'Best';
+  return TOP_ROUTE_NAMES[getRouteSafetyTier(route)];
 }
 
 const ROUTE_VERDICTS = {
@@ -1683,11 +1708,14 @@ function getMediumFloodDistance(route) {
 
 const MEDIUM_FLOOD_WARNING = 'Not safe for children, older adults, PWDs, pregnant women, or in flowing water.';
 
+// Called only for a "Risky route" result, whose route 1 is not "best".
 function describeMediumFloodCrossing(route) {
   const distance = getMediumFloodDistance(route);
+  const name = `Route ${route?.display_route_no ?? 1}`;
+  const depth = `0.5–1.5 m deep, ${FLOOD_DEPTH_ON_ADULT_BY_VAR[2].toLowerCase()}`;
   return distance > 0
-    ? `The best route has about ${formatDistanceCompact(distance)} of medium flood water (0.5–1.5 m deep).`
-    : 'The best route has some medium flood water (0.5–1.5 m deep).';
+    ? `${name} has about ${formatDistanceCompact(distance)} of medium flood water (${depth}).`
+    : `${name} has some medium flood water (${depth}).`;
 }
 
 // How much of a no-safe-route result's route 1 is above the safety limit, in
@@ -1703,11 +1731,26 @@ function describeUnsafeCrossing(route) {
     : `The least risky route still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area. Be extra careful.`;
 }
 
-// The "peak" row of the route safety panel and the PDF report.
+// The "peak" row of the route safety panel, the phone sheet and the PDF
+// report. A flood row's detail says how high that water reaches on a person.
 function getPeakRiskRow(route, isEarthquake) {
-  return isEarthquake
-    ? { label: 'Peak road risk crossed', value: `${getRiskLevelLabelFromScore(route?.max_hazard)} road risk` }
-    : { label: 'Peak flood level crossed', value: formatFloodPeakRiskWithHazard(route) };
+  if (isEarthquake) {
+    return { label: 'Peak road risk crossed', value: `${getRiskLevelLabelFromScore(route?.max_hazard)} road risk` };
+  }
+  const label = 'Peak flood level crossed';
+  const peakVar = getFloodPeakVar(route);
+  if (peakVar === 0) return { label, value: 'None', detail: 'No flood zone along this route' };
+  if (peakVar == null) return { label, value: 'Unknown' };
+  return {
+    label,
+    value: `${getFloodRiskLabelFromVar(peakVar)}, ${getFloodDepthRangeFromVar(peakVar)} deep`,
+    detail: FLOOD_DEPTH_ON_ADULT_BY_VAR[peakVar],
+  };
+}
+
+// The peak row as one line of text: the phone's verdict line.
+function formatPeakRiskSentence(peak) {
+  return `${peak.label}: ${peak.value}.${peak.detail ? ` ${peak.detail}.` : ''}`;
 }
 
 function getFloodOverlayConfig(mode = floodHazardOverlayMode) {
@@ -1761,9 +1804,7 @@ function buildRouteReason(route) {
   }
 
   if (route?.category === 'best') {
-    return isEarthquakeRoute && route?.destination_name
-      ? `Best route to ${route.destination_name}. It is the top choice in this result.`
-      : 'Best route. It is the top choice in this result.';
+    return `${getTopRouteName(route)} route${destinationNote}. It is the top choice in this result.`;
   }
 
   if (route?.category === 'available') {
@@ -4086,7 +4127,7 @@ function renderRouteSafetyPanel(result) {
     || PIN_ROLE_COPY.end.fallbackLabel;
 
   const peakScore = Number(best?.max_hazard || 0);
-  const { label: peakLabel, value: peakValue } = getPeakRiskRow(best, isEarthquake);
+  const { label: peakLabel, value: peakValue, detail: peakDetail } = getPeakRiskRow(best, isEarthquake);
   // Danger/red once it's actually High; amber/warning for Medium; neutral for
   // Low. "High" starts at 4 for earthquake (getRiskLevelLabelFromScore) and
   // at 5 for flood (High water).
@@ -4181,7 +4222,7 @@ function renderRouteSafetyPanel(result) {
       </div>
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
-        <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div></div>
+        <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div>${peakDetail ? `<div class="safety-card-sub">${escapeHtml(peakDetail)}</div>` : ''}</div>
       </div>
     </div>
     <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
@@ -4734,7 +4775,7 @@ async function downloadSimulationReport() {
       return pin ? `${label} (${formatPinCoordinates(pin)})` : label;
     };
 
-    const { label: peakLabel, value: peakValue } = getPeakRiskRow(best, isEq);
+    const { label: peakLabel, value: peakValue, detail: peakDetail } = getPeakRiskRow(best, isEq);
 
     let mapResult = await renderBestRouteMapCanvas(best, { start, end: endLabel });
     let mapDataUrl;
@@ -4799,7 +4840,7 @@ async function downloadSimulationReport() {
       ['Overall verdict', ROUTE_VERDICTS[getRouteSafetyTier(best)].title],
       [`${getTopRouteName(best)} route distance`, best?.display_distance || 'Unavailable'],
       ['Estimated time to destination', best?.display_duration || 'Unavailable'],
-      [peakLabel, peakValue],
+      [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),

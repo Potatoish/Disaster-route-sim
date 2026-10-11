@@ -657,7 +657,8 @@
     const unsafe = Number(route?.unsafe_distance) || 0;
     // "Medium flooding for 193 m"; with unsafe parts too, both lengths.
     const mediumFor = medium > 0 && unsafe === 0 ? ` for ${formatDistanceCompact(medium)}` : '';
-    const parts = [`${label} ${isEarthquake ? 'road risk' : 'flooding'}${mediumFor}`];
+    const dry = !isEarthquake && getFloodPeakVar(route) === 0;
+    const parts = [dry ? 'No flooding' : `${label} ${isEarthquake ? 'road risk' : 'flooding'}${mediumFor}`];
     if (unsafe > 0) parts.push(`${formatDistanceCompact(unsafe)} unsafe`);
     if (medium > 0 && unsafe > 0) parts.push(`${formatDistanceCompact(medium)} medium`);
     return { level: label.toLowerCase(), text: parts.join(' · ') };
@@ -737,9 +738,9 @@
     verdict.classList.toggle('is-danger', tier === 'unsafe');
     $('msimVerdictTitle').textContent = ROUTE_VERDICTS[tier].title;
     const VERDICT_SUBS = {
-      safe: `${peak.label}: ${peak.value}`,
+      safe: formatPeakRiskSentence(peak),
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: `${peak.label}: ${peak.value}. ${describeUnsafeCrossing(best)}`,
+      unsafe: `${formatPeakRiskSentence(peak)} ${describeUnsafeCrossing(best)}`,
     };
     $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
 
