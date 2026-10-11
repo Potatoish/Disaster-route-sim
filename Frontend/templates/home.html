@@ -8,7 +8,7 @@
     <div class="hero-copy">
       <span class="eyebrow">Ant Guided Navigation And Safety System</span>
       <h1>Disaster Preparedness<br>for safer communities</h1>
-      <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios filtering out hazard prone routes before evaluating path distance.</p>
+      <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios, filtering out hazard-prone routes before evaluating path distance.</p>
       <div class="hero-actions">
         <button type="button" class="hero-action" onclick="openScopeMap()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
@@ -19,12 +19,11 @@
 
     <div class="hero-quickstart" aria-label="Quick-start simulator setup">
       <div class="qs-head">
-        <h2>Select your Barangay</h2>
+        <h2 id="qsTitle">Select your Barangay</h2>
       </div>
 
       <div class="qs-field" id="heroBarangaySelector">
-        <span class="qs-label">Barangay</span>
-        <div class="qs-barangay-grid">
+        <div class="qs-barangay-grid" role="group" aria-labelledby="qsTitle">
           <button type="button" class="qs-barangay-card" data-barangay="Pinagbuhatan" onclick="setQuickStartBarangay('Pinagbuhatan', this)" aria-pressed="false">
             <span class="qs-barangay-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg></span>
             <span class="qs-barangay-copy"><strong>Pinagbuhatan</strong><span>Pasig City</span></span>
@@ -48,7 +47,8 @@
 </section>
 
 <section class="stats-section">
-  <div class="wrap stats">
+  <div class="wrap">
+  <div class="stats">
     <div class="stat"><b>ACO</b><span>Ant Colony Optimization</span></div>
     <div class="stat"><b>Safety over distance</b><span>Ranking rule</span></div>
     <div class="stat"><b>2</b><span>Hazard models: Flood &amp; Earthquake</span></div>
@@ -60,6 +60,7 @@
       </b>
       <span>Visitor counter</span>
     </div>
+  </div>
   </div>
 </section>
 
@@ -289,7 +290,7 @@
 
         <div class="hz-stack">
           <div class="hz-scene">
-            <svg class="hz-cross gs-on" id="hzCross" viewBox="0 0 520 240" role="img" aria-labelledby="hzCrossLabel">
+            <svg class="hz-cross gs-on" id="hzCross" viewBox="0 0 520 240" preserveAspectRatio="xMidYMax meet" role="img" aria-labelledby="hzCrossLabel">
               <title id="hzCrossLabel">Street built on loose, wet sand beside a river, shown with the ground cut away</title>
               <defs>
                 <linearGradient id="hzCrossSky" x1="0" y1="0" x2="0" y2="1">
@@ -305,8 +306,12 @@
                   <circle cx="6" cy="10.5" r=".8" style="fill: var(--sand-grain)"/>
                 </pattern>
               </defs>
+              {# Sky above the frame: shown only when the card is taller than
+                 the drawing (home.css, side-by-side cards), where the drawing
+                 sits at the bottom and these fill the space above it. #}
+              <rect y="-600" width="520" height="602" style="fill: var(--sky-top)"/>
               <rect width="520" height="240" fill="url(#hzCrossSky)"/>
-              <rect class="gs-wash" width="520" height="150" style="fill: var(--gs)"/>
+              <rect class="gs-wash" y="-600" width="520" height="750" style="fill: var(--gs)"/>
               <g class="cross-shake">
                 <rect y="150" width="520" height="14" style="fill: var(--soil-top)"/>
                 <rect y="164" width="520" height="51" style="fill: var(--sand)"/>
@@ -414,8 +419,16 @@
             <li><i style="background: var(--groundwater)"></i>Groundwater</li>
             <li><i style="background: var(--firm)"></i>Firm soil</li>
           </ul>
-          <p class="hz-caption" id="hzCrossCaption" aria-live="polite"><b>Ground shaking:</b> strong shaking cracks walls and drops debris on roads.</p>
         </div>
+
+        {# Same box as the flood readout; filled by hazard-showcase.js, the
+           levels read from the tiles above. #}
+        <dl class="hz-readout hz-readout--quake" aria-live="polite">
+          <dt>Level</dt>
+          <dd id="hzQuakeLevels"><span class="hz-chip hz-chip--gs">Ground shaking: High</span></dd>
+          <dt>On the street</dt>
+          <dd><span class="hz-street" id="hzCrossCaption"><b>Ground shaking:</b> strong shaking cracks walls and drops debris on roads.</span></dd>
+        </dl>
       </article>
     </div>
   </div>

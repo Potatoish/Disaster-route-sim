@@ -96,6 +96,10 @@
     none: 'Turn on a layer to see what it does.',
   };
   const LENS_NAMES = { both: 'Both', liq: 'Liquefaction', gs: 'Ground shaking', none: 'No layer' };
+  // The readout's levels come from the tiles' own "Level: ..." lines, so the
+  // markup stays the one place they are written.
+  const tileLevel = layer => tiles[layer].querySelector('.hz-tile-level').textContent.replace(/^Level:\s*/, '');
+  const LAYER_NAMES = { gs: 'Ground shaking', liq: 'Liquefaction' };
   // The simulate button names and pictures whatever is switched on.
   const ICON_QUAKE = '<path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/>';
   const ICON_BOTH = '<path d="M2 9h3.5l2-4.5 3 9 2.5-6.5 1.5 2H22"/><path d="M2 19.5h5l1.5-1.5 2 2.5 2-2 1.5 1h8"/>';
@@ -130,6 +134,10 @@
     cross.classList.toggle('liq-on', layers.liq);
     resetCross();
     $('hzCrossCaption').innerHTML = CAPTIONS[key];
+    const on = ['gs', 'liq'].filter(layer => layers[layer]);
+    $('hzQuakeLevels').innerHTML = on.length
+      ? on.map(layer => `<span class="hz-chip hz-chip--${layer}">${LAYER_NAMES[layer]}: ${tileLevel(layer)}</span>`).join('')
+      : '<span class="hz-note">No layer on</span>';
   }
 
   Object.entries(tiles).forEach(([layer, tile]) => tile.addEventListener('click', () => {
