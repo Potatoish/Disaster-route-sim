@@ -195,6 +195,12 @@ then the count shows a dash (the old script has no `doGet`, so nothing is writte
 To try it locally, set the variables in the same PowerShell window before starting the server, e.g.
 `$env:RESEND_API_KEY = "re_..."`.
 
+### 5. Simulation logs and visitors' pins
+
+The detailed simulation logs print each run's pins (coordinates and labels). They are off on the
+server, so the live site keeps no record of where visitors pinned, and on for the local dev server
+(`py Backend/app.py`). Do not set `AGNAS_DEBUG=1` on Railway: it turns them on there too.
+
 ## Supported Scope
 
 - **Flood routing:** Pinagbuhatan and Sta. Lucia
@@ -207,7 +213,7 @@ To try it locally, set the variables in the same PowerShell window before starti
 - `GET /about` — About page (with the contact form)
 - `GET /app` — the route simulator
 - `GET /health` — health check (used by Railway)
-- `GET /check-pin` — checks a start/destination tapped on the map before a run
+- `POST /check-pin` — checks a start/destination tapped on the map before a run
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`
 - `POST /simulate` — flood simulation (queued; `{"async": true}` returns a job id)

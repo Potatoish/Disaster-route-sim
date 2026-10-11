@@ -105,7 +105,10 @@ UNSAFE_PENALTY = 1_000_000.0
 # found so far lays ELITIST_WEIGHT times a normal deposit (elitist ant system).
 TOP_ACO_REINFORCERS = 3
 ELITIST_WEIGHT = 1.0
-DEBUG = True
+# Simulation logs name the visitor's pins (coordinates and labels), so they
+# are off on the server: the site promises not to keep pins. The local dev
+# server (app.py's __main__) turns them on; AGNAS_DEBUG=1 does elsewhere.
+DEBUG = os.environ.get("AGNAS_DEBUG", "").strip() == "1"
 FLOOD_GRAPH_ANNOTATION_VERSION = 2
 
 BLOCKED_ENDPOINT_ACCESS_VALUES = {"no"}

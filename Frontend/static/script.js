@@ -2565,14 +2565,19 @@ function resetRoutePins() {
   syncRoutePinFields();
 }
 
+// The pin goes in the request body, not the URL: URLs end up in the hosting
+// platform's request logs (app.py's check_pin).
 async function fetchPinCheck(lat, lng) {
-  const params = new URLSearchParams({
-    barangay: selectedBarangay || '',
-    hazard: selectedHazard || '',
-    lat: String(lat),
-    lng: String(lng),
+  const response = await fetch(`${window.BACKEND_BASE}/check-pin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      barangay: selectedBarangay || '',
+      hazard: selectedHazard || '',
+      lat,
+      lng,
+    }),
   });
-  const response = await fetch(`${window.BACKEND_BASE}/check-pin?${params}`);
   const data = await parseBackendJsonResponse(response);
   if (!response.ok || data?.error === true) {
     throw new Error(data?.message || 'Could not check that spot.');

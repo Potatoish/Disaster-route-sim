@@ -23,6 +23,7 @@ from earthquake_service import (
     simulate_earthquake,
 )
 from main import simulate
+import osm_routing
 from osm_routing import (
     BARANGAY_BOUNDARY_FILES,
     build_flood_hazard_layer_payload,
@@ -151,10 +152,12 @@ def _mark_simulation_started(mode, request_summary):
         _SIMULATION_STATE["mode"] = mode
         _SIMULATION_STATE["hazard"] = request_summary.get("hazard")
         _SIMULATION_STATE["started_at"] = _utc_now_iso()
+        # Anyone can read /simulation-status, so it names the run's barangay
+        # and hazard but never its pins (another visitor's locations).
         _SIMULATION_STATE["request"] = {
             key: value
             for key, value in request_summary.items()
-            if value not in (None, "")
+            if key not in ("start", "end") and value not in (None, "")
         }
 
 def _mark_simulation_finished():
@@ -485,16 +488,21 @@ def flood_hazard_layers():
             "message": str(e)
         }), 500
 
-@app.route("/check-pin", methods=["GET"])
+# POST, not GET: a URL's query string lands in the hosting platform's request
+# logs, and the pin's coordinates must not (the site promises not to keep
+# pins); a request body does not.
+@app.route("/check-pin", methods=["POST"])
 def check_pin():
     """Instant check of a start/destination tapped on the map, run before the
     (much slower) simulation: can a route be checked for safety from there?"""
-    barangay = (request.args.get("barangay") or "").strip()
-    hazard = (request.args.get("hazard") or "Flood").strip()
+    data = request.get_json(silent=True)
+    data = data if isinstance(data, dict) else {}
+    barangay = str(data.get("barangay") or "").strip()
+    hazard = str(data.get("hazard") or "Flood").strip()
     try:
-        lat = float(request.args.get("lat", ""))
-        lng = float(request.args.get("lng", ""))
-    except ValueError:
+        lat = float(data.get("lat", ""))
+        lng = float(data.get("lng", ""))
+    except (TypeError, ValueError):
         lat = lng = float("nan")
 
     if not barangay:
@@ -691,4 +699,7 @@ if __name__ == "__main__":
     # files instead of caching them, so edits to script.js/style.css show up on
     # a plain reload instead of silently running stale JS/CSS from an old tab.
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+    # Simulation logs show pins; fine on a developer's own machine, never on
+    # the server (osm_routing.DEBUG).
+    osm_routing.DEBUG = True
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
