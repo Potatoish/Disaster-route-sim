@@ -1,40 +1,32 @@
 {
   "pinagbuhatan": [
     {
-      "id": "nagpayong-covered-court",
-      "name": "Nagpayong Covered Court",
-      "lat": 14.539336863770531,
-      "lng": 121.10195436852801,
-      "address": "Nagpayong Covered Court, Pinagbuhatan, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "id": "urbano-velasco-ave",
+      "name": "Urbano Velasco Ave.",
+      "lat": 14.555551,
+      "lng": 121.090004,
+      "address": "Urbano Velasco Ave., Pinagbuhatan, Pasig City"
     },
     {
-      "id": "ilugin-elementary-school",
-      "name": "Ilugin Elementary School",
-      "lat": 14.552624063964547,
-      "lng": 121.09998577342084,
-      "address": "Ilugin Elementary School, Pinagbuhatan, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "id": "mh-del-pilar-st",
+      "name": "M.H. Del Pilar St.",
+      "lat": 14.554722,
+      "lng": 121.093178,
+      "address": "M.H. Del Pilar St., Pinagbuhatan, Pasig City"
     },
     {
-      "id": "pinagbuhatan-multi-purpose-hall",
-      "name": "Pinagbuhatan Multi Purpose Hall",
-      "lat": 14.55491012302813,
-      "lng": 121.09126923526185,
-      "address": "Pinagbuhatan Multi Purpose Hall, Pinagbuhatan, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "id": "sandoval-ave",
+      "name": "Sandoval Ave.",
+      "lat": 14.55033,
+      "lng": 121.1014,
+      "address": "Sandoval Ave., Pinagbuhatan, Pasig City"
     },
     {
-      "id": "nagpayong-high-school",
-      "name": "Nagpayong High School",
-      "lat": 14.544712652892146,
-      "lng": 121.10216421133673,
-      "address": "Nagpayong High School, Pinagbuhatan, Pasig City",
-      "site_setup": "Open-area assembly point",
-      "surroundings": "No tall buildings nearby"
+      "id": "near-pasig-city-jail",
+      "name": "Near Pasig City Jail",
+      "lat": 14.541525,
+      "lng": 121.101975,
+      "address": "Near Pasig City Jail, Pinagbuhatan, Pasig City"
     }
   ],
   "sta lucia": [
