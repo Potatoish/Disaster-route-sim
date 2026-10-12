@@ -694,6 +694,58 @@ def _warm_caches():
 
 Thread(target=_warm_caches, name="cache-warm-up", daemon=True).start()
 
+def _stop_old_dev_servers(port):
+    # Werkzeug binds with SO_REUSEADDR, which on Windows lets a second server
+    # listen on a port that is already taken instead of failing. A dev server
+    # left running in another terminal then keeps answering with its old data
+    # and caches, so the restarted one looks like it ignored every change.
+    if os.name != "nt":
+        return
+    import subprocess
+    try:
+        netstat = subprocess.run(
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=20,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    # netstat, not Get-NetTCPConnection: that lists only one of several
+    # sockets sharing the port. A listening socket's remote end is 0.0.0.0:0,
+    # which holds in every Windows language (the "LISTENING" word does not).
+    pids = set()
+    for row in netstat.splitlines():
+        cols = row.split()
+        if (len(cols) >= 5 and cols[1].endswith(f":{port}") and cols[2] == "0.0.0.0:0"
+                and cols[-1].isdigit() and int(cols[-1]) != os.getpid()):
+            pids.add(int(cols[-1]))
+    if not pids:
+        return
+    script = (
+        "Get-CimInstance Win32_Process -Filter \""
+        + " OR ".join(f"ProcessId={pid}" for pid in sorted(pids))
+        + "\" | Select-Object ProcessId, CommandLine | ConvertTo-Json"
+    )
+    try:
+        output = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, timeout=20,
+        ).stdout.strip()
+        listeners = json.loads(output) if output else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return
+    if isinstance(listeners, dict):
+        listeners = [listeners]
+    for listener in listeners:
+        pid = listener.get("ProcessId")
+        command = listener.get("CommandLine") or ""
+        if not pid or pid == os.getpid():
+            continue
+        # Only stop an AGNAS server; anything else on the port is left alone.
+        if "app.py" not in command:
+            print(f"[dev] port {port} is also used by PID {pid} ({command or 'unknown'}); not stopping it")
+            continue
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        print(f"[dev] stopped the old AGNAS server on port {port} (PID {pid})")
+
 if __name__ == "__main__":
     # Local dev only (gunicorn never runs this block): always revalidate static
     # files instead of caching them, so edits to script.js/style.css show up on
@@ -702,4 +754,5 @@ if __name__ == "__main__":
     # Simulation logs show pins; fine on a developer's own machine, never on
     # the server (osm_routing.DEBUG).
     osm_routing.DEBUG = True
+    _stop_old_dev_servers(5000)
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
