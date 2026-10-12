@@ -4319,6 +4319,7 @@ function renderRouteSafetyPanel(result) {
   const action = getNoSafeRouteAction(best);
   // With no safe route, what to do takes the walking-time card's place; an
   // earthquake route is still walked, so its distance stays in the card.
+  // Its Emergency hotlines button replaces the one under the disclaimer.
   const routeCardMarkup = action
     ? `
       <div class="safety-result-card danger safety-action-card">
@@ -4429,7 +4430,7 @@ function renderRouteSafetyPanel(result) {
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
-        <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
+        ${action ? '' : '<button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>'}
       </div>
     </div>
     ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}`;

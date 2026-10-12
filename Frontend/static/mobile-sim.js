@@ -752,9 +752,12 @@
     // time gives way to the call for rescue (getNoSafeRouteAction); an
     // earthquake route is still walked, with care.
     const action = getNoSafeRouteAction(best);
-    $('msimSummaryMain').innerHTML = action && !isEarthquake
+    const showRescue = !!action && !isEarthquake;
+    $('msimSummaryMain').innerHTML = showRescue
       ? `<button class="msummary-rescue" type="button" onclick="openEmergencyContactModal(event)">${safetyIcon('phone')}<span>${escapeHtml(action.title)}</span></button>`
       : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
+    // The rescue button already opens the hotlines; no second one in the details.
+    $('msimHotlines').hidden = showRescue;
     $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
 
     const destination = $('msimSummaryDest');
