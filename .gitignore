@@ -32,3 +32,7 @@ Backend/tools/evaluation_results/
 # Evaluation scripts, kept on the team's machines only
 Backend/tools/evaluate_routing.py
 Backend/tools/evaluate_objective2.py
+Backend/tools/confirm_objective1.py
+
+# Original Project NOAH flood shapefile (36 MB), used only by confirm_objective1.py
+Backend/tools/noah/
