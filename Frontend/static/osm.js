@@ -1,14 +1,8 @@
-// The best and eliminated routes are slim solid lines with a thin edge in a
-// darker shade of their color, so they sit inside the road and stay readable
-// over hazard fills. The best route is the heaviest (px at zoom scale 1; the
-// edge adds 1px per side).
+
 const ROUTE_BEST_WEIGHT = 5;
 const ROUTE_OTHER_WEIGHT = 3.5;
 const ROUTE_EDGE_EXTRA_WEIGHT = 2;
-// Available routes are dotted: opaque gray dots, each ringed in a darker edge
-// (the edge stroke, dotted the same way). A picked one firms up into a solid
-// edged line (getFocusedRouteVisual in script.js). Dot + gap in px at zoom
-// scale 1; a near-zero dash with round caps draws a dot as wide as the line.
+
 const ROUTE_TRAIL_WEIGHT = 4;
 const ROUTE_TRAIL_OPACITY = 1;
 const ROUTE_TRAIL_DOT = 0.1;
@@ -27,7 +21,7 @@ const ROUTE_EDGE_COLORS = {
   [ROUTE_BEST_COLOR]: '#15803d',
   [ROUTE_AVAILABLE_COLOR]: '#334155',
   [ROUTE_BEST_CAUTION_COLOR]: '#92400e',
-  [ROUTE_BEST_UNSAFE_COLOR]: '#991b1b',
+  [ROUTE_BEST_UNSAFE_COLOR]: '#cfa4a4',
   [ROUTE_ELIMINATED_COLOR]: '#450a0a',
 };
 // On the satellite base map the dark imagery swallows the slate-gray and
