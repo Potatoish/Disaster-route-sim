@@ -448,9 +448,8 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 }
 .foot-row{ display:flex; justify-content:space-between; align-items:center; padding-block:22px; gap:16px; flex-wrap:wrap; }
 .foot-copy{ font-size:12.5px; color:var(--muted); }
-.foot-links{ display:flex; gap:18px; font-size:12.5px; color:var(--muted); flex-wrap:wrap; }
-.foot-links a{ text-decoration:none; display:inline-block; padding-block:6px; }
-.foot-links a:hover{ color:var(--accent); }
+/* On a narrow screen the line breaks between the two sentences, not inside one. */
+.foot-copy > span{ white-space:nowrap; }
 
 /* ---------- FEEDBACK FAB ---------- */
 .fab{
@@ -984,7 +983,6 @@ body.dark .hz-section{
   /* The depth slider's thumb is small; a 44px-tall input is its tap area. */
   .hz-depth input[type="range"]{ height:44px; }
   .form-row input, .fab-field select, .rate-row button{ min-height:44px; }
-  .foot-links a{ display:inline-flex; align-items:center; min-height:44px; padding-block:0; padding-inline:6px; }
   /* Source links sit in running text, so they keep the line and gain a band. */
   .src-link{ position:relative; }
   .src-link::after{ content:""; position:absolute; inset:calc((44px - 100%) / -2) 0; }
@@ -1060,17 +1058,7 @@ body.dark .hz-section{
   .stat b{ font-size:19px; }
   .stat span{ font-size:12px; line-height:1.35; }
 
-  /* Footer: two columns side by side -- the copyright lines on the left,
-     Privacy Policy over Terms of Service on the right. */
-  .foot-row{ flex-wrap:nowrap; align-items:center; gap:16px; padding-block:12px 4px; }
-  /* Each copyright line gets the same 34px row as a link, so the two
-     columns share one rhythm and their lines sit level with each other. */
-  .foot-copy > span{ display:flex; align-items:center; min-height:34px; }
-  .foot-links{ flex-direction:column; align-items:flex-end; gap:0; text-align:right; }
-  /* Stacked, each link is a 34px row with an invisible band that brings its
-     tap area to 44px; the right padding goes so the text meets the edge. */
-  .foot-links a{ position:relative; min-height:34px; padding-inline:6px 0; }
-  .foot-links a::after{ content:""; position:absolute; inset:calc((44px - 100%) / -2) 0; }
+  .foot-row{ padding-block:16px; }
 
   /* About page: each credit's source stays right-aligned even when its
      label wraps. */
