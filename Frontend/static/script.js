@@ -1750,23 +1750,24 @@ function isFloodFreeRoute(route) {
   return !isEarthquakeRouteRecord(route) && getFloodPeakVar(route) === 0;
 }
 
-// Route 1's name says how risky it is. Only a flood route that touches no
-// flood zone is "Best". A green route that crosses Low water (up to 0.5 m)
-// or, for an earthquake, Moderate-risk roads is named by the highest risk it
-// meets: "Low risk" or "Moderate risk". Through Medium water it is "Risky",
-// like its amber line and verdict. With no safe route it is only the one
-// with the least dangerous road (the ranking is safety first), often not the
-// shortest either: "Least risky".
+// Route 1's name says how risky it is, and the names climb with the danger:
+// Best, Low risk (or Moderate risk), Risky, High risk. Only a flood route
+// that touches no flood zone is "Best". A green route that crosses Low water
+// (up to 0.5 m) or, for an earthquake, Moderate-risk roads is named by the
+// highest risk it meets: "Low risk" or "Moderate risk". Through Medium water
+// it is "Risky", like its amber line and verdict. With no safe route it is
+// "High risk", like its red line: still the least dangerous one found (the
+// ranking is safety first), but named so it never reads safer than "Risky".
 function getTopRouteName(route) {
   const tier = getRouteSafetyTier(route);
   if (tier === 'caution') return 'Risky';
-  if (tier === 'unsafe') return 'Least risky';
+  if (tier === 'unsafe') return 'High risk';
   if (isFloodFreeRoute(route)) return 'Best';
   return isEarthquakeRouteRecord(route) && Number(route?.max_hazard) >= 3 ? 'Moderate risk' : 'Low risk';
 }
 
 // The name in front of "route": "Best route", "Low-risk route", "Risky
-// route", "Least risky route".
+// route", "High-risk route".
 function getTopRouteTitle(route) {
   return `${getTopRouteName(route).replace(/ risk$/, '-risk')} route`;
 }
@@ -1868,10 +1869,11 @@ function describeMediumFloodCrossing(route) {
 function describeUnsafeCrossing(route) {
   const unsafe = Number(route?.unsafe_distance) || 0;
   const total = Number(route?.distance) || 0;
-  if (unsafe <= 0) return 'The least risky route still passes through a high-hazard area. Be extra careful.';
+  const name = `Route ${route?.display_route_no ?? 1}`;
+  if (unsafe <= 0) return `${name} still passes through a high-hazard area. Be extra careful.`;
   return total > 0 && unsafe >= total * 0.98
-    ? `The whole least risky route (${formatDistanceCompact(total)}) is in a high-hazard area. Be extra careful.`
-    : `The least risky route still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area. Be extra careful.`;
+    ? `All of ${name} (${formatDistanceCompact(total)}) is in a high-hazard area. Be extra careful.`
+    : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area. Be extra careful.`;
 }
 
 // The "peak" row of the route safety panel, the phone sheet and the PDF
@@ -1932,11 +1934,11 @@ function buildRouteReason(route) {
 
   if (route?.category === 'eliminated') {
     // The backend labels the top eliminated route "Best" only when no route
-    // is safe; residents see it as "Least risky" (getTopRouteName).
+    // is safe; residents see it as "High risk" (getTopRouteName).
     if (route?.status === 'Best') {
       return unsafeSections > 0
-        ? `Least risky route${destinationNote}, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
-        : `Least risky route${destinationNote}, but some road parts are above the safety limit.`;
+        ? `High-risk route${destinationNote}, the least dangerous one found, but ${formatRoadPartCountLabel(unsafeSections)} ${unsafeSections === 1 ? 'is' : 'are'} above the safety limit.`
+        : `High-risk route${destinationNote}, the least dangerous one found, but some road parts are above the safety limit.`;
     }
 
     return unsafeSections > 0
