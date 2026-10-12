@@ -1901,10 +1901,40 @@ function describeUnsafeCrossing(route) {
     : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area.${advice}`;
 }
 
+// What each earthquake layer does to a street at the route's worst level, in
+// the homepage hazard showcase's words: [title, detail].
+const EARTHQUAKE_EXPECTATIONS = {
+  ground_shaking: {
+    High: ['Strong shaking', 'cracked walls and falling debris on the road'],
+    Moderate: ['Moderate shaking', 'loose objects may fall and some walls may crack'],
+    Low: ['Light shaking', 'little damage expected'],
+  },
+  liquefaction: {
+    High: ['Soft, sinking ground', 'wet soil can turn to mud, and roads may crack and sink'],
+    Moderate: ['Some soft ground', 'watch for cracks and muddy patches'],
+    Low: ['Firm ground', 'little sinking expected'],
+  },
+};
+
+// The layers a lens routes by: both for the overall view, its own for the
+// others (like area_wide_high_risk).
+function getEarthquakeExpectations(route) {
+  const lens = route?.lens_key;
+  return ['ground_shaking', 'liquefaction']
+    .filter(layer => !lens || lens === 'overall' || lens === layer)
+    .map(layer => EARTHQUAKE_EXPECTATIONS[layer][getRiskLevelLabelFromScore(route?.hazard_maxima?.[layer])])
+    .filter(Boolean)
+    .map(([title, detail]) => ({ title, detail }));
+}
+
 // The "peak" row of the route safety panel, the phone sheet and the PDF
 // report. A flood row's detail says how high that water reaches on a person.
+// An earthquake row says what the ground may do on the way instead of a bare
+// "High road risk", which only repeated the verdict.
 function getPeakRiskRow(route, isEarthquake) {
   if (isEarthquake) {
+    const items = getEarthquakeExpectations(route);
+    if (items.length) return { label: 'What to expect on the way', items };
     return { label: 'Peak road risk crossed', value: `${getRiskLevelLabelFromScore(route?.max_hazard)} road risk` };
   }
   const label = 'Peak flood level crossed';
@@ -1920,7 +1950,16 @@ function getPeakRiskRow(route, isEarthquake) {
 
 // The peak row as one line of text: the phone's verdict line.
 function formatPeakRiskSentence(peak) {
+  if (peak.items) {
+    return `${peak.label}: ${peak.items.map(item => `${item.title.toLowerCase()} (${item.detail})`).join(' and ')}.`;
+  }
   return `${peak.label}: ${peak.value}.${peak.detail ? ` ${peak.detail}.` : ''}`;
+}
+
+// The peak row's value for the PDF report's table.
+function formatPeakRiskValue(peak) {
+  if (peak.items) return peak.items.map(item => `${item.title}: ${item.detail}.`).join(' ');
+  return peak.detail ? `${peak.value}. ${peak.detail}.` : peak.value;
 }
 
 function getFloodOverlayConfig(mode = floodHazardOverlayMode) {
@@ -4306,7 +4345,7 @@ function renderRouteSafetyPanel(result) {
     || PIN_ROLE_COPY.end.fallbackLabel;
 
   const peakScore = Number(best?.max_hazard || 0);
-  const { label: peakLabel, value: peakValue, detail: peakDetail } = getPeakRiskRow(best, isEarthquake);
+  const peak = getPeakRiskRow(best, isEarthquake);
   // Danger/red once it's actually High; amber/warning for Medium; neutral for
   // Low. "High" starts at 4 for earthquake (getRiskLevelLabelFromScore) and
   // at 5 for flood (High water).
@@ -4423,7 +4462,9 @@ function renderRouteSafetyPanel(result) {
       ${routeCardMarkup}
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
-        <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div>${peakDetail ? `<div class="safety-card-sub">${escapeHtml(peakDetail)}</div>` : ''}</div>
+        <div><div class="safety-card-label">${escapeHtml(peak.label)}</div>${peak.items
+          ? `<ul class="safety-expect-list">${peak.items.map(item => `<li><strong>${escapeHtml(item.title)}:</strong> ${escapeHtml(item.detail)}</li>`).join('')}</ul>`
+          : `<div class="safety-card-value">${escapeHtml(peak.value)}</div>${peak.detail ? `<div class="safety-card-sub">${escapeHtml(peak.detail)}</div>` : ''}`}</div>
       </div>
     </div>
     <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
@@ -4969,7 +5010,7 @@ async function downloadSimulationReport() {
       return pin ? `${label} (${formatPinCoordinates(pin)})` : label;
     };
 
-    const { label: peakLabel, value: peakValue, detail: peakDetail } = getPeakRiskRow(best, isEq);
+    const peak = getPeakRiskRow(best, isEq);
 
     let mapResult = await renderBestRouteMapCanvas(best, { start, end: endLabel });
     let mapDataUrl;
@@ -5040,7 +5081,7 @@ async function downloadSimulationReport() {
         : routeHasWadingTime(best)
         ? `${best?.display_duration || 'Unavailable'} (slower pace through flood water)`
         : best?.display_duration || 'Unavailable'],
-      [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
+      [peak.label, formatPeakRiskValue(peak)],
       ...(!isEq && getMediumFloodDistance(best) > 0
         ? [['Medium flooding crossed', `About ${formatDistanceCompact(getMediumFloodDistance(best))} (0.5–1.5 m deep). ${MEDIUM_FLOOD_WARNING}`]]
         : []),

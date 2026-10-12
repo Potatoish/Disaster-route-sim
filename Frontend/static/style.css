@@ -1835,6 +1835,12 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-result-card.success .safety-icon-box, .safety-result-card.success .safety-card-value { color: var(--green-ink); }
 .safety-result-card.warning, .safety-result-card.warning .safety-icon-box { border-color: rgba(245,158,11,.55); }
 .safety-result-card.warning .safety-icon-box, .safety-result-card.warning .safety-card-value { color: var(--yellow-ink); }
+/* Earthquake "What to expect on the way" (getEarthquakeExpectations): one
+   line per hazard layer, its name in the card's tone. */
+.safety-expect-list { list-style: none; margin: 3px 0 0; padding: 0; display: grid; gap: 4px; color: var(--muted); font-size: .78rem; font-weight: 500; line-height: 1.45; }
+.safety-expect-list strong { color: var(--ink-strong); font-weight: 800; }
+.safety-result-card.danger .safety-expect-list strong { color: var(--red); }
+.safety-result-card.warning .safety-expect-list strong { color: var(--yellow-ink); }
 /* "What to do" when no route is safe (getNoSafeRouteAction): its text runs
    several lines, so the icon stays at the top. */
 .safety-action-card { align-items: start; }
