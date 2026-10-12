@@ -27,6 +27,20 @@
       "lat": 14.552876,
       "lng": 121.098832,
       "address": "Ilugin Open Basketball Court, Pinagbuhatan, Pasig City"
+    },
+    {
+      "id": "near-greenwood-ave",
+      "name": "Near GreenWood Ave.",
+      "lat": 14.561501,
+      "lng": 121.095986,
+      "address": "Near GreenWood Ave., Pinagbuhatan, Pasig City"
+    },
+    {
+      "id": "santos-alipinin-basketball-court",
+      "name": "Santos Alipinin Basketball Court",
+      "lat": 14.541974,
+      "lng": 121.103773,
+      "address": "Santos Alipinin Basketball Court, Pinagbuhatan, Pasig City"
     }
   ],
   "sta lucia": [
