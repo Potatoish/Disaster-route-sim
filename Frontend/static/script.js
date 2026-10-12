@@ -1901,40 +1901,43 @@ function describeUnsafeCrossing(route) {
     : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area.${advice}`;
 }
 
-// What each earthquake layer does to a street at the route's worst level, in
-// the homepage hazard showcase's words: [title, detail].
-const EARTHQUAKE_EXPECTATIONS = {
-  ground_shaking: {
-    High: ['Strong shaking', 'cracked walls and falling debris on the road'],
-    Moderate: ['Moderate shaking', 'loose objects may fall and some walls may crack'],
-    Low: ['Light shaking', 'little damage expected'],
-  },
-  liquefaction: {
-    High: ['Soft, sinking ground', 'wet soil can turn to mud, and roads may crack and sink'],
-    Moderate: ['Some soft ground', 'watch for cracks and muddy patches'],
-    Low: ['Firm ground', 'little sinking expected'],
-  },
+const EARTHQUAKE_LAYER_NAMES = {
+  ground_shaking: 'Ground shaking',
+  liquefaction: 'Liquefaction',
 };
 
-// The layers a lens routes by: both for the overall view, its own for the
-// others (like area_wide_high_risk).
-function getEarthquakeExpectations(route) {
+// Route 1's level per earthquake layer the lens routes by (both for the
+// overall view, its own for the others, like area_wide_high_risk), with how
+// much of the route is High: "High · all 876 m", "High · 620 m of 876 m".
+// hazard_maxima and lens_unsafe_distances come from earthquake_service.py.
+function getEarthquakeHazardRows(route) {
   const lens = route?.lens_key;
-  return ['ground_shaking', 'liquefaction']
+  const total = Number(route?.distance) || 0;
+  return Object.keys(EARTHQUAKE_LAYER_NAMES)
     .filter(layer => !lens || lens === 'overall' || lens === layer)
-    .map(layer => EARTHQUAKE_EXPECTATIONS[layer][getRiskLevelLabelFromScore(route?.hazard_maxima?.[layer])])
-    .filter(Boolean)
-    .map(([title, detail]) => ({ title, detail }));
+    .map(layer => {
+      const level = getRiskLevelLabelFromScore(route?.hazard_maxima?.[layer]);
+      if (level === 'Unknown') return null;
+      const high = Number(route?.lens_unsafe_distances?.[layer]) || 0;
+      let extent = '';
+      if (level === 'High' && total > 0 && high > 0) {
+        extent = high >= total * 0.98
+          ? `all ${formatDistanceCompact(total)}`
+          : `${formatDistanceCompact(high)} of ${formatDistanceCompact(total)}`;
+      }
+      return { name: EARTHQUAKE_LAYER_NAMES[layer], level, extent };
+    })
+    .filter(Boolean);
 }
 
 // The "peak" row of the route safety panel, the phone sheet and the PDF
 // report. A flood row's detail says how high that water reaches on a person.
-// An earthquake row says what the ground may do on the way instead of a bare
-// "High road risk", which only repeated the verdict.
+// An earthquake row lists each hazard on route 1 instead of a bare "High
+// road risk", which only repeated the verdict.
 function getPeakRiskRow(route, isEarthquake) {
   if (isEarthquake) {
-    const items = getEarthquakeExpectations(route);
-    if (items.length) return { label: 'What to expect on the way', items };
+    const items = getEarthquakeHazardRows(route);
+    if (items.length) return { label: `Hazards on Route ${route?.display_route_no ?? 1}`, items };
     return { label: 'Peak road risk crossed', value: `${getRiskLevelLabelFromScore(route?.max_hazard)} road risk` };
   }
   const label = 'Peak flood level crossed';
@@ -1951,14 +1954,14 @@ function getPeakRiskRow(route, isEarthquake) {
 // The peak row as one line of text: the phone's verdict line.
 function formatPeakRiskSentence(peak) {
   if (peak.items) {
-    return `${peak.label}: ${peak.items.map(item => `${item.title.toLowerCase()} (${item.detail})`).join(' and ')}.`;
+    return `${peak.label}: ${peak.items.map(item => `${item.name.toLowerCase()} ${item.level.toLowerCase()}${item.extent ? ` (${item.extent})` : ''}`).join(' and ')}.`;
   }
   return `${peak.label}: ${peak.value}.${peak.detail ? ` ${peak.detail}.` : ''}`;
 }
 
 // The peak row's value for the PDF report's table.
 function formatPeakRiskValue(peak) {
-  if (peak.items) return peak.items.map(item => `${item.title}: ${item.detail}.`).join(' ');
+  if (peak.items) return peak.items.map(item => `${item.name}: ${item.level}${item.extent ? `, ${item.extent}` : ''}.`).join(' ');
   return peak.detail ? `${peak.value}. ${peak.detail}.` : peak.value;
 }
 
@@ -4402,10 +4405,7 @@ function renderRouteSafetyPanel(result) {
     );
     if (antSearchNote) notes.push(antSearchNote);
   } else if (isAreaWideHighRisk(best)) {
-    notes.push(
-      `${checkedLabel} ${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)}`,
-      describeLeastExposedRoute(best),
-    );
+    notes.push(`${checkedLabel} ${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)}`);
     if (antSearchNote) notes.push(antSearchNote);
   } else {
     notes.push(
@@ -4463,7 +4463,7 @@ function renderRouteSafetyPanel(result) {
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
         <div><div class="safety-card-label">${escapeHtml(peak.label)}</div>${peak.items
-          ? `<ul class="safety-expect-list">${peak.items.map(item => `<li><strong>${escapeHtml(item.title)}:</strong> ${escapeHtml(item.detail)}</li>`).join('')}</ul>`
+          ? `<ul class="safety-hazard-list">${peak.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong class="is-${item.level.toLowerCase()}">${escapeHtml([item.level, item.extent].filter(Boolean).join(' · '))}</strong></li>`).join('')}</ul>`
           : `<div class="safety-card-value">${escapeHtml(peak.value)}</div>${peak.detail ? `<div class="safety-card-sub">${escapeHtml(peak.detail)}</div>` : ''}`}</div>
       </div>
     </div>
