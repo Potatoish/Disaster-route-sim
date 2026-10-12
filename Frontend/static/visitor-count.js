@@ -13,8 +13,13 @@
     counted = localStorage.getItem(COUNTED_KEY) === '1';
   } catch (err) {}
 
+  // A new visitor's own count (POST) and the plain read (GET) can come back
+  // in either order; the count only grows, so the higher one is current.
+  let shown = -1;
   const show = count => {
-    if (output && Number.isFinite(count)) output.textContent = count.toLocaleString('en-US');
+    if (!output || !Number.isFinite(count) || count < shown) return;
+    shown = count;
+    output.textContent = count.toLocaleString('en-US');
   };
 
   const setCounted = value => {
@@ -36,21 +41,14 @@
     return body.count;
   };
 
-  const run = async () => {
-    if (counted === false) {
-      // Marked before asking, so a second page opened meanwhile doesn't
-      // count the same browser again.
-      setCounted(true);
-      try {
-        show(await ask('POST'));
-        return;
-      } catch (err) {
-        // Not counted this time (sheet down, rate limit): try again next visit.
-        setCounted(false);
-      }
-    }
-    if (output) show(await ask('GET'));
-  };
-
-  run().catch(() => {});
+  if (counted === false) {
+    // Marked before asking, so a second page opened meanwhile doesn't count
+    // the same browser again.
+    setCounted(true);
+    // Not counted this time (sheet down, rate limit): try again next visit.
+    ask('POST').then(show, () => setCounted(false));
+  }
+  // Asked alongside the POST, not after it: adding a visitor waits seconds
+  // on the Google Sheet, while the server answers this read from memory.
+  if (output) ask('GET').then(show, () => {});
 })();

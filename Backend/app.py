@@ -16,6 +16,7 @@ from contact_service import (
     record_feedback,
     record_visitor,
     send_contact_message,
+    warm_visitor_count,
 )
 from earthquake_service import (
     check_earthquake_pin,
@@ -693,6 +694,8 @@ def _warm_caches():
     print(f"[warm-up] caches ready in {time.time() - started:.1f}s")
 
 Thread(target=_warm_caches, name="cache-warm-up", daemon=True).start()
+# Its own thread: the sheet answers in seconds, the graphs take longer.
+Thread(target=warm_visitor_count, name="visitor-count-warm-up", daemon=True).start()
 
 def _stop_old_dev_servers(port):
     # Werkzeug binds with SO_REUSEADDR, which on Windows lets a second server
