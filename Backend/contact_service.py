@@ -91,6 +91,13 @@ MIN_DUPLICATE_CHECK_LENGTH = 20
 # again, so each page view doesn't wait on Apps Script.
 VISITOR_COUNT_CACHE_SECONDS = 120
 
+# A local dev server has no FEEDBACK_SHEET_URL (it lives in Railway's
+# variables), so app.py turns this on when run directly and the homepage there
+# shows the live site's count instead of a dash. Only read: local visits never
+# count.
+LIVE_VISITOR_COUNT_URL = "https://agnas-route.up.railway.app/visitors"
+USE_LIVE_VISITOR_COUNT = False
+
 FEEDBACK_RATINGS = {1: "Confusing", 2: "Okay", 3: "Clear"}
 FEEDBACK_ROLES = {
     "resident": "Resident",
@@ -443,8 +450,24 @@ def warm_visitor_count():
         _refresh_visitor_count()
 
 
+def _live_visitor_count():
+    """The live site's count, for a local dev server without the sheet."""
+    try:
+        response = requests.get(LIVE_VISITOR_COUNT_URL, timeout=UPSTREAM_TIMEOUT_SECONDS)
+        body = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        print(f"[visitors] Could not read the live site's visitor count: {exc}")
+        body = None
+    count = body.get("count") if isinstance(body, dict) and body.get("error") is False else None
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        return _error("The visitor count isn't available right now.", 502, "fetch_failed")
+    return {"error": False, "count": count}, 200
+
+
 def get_visitor_count():
     if not os.environ.get("FEEDBACK_SHEET_URL", "").strip():
+        if USE_LIVE_VISITOR_COUNT:
+            return _live_visitor_count()
         return _error("The visitor count isn't set up yet.", 503, "not_configured")
 
     with _VISITOR_COUNT_LOCK:

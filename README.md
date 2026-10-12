@@ -193,7 +193,9 @@ editor again and publish it with **Deploy → Manage deployments → Edit → Ve
 then the count shows a dash (the old script has no `doGet`, so nothing is written to the sheet).
 
 To try it locally, set the variables in the same PowerShell window before starting the server, e.g.
-`$env:RESEND_API_KEY = "re_..."`.
+`$env:RESEND_API_KEY = "re_..."`. Without `FEEDBACK_SHEET_URL`, the local dev server
+(`py Backend/app.py`) shows the live site's visitor count instead of a dash; it only reads it, so
+local visits aren't counted.
 
 ### 5. Simulation logs and visitors' pins
 

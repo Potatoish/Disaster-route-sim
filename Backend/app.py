@@ -10,6 +10,7 @@ from threading import Condition, RLock, Thread
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
+import contact_service
 from contact_service import (
     get_visitor_count,
     issue_form_token,
@@ -757,5 +758,8 @@ if __name__ == "__main__":
     # Simulation logs show pins; fine on a developer's own machine, never on
     # the server (osm_routing.DEBUG).
     osm_routing.DEBUG = True
+    # Without FEEDBACK_SHEET_URL the homepage shows the live site's visitor
+    # count (contact_service.USE_LIVE_VISITOR_COUNT).
+    contact_service.USE_LIVE_VISITOR_COUNT = True
     _stop_old_dev_servers(5000)
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
