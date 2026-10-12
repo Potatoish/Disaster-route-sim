@@ -440,20 +440,34 @@ function buildBarangayScopeMask(rings) {
   });
 }
 
-function getStoredTheme() {
+const darkSchemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+function getSavedTheme() {
   try {
-    return localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === 'dark' || saved === 'light' ? saved : null;
   } catch (err) {
-    return 'light';
+    return null;
   }
 }
 
 // The theme is picked with the homepage's switch (home.js); this page only
-// reads the stored choice.
+// reads that choice, or follows the device's setting when there is none.
+function getPreferredTheme() {
+  return getSavedTheme() || (darkSchemeQuery?.matches ? 'dark' : 'light');
+}
+
 function initTheme() {
-  document.body.classList.toggle('dark', getStoredTheme() === 'dark');
+  const theme = getPreferredTheme();
+  document.body.classList.toggle('dark', theme === 'dark');
+  document.documentElement.style.colorScheme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0a1420' : '#f6f9fd');
   applyHazardTheme();
 }
+
+darkSchemeQuery?.addEventListener?.('change', () => {
+  if (!getSavedTheme()) initTheme();
+});
 
 let emergencyContactReturnFocusEl = null;
 
@@ -1400,11 +1414,14 @@ function locateVisitor({ button = null, moveTo = flyToVisitor } = {}) {
 
 const BACKEND_CHECK_ATTEMPTS = 6;
 
+// The folded-map mark index.html starts #emptyMapIcon with.
+const EMPTY_MAP_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5 3.5 6.8v12.7L9 17.2l6 2.3 5.5-2.3V4.5L15 6.8 9 4.5Z"/><path d="M9 4.5v12.7M15 6.8v12.7"/></svg>';
+
 function setEmptyMapStatus(text, { spinner = true, retry = false } = {}) {
   const icon = document.getElementById('emptyMapIcon');
   const txt = document.getElementById('emptyMapTxt');
   const retryBtn = document.getElementById('emptyMapRetry');
-  if (icon) icon.innerHTML = spinner ? '<span class="empty-map-spinner" aria-hidden="true"></span>' : '&#128506;';
+  if (icon) icon.innerHTML = spinner ? '<span class="empty-map-spinner"></span>' : EMPTY_MAP_ICON_SVG;
   if (txt) txt.textContent = text;
   if (retryBtn) retryBtn.hidden = !retry;
 }

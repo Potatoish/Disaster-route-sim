@@ -12,7 +12,8 @@
 
     {# loading="lazy": the modal starts hidden, so its screenshots load when
        it opens instead of holding up the page's load event. #}
-    <div id="tutorialSlides">
+    {# Live, so a screen reader hears each step as Next/Back moves to it. #}
+    <div id="tutorialSlides" aria-live="polite">
       <div class="tutorial-slide is-active" data-step="1">
         <div class="tutorial-tile-shot">
           <img class="shot-light" loading="lazy" src="{{ url_for('static', filename='assets/tutorial/pick-barangay-light.png') }}" alt="Barangay selection cards for Pinagbuhatan and Sta. Lucia">
@@ -57,7 +58,7 @@
 
     <div class="tutorial-modal-foot">
       <div class="tutorial-dots" id="tutorialDots">
-        <button type="button" class="tutorial-dot is-active" onclick="goToTutorialStep(1)" aria-label="Step 1"></button>
+        <button type="button" class="tutorial-dot is-active" onclick="goToTutorialStep(1)" aria-label="Step 1" aria-current="step"></button>
         <button type="button" class="tutorial-dot" onclick="goToTutorialStep(2)" aria-label="Step 2"></button>
         <button type="button" class="tutorial-dot" onclick="goToTutorialStep(3)" aria-label="Step 3"></button>
         <button type="button" class="tutorial-dot" onclick="goToTutorialStep(4)" aria-label="Step 4"></button>

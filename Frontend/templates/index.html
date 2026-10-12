@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>AGNAS</title>
+  <meta name="description" content="Plan safer walking evacuation routes for flood and earthquake scenarios in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City.">
+  {# The phone browser's toolbar color; the theme script below swaps it. #}
+  <meta name="theme-color" content="#f6f9fd">
   {# Home <-> simulator cross-fade opt-in (styled in style.css). Inline and
      first: from a stylesheet, Chrome sometimes skipped it. #}
   <style>
@@ -24,17 +27,22 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+{# Same theme pick as site_base.html: the visitor's choice, else the device's. #}
 <script>
   (function () {
-    try {
-      if (localStorage.getItem('disaster-route-sim-theme') === 'dark') {
-        document.body.classList.add('dark');
-      }
-    } catch (err) {}
+    var saved = null;
+    try { saved = localStorage.getItem('disaster-route-sim-theme'); } catch (err) {}
+    var dark = saved === 'dark' || saved === 'light'
+      ? saved === 'dark'
+      : !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    if (dark) document.body.classList.add('dark');
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    document.querySelector('meta[name="theme-color"]').content = dark ? '#0a1420' : '#f6f9fd';
   })();
 </script>
 
 <div class="app" id="appShell">
+  <header class="sr-only"><h1>AGNAS evacuation route simulator</h1></header>
 
   <button class="sidebar-toggle sidebar-reopen-tab" id="sidebarReopenBtn" type="button" onclick="toggleSetupSidebar(true)" aria-label="Show simulation setup" aria-controls="setupPanel">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
@@ -47,10 +55,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
   </button>
 
-  <div class="left-panel" id="setupPanel">
+  <section class="left-panel" id="setupPanel" aria-labelledby="setupPanelTitle">
     <div class="panel-head">
       <div class="panel-head-title-row">
-        <div class="panel-head-title">Simulation setup</div>
+        <h2 class="panel-head-title" id="setupPanelTitle">Simulation setup</h2>
         <div class="panel-head-brand-actions">
           <button class="sidebar-toggle" type="button" onclick="return handleNavHowToUse(event)" aria-label="How to use">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.75.35-1.1.85-1.1 1.7v.2"/><circle cx="12" cy="16.3" r=".9" fill="currentColor" stroke="none"/></svg>
@@ -85,7 +93,7 @@
         <div class="workflow-card-body">
           <div class="hazard-grid">
             <button type="button" class="hazard-card flood" id="hFlood" aria-pressed="false" onclick="selectHazard('Flood', this)">
-              <span class="hazard-icon" aria-hidden="true">&#127754;</span>
+              <span class="hazard-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><path d="M3 19.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><circle cx="12" cy="6.5" r="2"/><path d="M12 8.5v3.8"/></svg></span>
               <span>
                 <span class="hazard-name">Flood</span>
                 <span class="hazard-sub">Water level</span>
@@ -93,7 +101,7 @@
             </button>
 
             <button type="button" class="hazard-card" id="hEarthquake" aria-pressed="false" onclick="selectHazard('Earthquake', this)">
-              <span class="hazard-icon" aria-hidden="true">&#9888;&#65039;</span>
+              <span class="hazard-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l2-5 3.5 10 3-8 2 3h4.5"/></svg></span>
               <span>
                 <span class="hazard-name">Earthquake</span>
                 <span class="hazard-sub">Liquefaction / Ground shaking</span>
@@ -194,9 +202,9 @@
         Back to Home
       </button>
     </div>
-  </div>
+  </section>
 
-  <div class="right-panel">
+  <main class="right-panel">
     <div class="map-wrap">
       <div id="map"></div>
 
@@ -228,8 +236,8 @@
       </div>
 
       <div class="empty-map" id="emptyMap">
-        <div class="empty-map-icon" id="emptyMapIcon">&#128506;</div>
-        <div class="empty-map-txt" id="emptyMapTxt">Select a barangay to load the map</div>
+        <div class="empty-map-icon" id="emptyMapIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5 3.5 6.8v12.7L9 17.2l6 2.3 5.5-2.3V4.5L15 6.8 9 4.5Z"/><path d="M9 4.5v12.7M15 6.8v12.7"/></svg></div>
+        <div class="empty-map-txt" id="emptyMapTxt" role="status">Select a barangay to load the map</div>
         <button type="button" class="empty-map-retry" id="emptyMapRetry" onclick="retryBackendConnection()" hidden>Try again</button>
       </div>
       <script>
@@ -480,7 +488,7 @@
       </section>
     </div>
 
-    <div id="loader" aria-live="polite">
+    <div id="loader">
       <div class="loader-card">
         <div class="loader-visual" id="loaderVisual" aria-hidden="true">
           <svg class="loader-graph" viewBox="0 0 100 100">
@@ -518,9 +526,9 @@
           </svg>
         </div>
         <div class="loader-kicker" id="loaderKicker">Loading</div>
-        <div class="loader-text" id="loaderTitle">Loading routes</div>
+        <div class="loader-text" id="loaderTitle" role="status">Loading routes</div>
         <div class="loader-progress-shell">
-          <div class="loader-progress" id="loaderProgress" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="loader-progress" id="loaderProgress" role="progressbar" aria-label="Simulation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="loader-bar" id="loaderBar"></div>
             <svg class="loader-crack" viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden="true">
               <path class="loader-crack-main" pathLength="100" d="M0,7 L9,6 L15,9.5 L23,4 L31,8.5 L39,5 L47,10 L55,5.5 L63,9 L71,4.5 L79,8 L87,5 L100,7"></path>
@@ -529,16 +537,16 @@
               <path class="loader-crack-branch loader-crack-branch--c" pathLength="100" d="M79,8 L84.5,13.2"></path>
             </svg>
           </div>
-          <div class="loader-progress-caption">
+          <div class="loader-progress-caption" aria-hidden="true">
             <span class="loader-pct" id="loaderPct">0%</span> complete — this may take a few moments
           </div>
         </div>
       </div>
     </div>
 
-  </div>
+  </main>
 
-  <aside class="route-safety-panel" id="routeSafetyPanel" aria-live="polite">
+  <aside class="route-safety-panel" id="routeSafetyPanel" aria-label="Route safety results" aria-live="polite">
     <div class="safety-brand">
       <div class="safety-eyebrow">AGNAS</div>
       <h2>Ant guided navigation and safety system</h2>
@@ -602,6 +610,7 @@
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>
+<script src="{{ url_for('static', filename='modal-focus.js') }}"></script>
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 <script src="{{ url_for('static', filename='mobile-sim.js') }}"></script>

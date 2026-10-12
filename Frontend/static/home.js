@@ -7,13 +7,24 @@
 window.BACKEND_BASE = window.BACKEND_BASE || window.location.origin;
 
 const HOME_THEME_STORAGE_KEY = 'disaster-route-sim-theme';
+// The phone browser's toolbar color per theme (--page-top in home.css).
+const HOME_THEME_COLORS = { light: '#f6f9fd', dark: '#0a1420' };
+const darkSchemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
 
-function getStoredHomeTheme() {
+// Only a theme the visitor picked with the switch is stored.
+function getSavedHomeTheme() {
   try {
-    return localStorage.getItem(HOME_THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+    const saved = localStorage.getItem(HOME_THEME_STORAGE_KEY);
+    return saved === 'dark' || saved === 'light' ? saved : null;
   } catch (err) {
-    return 'light';
+    return null;
   }
+}
+
+// The visitor's pick, else their device's setting (as the inline script in
+// site_base.html decided before the first paint).
+function getPreferredHomeTheme() {
+  return getSavedHomeTheme() || (darkSchemeQuery?.matches ? 'dark' : 'light');
 }
 
 // Set by initAntCanvas() so a theme flip can refresh its cached colors
@@ -22,33 +33,42 @@ let refreshAntCanvasColors = null;
 
 function applyHomeTheme(theme) {
   document.body.classList.toggle('dark', theme === 'dark');
-  const logo = document.getElementById('brandLogo');
-  if (logo) {
-    logo.src = theme === 'dark' ? logo.dataset.logoDark : logo.dataset.logoLight;
-  }
+  document.documentElement.style.colorScheme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', HOME_THEME_COLORS[theme]);
   document.querySelectorAll('.theme-switch-btn').forEach((btn) => {
     const active = btn.dataset.theme === theme;
     btn.classList.toggle('is-active', active);
     btn.setAttribute('aria-pressed', String(active));
   });
   if (refreshAntCanvasColors) refreshAntCanvasColors();
-  try {
-    localStorage.setItem(HOME_THEME_STORAGE_KEY, theme);
-  } catch (err) {
-    // Ignore storage failures and keep the theme in-memory only.
-  }
 }
 
 function initHomeTheme() {
-  applyHomeTheme(getStoredHomeTheme());
+  applyHomeTheme(getPreferredHomeTheme());
   initAntCanvas();
   syncQuickStartLink();
+}
+
+// Until the visitor picks a theme, the page follows the device's setting as
+// it changes (an automatic sunset switch, say).
+darkSchemeQuery?.addEventListener?.('change', () => {
+  if (!getSavedHomeTheme()) switchHomeTheme(getPreferredHomeTheme());
+});
+
+// The theme switch: the visitor's pick, kept for every page.
+function setHomeTheme(theme) {
+  try {
+    localStorage.setItem(HOME_THEME_STORAGE_KEY, theme);
+  } catch (err) {
+    // Storage blocked: the theme still applies for this page view.
+  }
+  switchHomeTheme(theme);
 }
 
 // The page cross-fades into the other theme instead of flipping (where the
 // browser has view transitions); the switch itself stays live, so its thumb
 // slides across without a ghost of the old one fading out.
-function setHomeTheme(theme) {
+function switchHomeTheme(theme) {
   const unchanged = document.body.classList.contains('dark') === (theme === 'dark');
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (unchanged || reduced || typeof document.startViewTransition !== 'function') {
@@ -74,10 +94,20 @@ function setHomeTheme(theme) {
 let fabOpen = false;
 let toastTimer = null;
 
-function toggleFab() {
-  fabOpen = !fabOpen;
+// Opening moves focus to the first rating, closing hands it back to the
+// button, so keyboard users never land on a control that has vanished.
+function toggleFab(open = !fabOpen) {
   const panel = document.getElementById('fabPanel');
-  if (panel) panel.classList.toggle('open', fabOpen);
+  const button = document.getElementById('fabBtn');
+  if (!panel) return;
+  fabOpen = open;
+  panel.classList.toggle('open', fabOpen);
+  button?.setAttribute('aria-expanded', String(fabOpen));
+  if (fabOpen) {
+    requestAnimationFrame(() => panel.querySelector('button[data-v]')?.focus({ preventScroll: true }));
+  } else if (panel.contains(document.activeElement)) {
+    button?.focus({ preventScroll: true });
+  }
 }
 
 function showHomeToast(message, duration = 2200) {
@@ -140,7 +170,7 @@ async function sendFeedback() {
   const msg = document.getElementById('fabMsg');
   const role = document.getElementById('fabRole');
   const button = document.getElementById('fabSend');
-  const rated = rateRow ? rateRow.querySelector('button.sel') : null;
+  const rated = rateRow ? rateRow.querySelector('button[aria-pressed="true"]') : null;
   const comment = msg ? msg.value.trim() : '';
   if (!rated && !comment) {
     showHomeToast('Pick a rating or write a comment first.', 3500);
@@ -161,41 +191,61 @@ async function sendFeedback() {
     return;
   }
 
-  if (fabOpen) toggleFab();
+  if (fabOpen) toggleFab(false);
   showHomeToast(result.message || 'Thanks for the feedback!');
   if (msg) msg.value = '';
   if (role) role.value = '';
-  if (rateRow) rateRow.querySelectorAll('button.sel').forEach((btn) => btn.classList.remove('sel'));
+  setRating(null);
 }
 
 const rateRow = document.getElementById('rateRow');
-if (rateRow) {
-  rateRow.addEventListener('click', (event) => {
-    const btn = event.target.closest('button');
-    if (!btn) return;
-    Array.from(rateRow.children).forEach((child) => child.classList.toggle('sel', child === btn));
+
+// One rating at most; picking the chosen one again clears it.
+function setRating(btn) {
+  rateRow?.querySelectorAll('button[data-v]').forEach((child) => {
+    child.setAttribute('aria-pressed', String(child === btn));
   });
 }
 
-async function submitContactForm() {
+rateRow?.addEventListener('click', (event) => {
+  const btn = event.target.closest('button[data-v]');
+  if (btn) setRating(btn.getAttribute('aria-pressed') === 'true' ? null : btn);
+});
+
+// The contact form's message line (About page): stays until the next send,
+// unlike a toast, and is read out as it appears (role="alert").
+function setContactError(message) {
+  const el = document.getElementById('contactError');
+  if (!el) return;
+  el.textContent = message || '';
+  el.hidden = !message;
+}
+
+async function submitContactForm(event) {
+  event?.preventDefault();
   const name = document.getElementById('cName');
   const email = document.getElementById('cEmail');
   const msg = document.getElementById('cMsg');
   const button = document.getElementById('cSend');
-  if (!name || !email || !msg) return;
+  if (!name || !email || !msg || button?.disabled) return;
 
-  const empty = [name, email, msg].find((field) => !field.value.trim());
-  if (empty) {
-    showHomeToast('Please fill in your name, email, and message.', 3500);
-    empty.focus();
+  const fields = [name, email, msg];
+  fields.forEach((field) => field.removeAttribute('aria-invalid'));
+  const empty = fields.filter((field) => !field.value.trim());
+  const invalid = empty.length ? empty : (email.checkValidity() ? [] : [email]);
+  if (invalid.length) {
+    invalid.forEach((field) => {
+      field.setAttribute('aria-invalid', 'true');
+      field.setAttribute('aria-describedby', 'contactError');
+    });
+    setContactError(empty.length
+      ? 'Please fill in your name, email, and message.'
+      : 'Please enter a valid email address.');
+    invalid[0].focus();
     return;
   }
-  if (!email.checkValidity()) {
-    showHomeToast('Please enter a valid email address.', 3500);
-    email.focus();
-    return;
-  }
 
+  setContactError(null);
   setSending(button, true);
   const result = await postHomeForm('/contact', {
     name: name.value.trim(),
@@ -205,7 +255,7 @@ async function submitContactForm() {
   });
   setSending(button, false);
   if (!result.ok) {
-    showHomeToast(result.message, 4500);
+    setContactError(result.message);
     return;
   }
 
@@ -214,6 +264,16 @@ async function submitContactForm() {
   msg.value = '';
   showHomeToast(result.message || "Message sent. We'll reply by email.", 3500);
 }
+
+// A field marked invalid is cleared as soon as the visitor fixes it.
+document.getElementById('contactForm')?.addEventListener('input', (event) => {
+  const field = event.target;
+  if (field.getAttribute('aria-invalid') !== 'true' || !field.value.trim()) return;
+  if (field.type === 'email' && !field.checkValidity()) return;
+  field.removeAttribute('aria-invalid');
+  field.removeAttribute('aria-describedby');
+  if (!document.querySelector('#contactForm [aria-invalid="true"]')) setContactError(null);
+});
 
 // ---- hero quick-start card ----
 // The barangay pick goes into the "Open simulator" link as ?barangay=...;
@@ -373,6 +433,7 @@ async function openScopeMap() {
 
   modal.hidden = false;
   document.body.classList.add('scope-modal-open');
+  window.modalFocus?.enter(modal, document.getElementById('scopeModalClose'));
   setScopeMapError(null);
 
   try {
@@ -387,8 +448,10 @@ async function openScopeMap() {
 
 function closeScopeMap() {
   const modal = document.getElementById('scopeModal');
-  if (modal) modal.hidden = true;
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
   document.body.classList.remove('scope-modal-open');
+  window.modalFocus?.restore(modal);
 }
 
 function setScopeMapError(message) {
@@ -451,7 +514,7 @@ document.addEventListener('keydown', (event) => {
     closeScopeMap();
   } else if (fabOpen) {
     event.preventDefault();
-    toggleFab();
+    toggleFab(false);
   }
 });
 

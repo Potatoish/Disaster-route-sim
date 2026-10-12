@@ -1,13 +1,14 @@
 {% extends "site_base.html" %}
 
 {% block content %}
+<main id="main" tabindex="-1">
 <section id="hero" class="hero">
   <canvas id="antCanvas" aria-hidden="true"></canvas>
   <div class="wrap hero-inner hero-split">
 
     <div class="hero-copy">
       <span class="eyebrow">Ant Guided Navigation And Safety System</span>
-      <h1>Disaster Preparedness<br>for safer communities</h1>
+      <h1>Disaster Preparedness<br><span class="hero-accent">for safer communities</span></h1>
       <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios, filtering out hazard-prone routes before evaluating path distance.</p>
       <div class="hero-actions">
         <button type="button" class="hero-action" onclick="openScopeMap()">
@@ -17,7 +18,7 @@
       </div>
     </div>
 
-    <div class="hero-quickstart" aria-label="Quick-start simulator setup">
+    <section class="hero-quickstart" aria-labelledby="qsTitle">
       <div class="qs-head">
         <h2 id="qsTitle">Select your Barangay</h2>
       </div>
@@ -41,12 +42,12 @@
         Open simulator <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </a>
       <p class="qs-note" id="quickStartNote">Opens the simulator pre-set to your choices above.</p>
-    </div>
+    </section>
 
   </div>
 </section>
 
-<section class="stats-section">
+<section class="stats-section" aria-label="AGNAS at a glance">
   <div class="wrap">
   <div class="stats">
     <div class="stat"><b>ACO</b><span>Ant Colony Optimization</span></div>
@@ -495,6 +496,8 @@
     </div>
   </div>
 </section>
+</div>
+</main>
 
 <footer class="site-footer">
   <div class="wrap foot-row">
@@ -505,7 +508,6 @@
     </div>
   </div>
 </footer>
-</div>
 
 {# "Emergency hotlines" from the Plan ahead card: the same numbers as the
    simulator (_emergency_contacts.html), styled like the coverage-map dialog. #}
@@ -513,7 +515,7 @@
   <div class="scope-modal-backdrop" onclick="closeHotlines()"></div>
   <div class="scope-modal-panel">
     <div class="scope-modal-head">
-      <h3 id="hotlineModalTitle">Emergency hotlines</h3>
+      <h2 id="hotlineModalTitle">Emergency hotlines</h2>
       <button type="button" class="scope-modal-close" id="hotlineModalClose" onclick="closeHotlines()" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>

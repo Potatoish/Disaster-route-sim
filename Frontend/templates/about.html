@@ -3,24 +3,25 @@
 {% block title %}AGNAS{% endblock %}
 
 {% block content %}
-<section class="block" style="padding-top:44px;">
+<main id="main" tabindex="-1">
+<section class="block about-section">
   <div class="wrap">
     <div class="block-head center-head">
       <span class="about-logo" aria-hidden="true">
         <img class="logo-light" src="{{ url_for('static', filename='agnas-logo.png') }}" alt="">
         <img class="logo-dark" src="{{ url_for('static', filename='agnas-logo-dark.png') }}" alt="">
       </span>
-      <h2>About AGNAS</h2>
+      <h1>About AGNAS</h1>
     </div>
 
     <div class="about-grid">
       <div>
         <div class="panel">
-          <h3>Project overview</h3>
+          <h2>Project overview</h2>
           <p>AGNAS helps you plan safer walking routes in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City. Using official flood and earthquake hazard maps from <a class="src-link" href="https://noah.up.edu.ph/" target="_blank" rel="noopener">Project NOAH</a> and <a class="src-link" href="https://www.phivolcs.dost.gov.ph/" target="_blank" rel="noopener">PHIVOLCS</a>, it shows which routes avoid high-risk streets, with the safest ones listed first. Use it to plan ahead before a disaster, not during an emergency.</p>
         </div>
         <div class="panel">
-          <h3>Architecture</h3>
+          <h2>Architecture</h2>
           <p>A three-tier build separating the map interface from the routing computation.</p>
           <div class="credit-row"><b>Client</b><span>Leaflet, OSM tiles</span></div>
           <div class="credit-row"><b>Service</b><span>Flask, OSMnx, ACO engine</span></div>
@@ -28,7 +29,7 @@
         </div>
         {# Linked from the homepage, the simulator results and the PDF report. #}
         <div class="panel" id="data-sources">
-          <h3>Data sources</h3>
+          <h2>Data sources</h2>
           <ul class="source-list">
             <li>
               <b>Flood hazard levels</b>
@@ -55,21 +56,24 @@
       </div>
 
       <div>
-        <div class="panel">
-          <h3>Contact the team</h3>
-          <p style="margin-bottom:16px;">Questions about the study, the data, or a request to use the system.</p>
-          <div class="form-row"><label for="cName">Name</label><input id="cName" type="text" placeholder="Juan Dela Cruz" autocomplete="name" maxlength="100" required></div>
-          <div class="form-row"><label for="cEmail">Email</label><input id="cEmail" type="email" placeholder="you@example.com" autocomplete="email" maxlength="254" required></div>
-          <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" rows="4" placeholder="Data request, question, or feedback" maxlength="5000" required></textarea></div>
+        {# A real form: Enter sends it, and home.js marks a missing or invalid
+           field (aria-invalid) instead of the browser's own bubbles. #}
+        <form class="panel contact-form" id="contactForm" novalidate onsubmit="submitContactForm(event)" aria-labelledby="contactTitle">
+          <h2 id="contactTitle">Contact the team</h2>
+          <p class="contact-intro">Questions about the study, the data, or a request to use the system.</p>
+          <div class="form-row"><label for="cName">Name</label><input id="cName" name="name" type="text" placeholder="Juan Dela Cruz" autocomplete="name" maxlength="100" required></div>
+          <div class="form-row"><label for="cEmail">Email</label><input id="cEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email" maxlength="254" required></div>
+          <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" name="message" rows="4" placeholder="Data request, question, or feedback" maxlength="5000" required></textarea></div>
           <div class="hp-field" aria-hidden="true"><label for="cWebsite">Website</label><input id="cWebsite" type="text" tabindex="-1" autocomplete="off"></div>
-          <button type="button" class="cta full" id="cSend" onclick="submitContactForm()">Send message</button>
+          <p class="form-error" id="contactError" role="alert" hidden></p>
+          <button type="submit" class="cta full" id="cSend">Send message</button>
           <p class="contact-note">We typically reply within 2–3 business days. AGNAS isn't a live service wired directly to real-time hazard feeds, so the site doesn't need round-the-clock monitoring.</p>
-        </div>
+        </form>
       </div>
     </div>
 
     <div class="panel research-panel">
-      <h3>Research team</h3>
+      <h2>Research team</h2>
       <div class="research-grid">
         <div>
           <span class="research-label">Authors</span>
@@ -95,4 +99,5 @@
     </div>
   </div>
 </section>
+</main>
 {% endblock %}

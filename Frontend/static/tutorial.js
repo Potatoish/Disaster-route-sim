@@ -11,13 +11,21 @@
       el.classList.toggle('is-active', Number(el.dataset.step) === tutorialStep);
     });
     document.querySelectorAll('.tutorial-dot').forEach((dot, i) => {
-      dot.classList.toggle('is-active', i + 1 === tutorialStep);
+      const current = i + 1 === tutorialStep;
+      dot.classList.toggle('is-active', current);
+      if (current) dot.setAttribute('aria-current', 'step');
+      else dot.removeAttribute('aria-current');
     });
     const stepNum = document.getElementById('tutorialStepNum');
     if (stepNum) stepNum.textContent = String(tutorialStep);
 
     const back = document.getElementById('tutorialBack');
-    if (back) back.disabled = tutorialStep === 1;
+    if (back) {
+      // Disabling the focused Back button would drop focus to the page.
+      const backHadFocus = document.activeElement === back;
+      back.disabled = tutorialStep === 1;
+      if (back.disabled && backHadFocus) document.getElementById('tutorialNext')?.focus();
+    }
 
     const next = document.getElementById('tutorialNext');
     if (next) next.textContent = tutorialStep === TUTORIAL_STEPS ? 'Done' : 'Next';
@@ -62,6 +70,7 @@
     goToTutorialStep(1);
     modal.hidden = false;
     document.body.classList.add('tutorial-modal-open');
+    window.modalFocus?.enter(modal, document.getElementById('tutorialNext'));
     document.dispatchEvent(new CustomEvent('tutorial:open'));
   }
 
@@ -70,6 +79,7 @@
     const modal = document.getElementById('tutorialModal');
     if (!modal || modal.hidden || modal.classList.contains('is-closing')) return;
     modal.classList.add('is-closing');
+    window.modalFocus?.restore(modal);
     document.dispatchEvent(new CustomEvent('tutorial:close'));
     const panel = modal.querySelector('.tutorial-modal-panel');
     if (reducedMotion.matches || !panel || getComputedStyle(panel).animationName === 'none') {
