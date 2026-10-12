@@ -1821,7 +1821,19 @@ function describeAreaWideHighRisk(route, barangay = selectedBarangay) {
 
 function describeLeastExposedRoute(route) {
   const destination = route?.destination_name ? ` to ${route.destination_name}` : '';
-  return `Route ${route?.display_route_no ?? 1} is the least exposed way${destination}. Once the shaking stops, watch for falling debris and damaged buildings on the way.`;
+  // A site named for its street ("Sandoval Ave.") already ends the sentence.
+  const end = destination.endsWith('.') ? '' : '.';
+  return `Route ${route?.display_route_no ?? 1} is the least exposed way${destination}${end} Once the shaking stops, watch for falling debris and damaged buildings on the way.`;
+}
+
+// Past about a 12-minute walk (5 km/h), the open area a run suggests is too
+// far to reach soon after a quake, when aftershocks and falling debris make
+// every extra street a risk; any open space closer by is the better refuge.
+const FAR_FROM_OPEN_AREA_METERS = 1000;
+const FAR_FROM_OPEN_AREA_NOTE = 'If you are far from the suggested open area, move immediately to the nearest open area once the shaking stops.';
+
+function isFarFromOpenArea(route) {
+  return isEarthquakeRouteRecord(route) && Number(route?.distance) > FAR_FROM_OPEN_AREA_METERS;
 }
 
 // How many routes are green, in words that don't call them "safe" either:
@@ -4414,6 +4426,8 @@ function renderRouteSafetyPanel(result) {
     );
     if (antSearchNote) notes.push(antSearchNote);
   }
+  // What to do comes right after the verdict, before how the search ran.
+  if (isFarFromOpenArea(best)) notes.splice(1, 0, FAR_FROM_OPEN_AREA_NOTE);
   if (isEarthquake && result.active_view_label) {
     notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
   }
@@ -5088,6 +5102,7 @@ async function downloadSimulationReport() {
       ...(isAreaWideHighRisk(best)
         ? [['Why every route is high risk', `${describeAreaWideHighRisk(best, barangay)} ${describeLeastExposedRoute(best)}`]]
         : []),
+      ...(isFarFromOpenArea(best) ? [['Far from the open area', FAR_FROM_OPEN_AREA_NOTE]] : []),
       ['Routes checked', `${routes.length} (${formatGreenRouteTally(countTier('safe'), isEq)}, ${cautionCount ? `${cautionCount} risky, ` : ''}${countTier('unsafe')} not recommended)`],
       [`${getTopRouteTitle(best)} found by`, ROUTE_FOUND_BY_TEXT[best?.found_by] || ROUTE_FOUND_BY_TEXT.aco],
     ];

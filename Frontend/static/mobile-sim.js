@@ -763,6 +763,9 @@
     const destination = $('msimSummaryDest');
     destination.hidden = !(isEarthquake && best?.destination_name);
     destination.textContent = isEarthquake && best?.destination_name ? `To ${best.destination_name}` : '';
+    const farNote = $('msimFarNote');
+    farNote.hidden = !isFarFromOpenArea(best);
+    farNote.textContent = farNote.hidden ? '' : FAR_FROM_OPEN_AREA_NOTE;
 
     const ordered = [...routes].sort((left, right) => (left.display_route_no ?? 99) - (right.display_route_no ?? 99));
     state.routesExpanded = false;

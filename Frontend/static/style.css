@@ -3952,6 +3952,15 @@ body.dark .leaflet-popup-close-button {
   line-height: 1.4;
 }
 
+/* An instruction, not a detail: darker than the destination line above it. */
+.msummary-far {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 /* Results details (half / full). */
 .mhotlines {
   display: flex;
@@ -4524,6 +4533,7 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 .tutorial-slide p,
 .msheet-help,
 .mverdict-sub,
+.msummary-far,
 .msheet-source,
 .maccordion p {
   text-align: justify;
