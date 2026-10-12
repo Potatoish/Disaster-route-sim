@@ -1835,11 +1835,12 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-result-card.success .safety-icon-box, .safety-result-card.success .safety-card-value { color: var(--green-ink); }
 .safety-result-card.warning, .safety-result-card.warning .safety-icon-box { border-color: rgba(245,158,11,.55); }
 .safety-result-card.warning .safety-icon-box, .safety-result-card.warning .safety-card-value { color: var(--yellow-ink); }
-/* Earthquake "Hazards on Route 1" (getEarthquakeHazardRows): one row per
-   layer, its name left and its level right, colored by that level. A long
-   value ("High · 620 m of 876 m") drops under the name. */
-.safety-hazard-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 3px; }
-.safety-hazard-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 10px; color: var(--muted); font-size: .78rem; font-weight: 500; line-height: 1.4; }
+/* Earthquake "Hazards on Route 1" (getEarthquakeHazardRows): each layer's
+   name with its level right under it, colored by that level. Side by side,
+   a short value sat far from its name and a long one wrapped, so the rows
+   didn't line up. */
+.safety-hazard-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.safety-hazard-list li { display: grid; color: var(--muted); font-size: .78rem; font-weight: 500; line-height: 1.35; }
 .safety-hazard-list strong { color: var(--ink-strong); font-size: .84rem; font-weight: 800; }
 .safety-hazard-list strong.is-high { color: var(--red); }
 .safety-hazard-list strong.is-moderate { color: var(--yellow-ink); }
