@@ -748,7 +748,13 @@
 
     const duration = best?.display_duration || formatRouteWalkingDuration(best);
     const distance = best?.display_distance || formatDistanceCompact(best?.distance);
-    $('msimSummaryMain').innerHTML = `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
+    // A flood route with no safe option is not to be walked, so its walking
+    // time gives way to the call for rescue (getNoSafeRouteAction); an
+    // earthquake route is still walked, with care.
+    const action = getNoSafeRouteAction(best);
+    $('msimSummaryMain').innerHTML = action && !isEarthquake
+      ? `<button class="msummary-rescue" type="button" onclick="openEmergencyContactModal(event)">${safetyIcon('phone')}<span>${escapeHtml(action.title)}</span></button>`
+      : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
     $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
 
     const destination = $('msimSummaryDest');

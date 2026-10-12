@@ -1835,6 +1835,16 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-result-card.success .safety-icon-box, .safety-result-card.success .safety-card-value { color: var(--green-ink); }
 .safety-result-card.warning, .safety-result-card.warning .safety-icon-box { border-color: rgba(245,158,11,.55); }
 .safety-result-card.warning .safety-icon-box, .safety-result-card.warning .safety-card-value { color: var(--yellow-ink); }
+/* "What to do" when no route is safe (getNoSafeRouteAction): its text runs
+   several lines, so the icon stays at the top. */
+.safety-action-card { align-items: start; }
+/* Justified in a narrow card: hyphenation keeps the word gaps even. */
+.safety-action-detail { margin: 3px 0 0; line-height: 1.45; -webkit-hyphens: auto; hyphens: auto; }
+.safety-card-action { display: inline-flex; align-items: center; gap: 6px; margin-top: 9px; padding: 7px 12px; border: 1px solid var(--red); border-radius: 8px; background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); font: 700 .76rem var(--font-body); cursor: pointer; transition: background-color .16s ease, color .16s ease, scale .12s ease; }
+.safety-card-action svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.safety-card-action:hover { background: var(--red); color: #fff; }
+/* Dark mode's brighter red takes dark ink. */
+body.dark .safety-card-action:hover { color: #1c0606; }
 .safety-notes { margin-top: 11px; padding: 10px 11px; border-left: 2px solid var(--border2); color: var(--muted); font-size: .79rem; line-height: 1.55; }
 .safety-notes em { color: var(--ink-strong); font-weight: 700; }
 .safety-notes ul { margin: 5px 0 0 15px; }
@@ -2607,7 +2617,8 @@ body.dark .leaflet-popup-close-button {
   .panel-back-btn,
   .pin-input,
   .earthquake-evac-btn,
-  .panel-barangay-seg button {
+  .panel-barangay-seg button,
+  .safety-card-action {
     min-height: 44px;
   }
 
@@ -3893,6 +3904,30 @@ body.dark .leaflet-popup-close-button {
   color: var(--accent);
 }
 
+/* Flood with no safe route: the call for rescue replaces the walking time. */
+.msummary-rescue {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--red) 60%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red);
+  font: 800 .9rem var(--font-body);
+  cursor: pointer;
+  transition: background-color .16s ease, scale .12s ease;
+}
+
+.msummary-rescue:hover {
+  background: color-mix(in srgb, var(--red) 16%, transparent);
+}
+
+.msummary-main .msummary-rescue svg {
+  color: currentColor;
+}
+
 .msummary-route {
   flex: none;
   color: var(--muted);
@@ -4455,7 +4490,8 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 @media (prefers-reduced-motion: no-preference) {
   :is(.run-btn, .earthquake-evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
       .reset-btn, .safety-download-btn, .safety-all-routes-btn, .route-modal-btn,
-      .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard):active:not(:disabled) {
+      .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
+      .safety-card-action, .msummary-rescue):active:not(:disabled) {
     scale: .97;
   }
 }
@@ -4470,6 +4506,7 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 .pin-field-help,
 .info-box,
 .safety-route-hint,
+.safety-action-detail,
 .safety-notes li,
 .safety-disclaimer-text,
 .route-modal-caution span,

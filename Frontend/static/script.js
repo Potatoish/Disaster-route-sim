@@ -1852,6 +1852,28 @@ function getMediumFloodDistance(route) {
 
 const MEDIUM_FLOOD_WARNING = 'Not safe for children, older adults, PWDs, pregnant women, or in flowing water.';
 
+// What to do when no route is safe, shown in place of route 1's walking time
+// (results panel, phone sheet, PDF). A flood route is unsafe only through
+// High water, over 1.5 m (above an adult's neck), so nobody should walk it.
+// After an earthquake the route is still the way to the evacuation site once
+// the shaking stops; most of these results are red because one high-risk
+// zone covers the whole barangay, not because the walk is impossible.
+const NO_SAFE_ROUTE_ACTIONS = {
+  flood: {
+    title: "Don't walk. Call for rescue.",
+    detail: 'In this flood, every route crosses water over 1.5 m deep. Stay somewhere high and dry, and contact your barangay or the Pasig City DRRMO for rescue.',
+  },
+  earthquake: {
+    title: 'Walk with care once the shaking stops.',
+    detail: 'Expect aftershocks. Keep clear of cracked roads, fallen wires and damaged buildings, and call for help if anyone is hurt or trapped.',
+  },
+};
+
+function getNoSafeRouteAction(route) {
+  if (getRouteSafetyTier(route) !== 'unsafe') return null;
+  return NO_SAFE_ROUTE_ACTIONS[isEarthquakeRouteRecord(route) ? 'earthquake' : 'flood'];
+}
+
 // Called only for a "Risky route" result, whose route 1 is not "best".
 function describeMediumFloodCrossing(route) {
   const distance = getMediumFloodDistance(route);
@@ -1866,14 +1888,17 @@ function describeMediumFloodCrossing(route) {
 // meters like the route rows ("485 m unsafe"), not a count of road pieces:
 // one street can be one piece or eight, depending on how OpenStreetMap
 // splits it.
+// A flood route ends there (the "What to do" card says not to walk it); an
+// earthquake one adds how to walk it.
 function describeUnsafeCrossing(route) {
   const unsafe = Number(route?.unsafe_distance) || 0;
   const total = Number(route?.distance) || 0;
   const name = `Route ${route?.display_route_no ?? 1}`;
-  if (unsafe <= 0) return `${name} still passes through a high-hazard area. Be extra careful.`;
+  const advice = isEarthquakeRouteRecord(route) ? ` ${NO_SAFE_ROUTE_ACTIONS.earthquake.title}` : '';
+  if (unsafe <= 0) return `${name} still passes through a high-hazard area.${advice}`;
   return total > 0 && unsafe >= total * 0.98
-    ? `All of ${name} (${formatDistanceCompact(total)}) is in a high-hazard area. Be extra careful.`
-    : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area. Be extra careful.`;
+    ? `All of ${name} (${formatDistanceCompact(total)}) is in a high-hazard area.${advice}`
+    : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area.${advice}`;
 }
 
 // The "peak" row of the route safety panel, the phone sheet and the PDF
@@ -4156,6 +4181,7 @@ function safetyIcon(name) {
     pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><path d="M12 10h.01"/></svg>',
     clock: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
     flag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h13l-3 3.5L19 11H6"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>',
     walk: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14" cy="4" r="1.6"/><path d="M13 6.5 11.5 13M12.3 8 9 7M12 9.3 15.6 11.6M11.5 13 8 15.5 8.6 19M11.5 13 14.6 16.8 16.2 20"/></svg>',
   };
   return icons[name] || icons.alert;
@@ -4290,6 +4316,26 @@ function renderRouteSafetyPanel(result) {
     .join(' · ');
   const tier = getRouteSafetyTier(best);
   const verdict = { ...ROUTE_VERDICTS[tier], title: getRouteVerdictTitle(best) };
+  const action = getNoSafeRouteAction(best);
+  // With no safe route, what to do takes the walking-time card's place; an
+  // earthquake route is still walked, so its distance stays in the card.
+  const routeCardMarkup = action
+    ? `
+      <div class="safety-result-card danger safety-action-card">
+        <div class="safety-icon-box">${safetyIcon('phone')}</div>
+        <div>
+          <div class="safety-card-label">What to do</div>
+          <div class="safety-card-value">${escapeHtml(action.title)}</div>
+          <p class="safety-card-sub safety-action-detail">${escapeHtml(action.detail)}</p>
+          ${isEarthquake ? `<div class="safety-card-sub">${escapeHtml(`Route ${bestRouteNo}: ${bestDistanceText}`)}</div>` : ''}
+          <button class="safety-card-action" type="button" onclick="openEmergencyContactModal(event)">${safetyIcon('phone')}Emergency hotlines</button>
+        </div>
+      </div>`
+    : `
+      <div class="safety-result-card">
+        <div class="safety-icon-box">${safetyIcon('ruler')}</div>
+        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${routeHasWadingTime(best) ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
+      </div>`;
   const fullySafeCount = routes.filter(route => getRouteSafetyTier(route) === 'safe').length;
   const dryCount = routes.filter(route => getRouteSafetyTier(route) === 'safe' && isFloodFreeRoute(route)).length;
   // The list button covers only the routes not already on the map; none off
@@ -4373,10 +4419,7 @@ function renderRouteSafetyPanel(result) {
         <div class="safety-icon-box">${safetyIcon(verdict.icon)}</div>
         <div><div class="safety-card-label">Overall verdict</div><div class="safety-card-value">${escapeHtml(verdict.title)}</div></div>
       </div>
-      <div class="safety-result-card">
-        <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${routeHasWadingTime(best) ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
-      </div>
+      ${routeCardMarkup}
       <div class="safety-result-card ${peakClass}">
         <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
         <div><div class="safety-card-label">${escapeHtml(peakLabel)}</div><div class="safety-card-value">${escapeHtml(peakValue)}</div>${peakDetail ? `<div class="safety-card-sub">${escapeHtml(peakDetail)}</div>` : ''}</div>
@@ -4982,14 +5025,18 @@ async function downloadSimulationReport() {
     y += 18;
 
     const labelColWidth = 160;
+    const noSafeAction = getNoSafeRouteAction(best);
     const rows = [
       ['Barangay', barangay || 'Unknown'],
       ['Disaster type', hazard || 'Unknown'],
       ['Start', withPinCoordinates(start || 'Unknown', 'start')],
       ['Destination', isEq ? (endLabel || 'Unknown') : withPinCoordinates(endLabel || 'Unknown', 'end')],
       ['Overall verdict', getRouteVerdictTitle(best)],
+      ...(noSafeAction ? [['What to do', `${noSafeAction.title} ${noSafeAction.detail}`]] : []),
       [`${getTopRouteTitle(best)} distance`, best?.display_distance || 'Unavailable'],
-      ['Estimated time to destination', routeHasWadingTime(best)
+      ['Estimated time to destination', !isEq && noSafeAction
+        ? `${best?.display_duration || 'Unavailable'} (do not walk this route)`
+        : routeHasWadingTime(best)
         ? `${best?.display_duration || 'Unavailable'} (slower pace through flood water)`
         : best?.display_duration || 'Unavailable'],
       [peakLabel, peakDetail ? `${peakValue}. ${peakDetail}.` : peakValue],
