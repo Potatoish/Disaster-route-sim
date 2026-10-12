@@ -57,7 +57,11 @@
     const fill = isHighlighted ? '#22c55e' : '#f59e0b';
     const stroke = isHighlighted ? '#14532d' : '#9a3412';
     const accent = isHighlighted ? '#166534' : '#b45309';
-    const label = isHighlighted ? 'CHOSEN' : 'EVAC';
+    const label = isHighlighted ? 'CHOSEN' : 'OPEN AREA';
+    // "OPEN AREA" is wider than the 66-unit pin, so its badge overhangs it a
+    // little and its text is a point smaller.
+    const badgeWidth = isHighlighted ? 56 : 80;
+    const labelSize = isHighlighted ? 11 : 10;
     const halo = isHighlighted
       ? `<circle cx="46" cy="38" r="33" fill="rgba(34,197,94,0.18)" />`
       : '';
@@ -76,8 +80,8 @@
           <path d="M34 40l12-10 12 10" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M38 40v11h16V40" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M46 45v6" fill="none" stroke="${accent}" stroke-width="3.2" stroke-linecap="round"/>
-          <rect x="18" y="63" width="56" height="18" rx="9" fill="#ffffff" opacity="0.98"/>
-          <text x="46" y="75.5" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="11" font-weight="800" fill="${accent}">${label}</text>
+          <rect x="${46 - badgeWidth / 2}" y="63" width="${badgeWidth}" height="18" rx="9" fill="#ffffff" opacity="0.98"/>
+          <text x="46" y="75.5" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="${labelSize}" font-weight="800" fill="${accent}">${label}</text>
         </g>
       </svg>
     `;
