@@ -3,7 +3,7 @@
 **Ant Guided Navigation And Safety System** is a disaster-aware evacuation route simulator for **Barangay Pinagbuhatan** and **Barangay Sta. Lucia** in **Pasig City**.
 It finds walking routes with **Ant Colony Optimization (ACO)** and ranks them with a **lexicographic safety-first rule**: route safety always comes before travel distance.
 
-Live site: https://agnas-route.up.railway.app
+Live site: agnas-nav.up.railway.app
 
 AGNAS is a planning tool for use *before* a disaster. It works from stored hazard maps, not live feeds, so it is not an emergency alert service.
 
