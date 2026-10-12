@@ -25,12 +25,25 @@
   const walkFor = d => (d <= 0.5 ? ['safe', 'Walkable'] : d <= 1.5 ? ['risk', 'Risky'] : ['elim', 'Not walkable']);
   const ADULT_LIMIT_DEPTH = 1.2;
 
-  // Water depth (m) up to each body landmark, from standard proportions of
-  // standing height: a 163 cm adult (DOST-FNRI) and a 130 cm child.
-  const ADULT = [[0.1, 'ankles'], [0.3, 'shins'], [0.46, 'knees'], [0.87, 'thighs'], [0.98, 'waist'], [1.18, 'chest'], [1.34, 'shoulders'], [1.42, 'neck'], [9, 'face']];
-  const CHILD = [[0.08, 'ankles'], [0.25, 'shins'], [0.37, 'knees'], [0.69, 'thighs'], [0.78, 'waist'], [0.94, 'chest'], [1.06, 'shoulders'], [1.13, 'neck'], [1.3, 'face'], [9, null]];
+  // Height (m) of each body landmark above the ground, from standard
+  // proportions of standing height (hips 0.53, waist 0.60, chest 0.72,
+  // shoulders 0.82, chin 0.87, eyes 0.94 of it): a 163 cm adult (DOST-FNRI)
+  // and a 130 cm child, the same heights the scene draws them at.
+  const ADULT = { height: 1.63, parts: [[0.1, 'ankles'], [0.3, 'shins'], [0.46, 'knees'], [0.62, 'thighs'], [0.87, 'hips'], [0.98, 'waist'], [1.18, 'chest'], [1.34, 'shoulders'], [1.42, 'neck'], [1.53, 'face']] };
+  const CHILD = { height: 1.3, parts: [[0.08, 'ankles'], [0.25, 'shins'], [0.37, 'knees'], [0.49, 'thighs'], [0.69, 'hips'], [0.78, 'waist'], [0.94, 'chest'], [1.06, 'shoulders'], [1.13, 'neck'], [1.22, 'face']] };
+  // The landmark nearest the water line: naming the next one above it would
+  // call 1.00 m (2 cm over an adult's waist) chest-deep. On a tie the higher
+  // one wins, so the water is never made to sound shallower than it is. From
+  // the top of the head up, the person is under water.
+  function reachText({ height, parts }, d) {
+    if (d >= height - 1e-9) return 'over the head';
+    let [best] = parts;
+    parts.forEach(part => {
+      if (Math.abs(d - part[0]) <= Math.abs(d - best[0]) + 1e-9) best = part;
+    });
+    return `up to the ${best[1]}`;
+  }
   const firstAtOrAbove = (table, d) => table.find(([limit]) => d <= limit + 1e-9)[1];
-  const reachText = part => (part ? `up to the ${part}` : 'over the head');
   const DEPTH_NOTES = [
     [0.2, 'Walk carefully. The water can hide open drains.'],
     [0.5, 'Walking is slower. Keep children close.'],
@@ -69,8 +82,8 @@
     flood.style.setProperty('--lvl-on', lvl.on);
     cards.forEach(card => card.setAttribute('aria-pressed', String(card.dataset.level === key)));
 
-    $('hzReach').innerHTML = `<span>Adult: ${reachText(firstAtOrAbove(ADULT, depth))}</span>`
-      + `<span>Child: ${reachText(firstAtOrAbove(CHILD, depth))}</span>`;
+    $('hzReach').innerHTML = `<span>Adult: ${reachText(ADULT, depth)}</span>`
+      + `<span>Child: ${reachText(CHILD, depth)}</span>`;
     $('hzLevel').textContent = lvl.label;
     $('hzLevelNote').textContent = firstAtOrAbove(DEPTH_NOTES, depth);
     const [walkClass, walkText] = walkFor(depth);
