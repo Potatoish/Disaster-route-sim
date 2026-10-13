@@ -609,7 +609,7 @@
       : placing
       ? `Move the map, then tap “Set ${role} here”`
       : toEvacSite
-      ? getFloodResultEvacSite()?.name || 'Evacuation site with the safest route'
+      ? getFloodResultEvacSite()?.name || 'Evacuation site'
       : waiting
       ? 'Set the start point first'
       : 'Not set yet';

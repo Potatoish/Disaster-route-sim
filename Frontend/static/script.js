@@ -2591,7 +2591,7 @@ function syncRoutePinFields() {
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
       : toEvacSite
-      ? resultSite?.name || 'Safest evacuation site'
+      ? resultSite?.name || 'Evacuation site'
       : placingOwn
       ? 'Tap the map where you want to go'
       : pin?.label || PIN_ROLE_COPY[role].empty;
@@ -2637,7 +2637,7 @@ function syncEndPinMenu() {
   if (!evacItem || !ownItem) return;
   const ownPin = !!routePins.end;
   const toEvacSite = !ownPin && isFloodToEvacSite() && pinPlacementRole !== 'end';
-  evacItem.textContent = toEvacSite ? 'Show the evacuation sites' : 'Use the safest evacuation site';
+  evacItem.textContent = toEvacSite ? 'Show the evacuation sites' : 'Use an evacuation site instead';
   evacItem.setAttribute('aria-checked', String(toEvacSite));
   ownItem.textContent = ownPin ? 'Move my destination on the map' : 'Choose my own destination instead';
 }
