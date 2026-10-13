@@ -142,9 +142,13 @@
                 </div>
               </div>
 
+              {# Flood's destination is the evacuation site with the safest
+                 route by default (.is-evac: a house icon); a spot of one's
+                 own is the menu's second choice (syncEndPinMenu). #}
               <div class="pin-input-row pin-input-row-end" id="endField">
                 <span class="pin-input-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                  <svg class="pin-input-icon-pin" viewBox="0 0 24 24"><path d="M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                  <svg class="pin-input-icon-evac" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 10v9h11v-9M10.5 19v-4.5h3V19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </span>
                 <div class="pin-input-combo">
                   <button type="button" class="pin-input" id="endPinBtn" onclick="togglePinMenu('end')" disabled aria-haspopup="menu" aria-expanded="false" aria-controls="endPinMenu">
@@ -152,12 +156,12 @@
                     <span class="pin-field-meta" id="endPinMeta" hidden></span>
                   </button>
                   <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
-                    <button type="button" class="evac-btn pin-input-menu-evac" role="menuitem" onclick="showFloodEvacuationSites()">
-                      Show Evacuation Sites
+                    <button type="button" class="evac-btn pin-input-menu-evac" id="endMenuEvacBtn" role="menuitemradio" aria-checked="true" onclick="showFloodEvacuationSites()">
+                      Show the evacuation sites
                     </button>
                     <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('end')">
                       <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
-                      Or choose where you want to go
+                      <span id="endMenuOwnLabel">Choose my own destination instead</span>
                     </button>
                   </div>
                 </div>
@@ -406,6 +410,10 @@
             </div>
           </div>
 
+          {# The ants' search between a run's loader and its results
+             (aco-replay.js builds the panel, mobile-sim.js shows it here). #}
+          <div class="msheet-mode" id="msimReplay" hidden></div>
+
           <div class="msheet-mode" id="msimResults" hidden>
             <div class="mlens" id="msimLens" role="group" aria-label="Earthquake lens" hidden>
               <button type="button" data-msim-eq-view="overall" aria-pressed="true" onclick="switchEarthquakeView('overall')">Overall</button>
@@ -614,6 +622,7 @@
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>
+<script src="{{ url_for('static', filename='aco-replay.js') }}"></script>
 <script src="{{ url_for('static', filename='modal-focus.js') }}"></script>
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>

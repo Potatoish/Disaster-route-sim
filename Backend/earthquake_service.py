@@ -17,6 +17,7 @@ from osm_routing import (
     UNKNOWN_HAZARD_LEVEL,
     add_alternative_routes,
     add_road_access_nodes,
+    build_colony_replay,
     build_elimination_reason,
     build_hazard_coverage_area,
     check_route_pin,
@@ -74,6 +75,9 @@ EARTHQUAKE_VIEW_CONFIG = {
         "description": "Ground-shaking exposure first, ACO pheromone second, distance third.",
     },
 }
+# The lens the results open on; its chosen site's colony is the one the
+# results' replay shows (build_colony_replay).
+REPLAY_VIEW = "overall"
 
 
 def _format_supported_barangay_list():
@@ -455,14 +459,22 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
     """A main ant colony to every reachable site (NUM_ITERATIONS progress
     steps each). The site whose best route ranks first is the result; only
     its colony goes on to alternative colonies (one step each) and the full
-    candidate pool. Returns (that site's evaluated candidates, ACO stats)."""
+    candidate pool. Returns (that site's evaluated candidates, ACO stats,
+    that colony -- recorded for the replay in the lens the results open
+    on)."""
     view_graph = _clone_graph_for_view(base_graph, view_key)
 
     best_pick = None
     ants_sent = ants_arrived = 0
     for evacuation_site in evacuation_sites:
         rng = random.Random(route_search_seed(*seed_parts, view_key, evacuation_site["id"]))
-        colony = start_aco(view_graph, start_node, site_nodes[evacuation_site["id"]], rng)
+        colony = start_aco(
+            view_graph,
+            start_node,
+            site_nodes[evacuation_site["id"]],
+            rng,
+            record=view_key == REPLAY_VIEW,
+        )
         ants_sent += colony["stats"]["ants_sent"]
         ants_arrived += colony["stats"]["ants_arrived"]
         if not colony["routes"] and colony["baseline"] is None:
@@ -489,7 +501,7 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
     alternatives = FINAL_ROUTES_TO_SHOW - 1
     if best_pick is None:
         bump_progress(alternatives)
-        return [], None
+        return [], None, None
 
     evacuation_site, colony, _ = best_pick
     main_sent, main_arrived = colony["stats"]["ants_sent"], colony["stats"]["ants_arrived"]
@@ -499,7 +511,16 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
     stats["sites_searched"] = len(evacuation_sites)
     stats["ants_sent_all_sites"] = ants_sent + colony["stats"]["ants_sent"] - main_sent
     stats["ants_arrived_all_sites"] = ants_arrived + colony["stats"]["ants_arrived"] - main_arrived
-    return _evaluate_colony_routes(base_graph, candidates, evacuation_site, view_key, colony["pheromone"]), stats
+    return _evaluate_colony_routes(base_graph, candidates, evacuation_site, view_key, colony["pheromone"]), stats, colony
+
+
+def _replay_span_levels(edge_data):
+    """A road's liquefaction and ground-shaking levels, for the replay's walk
+    along Route 1."""
+    return [
+        _edge_layer_level(edge_data, "eq_liquefaction"),
+        _edge_layer_level(edge_data, "eq_ground_shaking"),
+    ]
 
 
 def _collect_road_reachable_evacuation_sites(base_graph, start_node, evacuation_sites, site_nodes):
@@ -673,11 +694,12 @@ def simulate_earthquake(start, barangay_name):
             float(start_location["lat"]),
             float(start_location["lng"]),
         )
+        replay = None
         for view_key in EARTHQUAKE_VIEW_CONFIG:
             view_started = time.perf_counter()
             view_label = EARTHQUAKE_VIEW_CONFIG[view_key]["label"]
             debug_print(f"[EQ]   View start: {view_label}")
-            candidates, aco_stats = _collect_view_candidates(
+            candidates, aco_stats, colony = _collect_view_candidates(
                 routing_graph,
                 start_node,
                 evaluated_sites,
@@ -696,6 +718,14 @@ def simulate_earthquake(start, barangay_name):
             area_wide = _area_wide_high_risk(base_graph, view_key)
             for route in views[view_key]["routes"]:
                 route["area_wide_high_risk"] = area_wide
+            if view_key == REPLAY_VIEW and colony is not None:
+                routes = views[view_key]["routes"]
+                replay = build_colony_replay(
+                    colony,
+                    routes[0] if routes else None,
+                    _replay_span_levels,
+                    {"sites_searched": len(evaluated_sites)},
+                )
             debug_print(
                 f"[EQ]   View complete: {view_label} in {time.perf_counter() - view_started:.2f}s "
                 f"(routes={len(views[view_key]['routes'])})"
@@ -717,8 +747,9 @@ def simulate_earthquake(start, barangay_name):
             "evacuation_sites": dataset["evacuation_sites"],
             "reachable_evacuation_sites": evaluated_sites,
             "hazard_layers": dataset["layer_payloads"],
-            "active_view": "overall",
+            "active_view": REPLAY_VIEW,
             "views": views,
+            "replay": replay,
         }
         now = time.perf_counter()
         debug_print(f"[EQ] Phase 3/3 complete in {now - phase_started:.2f}s")

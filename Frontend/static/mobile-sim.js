@@ -1,6 +1,8 @@
 // Phone and tablet layout of the simulator (< 1024px wide and >= 500px tall):
 // a full-screen map under a floating top bar, map controls, a fixed center
-// pin, one panel with a setup and a results mode, and a Map layers sheet. On
+// pin, one panel with a setup, a replay and a results mode (the replay holds
+// aco-replay.js's panel while the ants' search plays), and a Map layers
+// sheet. On
 // phones the panel is a bottom sheet (peek / half / full); on tablets
 // (>= 640px, isSide) it is docked on the left. The markup is #msim in
 // index.html; style.css hides it on desktops and short viewports.
@@ -37,6 +39,9 @@
   const DISCLAIMER_SEEN_KEY = 'agnas-disclaimer-seen';
   const LEGEND_FOLDED_KEY = 'agnas-map-legend-folded';
   const SNAP_ORDER = ['peek', 'half', 'full'];
+  // The Evacuation sites slot's house, for the End slot while the end point
+  // is the sites.
+  const EVAC_BADGE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>';
   const FLOOD_LEGEND_ROWS = [
     ['rgba(250,204,21,.86)', 'Low'],
     ['rgba(249,115,22,.90)', 'Medium'],
@@ -51,7 +56,7 @@
   if (!shell || !sheet || !scroller || !handle) return;
 
   const state = {
-    mode: 'setup', // 'setup' | 'results'
+    mode: 'setup', // 'setup' | 'replay' | 'results'
     snap: 'peek', // 'peek' | 'half' | 'full'
     height: 0, // the sheet's visible height, px
     snaps: { peek: 0, half: 0, full: 0 },
@@ -146,6 +151,7 @@
 
   function getPeekEnd() {
     if (state.mode === 'results') return $('msimResultActions');
+    if (state.mode === 'replay') return $('msimReplay').querySelector('.aco-replay-skip');
     if (!selectedHazard) return $('msimHazardSection');
     const help = $('msimSetupHelp');
     return help.textContent.trim() ? help : $('msimSetupActions');
@@ -421,12 +427,14 @@
       state.syncFrame = null;
     }
     if (state.mode === 'results' && !simData) state.mode = 'setup';
+    if (state.mode === 'replay' && !$('msimReplay').firstElementChild) state.mode = simData ? 'results' : 'setup';
 
     $('msimSetup').hidden = state.mode !== 'setup';
+    $('msimReplay').hidden = state.mode !== 'replay';
     $('msimResults').hidden = state.mode !== 'results';
     syncTopBar();
     if (state.mode === 'setup') syncSetup();
-    else syncResultsChrome();
+    else if (state.mode === 'results') syncResultsChrome();
     if (state.layersOpen) syncLayersPanel();
     renderMapLegend();
     measureSnaps();
@@ -437,13 +445,15 @@
       || new URLSearchParams(window.location.search).get('barangay')
       || 'Simulator';
     $('msimTitle').textContent = barangay;
-    // Which disaster and which step: "Flood · Setup", "Flood · Results".
+    // Which disaster and which step: "Flood · Setup", "Flood · Simulation",
+    // "Flood · Results".
     const results = state.mode === 'results' && simData;
     const hazard = results
       ? (isEarthquakeSimulationResult(simData) ? 'Earthquake' : 'Flood')
       : selectedHazard;
+    const stepName = results ? 'Results' : state.mode === 'replay' ? 'Simulation' : 'Setup';
     $('msimSubtitle').textContent = hazard
-      ? `${hazard} · ${results ? 'Results' : 'Setup'}`
+      ? `${hazard} · ${stepName}`
       : 'Choose a disaster';
 
     // The title opens the barangay switcher, except mid-run.
@@ -547,11 +557,10 @@
     syncPinSlot('start');
     $('msimSlot-end').hidden = earthquake;
     if (!earthquake) syncPinSlot('end');
-    // Flood: the sites are one way to choose the end point, so their slot
-    // shows only while it is still open -- unset, or a pinned one being
-    // moved. Once they are the end point, the End slot says so.
-    $('msimSlot-evac').hidden = !earthquake
-      && (isFloodToEvacSite() || (!!routePins.end && getPinRole() !== 'end'));
+    // Flood: the end point is the evacuation sites until the visitor picks a
+    // spot of their own (the End slot's Change); then this slot offers the
+    // sites again.
+    $('msimSlot-evac').hidden = !earthquake && isFloodToEvacSite() && !routePins.end;
     syncEvacSlot();
 
     const role = getPinRole();
@@ -588,6 +597,11 @@
     slot.classList.toggle('is-active', placing);
     slot.classList.toggle('is-empty', !set);
     slot.classList.toggle('is-disabled', waiting && !placing);
+    if (role === 'end') {
+      // A house while the end point is the evacuation sites, like their pins.
+      slot.classList.toggle('mslot--to-evac', toEvacSite && !placing);
+      slot.querySelector('.mslot-badge').innerHTML = toEvacSite && !placing ? EVAC_BADGE_SVG : 'E';
+    }
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
       : pin
@@ -600,14 +614,21 @@
       ? 'Set the start point first'
       : 'Not set yet';
 
-    // Edit moves a set pin, Cancel stops moving it, Set arms an empty one.
-    const label = set ? (placing ? 'Cancel' : 'Edit') : (placing || waiting ? '' : 'Set');
+    // Edit moves a set pin, Cancel stops moving it, Set arms an empty one;
+    // Change trades the evacuation sites for a spot of one's own.
+    const label = set
+      ? (placing ? 'Cancel' : toEvacSite ? 'Change' : 'Edit')
+      : (placing || waiting ? '' : 'Set');
     edit.hidden = !label
       || pin?.status === 'checking'
       || !canPlaceRoutePins()
       || isSimulationInteractionLocked();
     edit.textContent = label;
-    edit.setAttribute('aria-label', label ? `${label} ${pointName}` : '');
+    edit.setAttribute('aria-label', !label
+      ? ''
+      : toEvacSite && !placing
+      ? 'Choose your own end point instead of the evacuation site'
+      : `${label} ${pointName}`);
   }
 
   // The sites the run chooses from: earthquake's destination, and flood's
@@ -621,14 +642,16 @@
 
     if (!isEarthquakeMode()) {
       slot.classList.add('is-empty');
-      slot.classList.toggle('is-disabled', !hasStart);
-      value.textContent = hasStart
-        ? 'Tap Show to go to the one with the safest route'
-        : 'Set the start point first';
-      button.hidden = !hasStart || !canPlaceRoutePins();
+      slot.classList.remove('is-disabled');
+      value.textContent = 'Tap Use to go to the one with the safest route instead';
+      button.textContent = 'Use';
+      button.setAttribute('aria-label', 'Use the evacuation site with the safest route');
+      button.hidden = !canPlaceRoutePins();
       button.disabled = isSimulationInteractionLocked();
       return;
     }
+    button.textContent = 'Show';
+    button.removeAttribute('aria-label');
 
     const supported = isEarthquakeBarangaySupported();
     const loaded = earthquakeEvacSitesVisible;
@@ -657,7 +680,10 @@
       return 'Tap Show to put the evacuation sites on the map, then run the simulation.';
     }
     if (canRunCurrentSimulation()) {
-      return simData ? 'Change the hazard or move a pin to compare routes.' : 'Ready. Tap Run simulation.';
+      if (simData) return 'Change the hazard or move a pin to compare routes.';
+      return isFloodToEvacSite() && !routePins.end
+        ? 'Ready. Routes go to the evacuation site with the safest route. Tap Run simulation.'
+        : 'Ready. Tap Run simulation.';
     }
     return '';
   }
@@ -876,6 +902,25 @@
       markDisclaimerSeen();
     }
     if (isActive()) $('msimVerdictTitle').focus({ preventScroll: true });
+  }
+
+  // The ants' search (aco-replay.js), between a run's loader and its
+  // results: the sheet holds the replay's panel, at peek, so the map stays
+  // in view. Returns false outside this layout.
+  function showReplay(panel) {
+    if (!isActive()) return false;
+    $('msimReplay').replaceChildren(panel);
+    state.mode = 'replay';
+    state.snap = 'peek';
+    scroller.scrollTop = 0;
+    syncNow();
+    return true;
+  }
+
+  function endReplay() {
+    $('msimReplay').replaceChildren();
+    if (state.mode === 'replay') state.mode = simData ? 'results' : 'setup';
+    scheduleSync();
   }
 
   function showSetup() {
@@ -1247,13 +1292,16 @@
   window.mobileSim = {
     attachMap,
     clearResults,
+    endReplay,
     getCoveredInsets,
     handleEscape,
     handleMapTap,
+    isActive,
     // The pin being moved is drawn by the center pin, not its marker.
     isCenterPinRole: role => isActive() && getPinRole() === role,
     renderResults,
     scheduleSync,
+    showReplay,
     showResults,
     showSetup,
     syncRouteRows,

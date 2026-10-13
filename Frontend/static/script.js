@@ -2511,7 +2511,7 @@ function togglePinMenu(role) {
 
   menu.hidden = false;
   document.getElementById(`${role}PinBtn`)?.setAttribute('aria-expanded', 'true');
-  menu.querySelector('[role="menuitem"]')?.focus({ preventScroll: true });
+  menu.querySelector('[role^="menuitem"]')?.focus({ preventScroll: true });
 }
 
 // Zooms to street level so the visitor can tap an exact spot: around the
@@ -2575,8 +2575,9 @@ function syncRoutePinFields() {
 
     const pin = routePins[role];
     // No pin: the destination is the evacuation sites, or after a run, the
-    // one it picked.
-    const toEvacSite = role === 'end' && !pin && isFloodToEvacSite();
+    // one it picked -- unless the visitor is picking a spot of their own.
+    const placingOwn = role === 'end' && !pin && pinPlacementRole === 'end';
+    const toEvacSite = role === 'end' && !pin && !placingOwn && isFloodToEvacSite();
     const resultSite = toEvacSite ? getFloodResultEvacSite() : null;
     input.disabled = locked || !canPlaceRoutePins();
     if (input.disabled) {
@@ -2585,22 +2586,28 @@ function syncRoutePinFields() {
     }
     row.classList.toggle('is-placing', pinPlacementRole === role);
     row.classList.toggle('is-set', !!pin || toEvacSite);
+    row.classList.toggle('is-evac', toEvacSite);
 
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
       : toEvacSite
-      ? resultSite?.name || 'Evacuation site'
+      ? resultSite?.name || 'Safest evacuation site'
+      : placingOwn
+      ? 'Tap the map where you want to go'
       : pin?.label || PIN_ROLE_COPY[role].empty;
-    meta.hidden = !pin && !toEvacSite;
+    meta.hidden = !pin && !toEvacSite && !placingOwn;
     meta.textContent = pin
       ? formatPinCoordinates(pin)
       : toEvacSite
-      ? (resultSite ? 'Evacuation site with the safest route' : 'The one with the safest route')
+      ? (resultSite ? 'Evacuation site with the safest route' : 'AGNAS picks the one with the safest route')
+      : placingOwn
+      ? 'Your own destination'
       : '';
     input.title = pin ? `${pin.label || PIN_ROLE_COPY[role].fallbackLabel} (${formatPinCoordinates(pin)})` : '';
   });
 
   document.getElementById('pinInputs')?.classList.toggle('is-single', isEarthquakeMode());
+  syncEndPinMenu();
 
   // Shown while the route card is collapsed: how to change pins already set.
   const summary = document.getElementById('summaryRoute');
@@ -2620,6 +2627,19 @@ function syncRoutePinFields() {
 
   // Most setup changes pass through here; the phone sheet re-reads them all.
   window.mobileSim?.scheduleSync();
+}
+
+// The destination menu (flood): the evacuation site with the safest route
+// comes first -- it is also the default -- and a spot of one's own second.
+function syncEndPinMenu() {
+  const evacItem = document.getElementById('endMenuEvacBtn');
+  const ownItem = document.getElementById('endMenuOwnLabel');
+  if (!evacItem || !ownItem) return;
+  const ownPin = !!routePins.end;
+  const toEvacSite = !ownPin && isFloodToEvacSite() && pinPlacementRole !== 'end';
+  evacItem.textContent = toEvacSite ? 'Show the evacuation sites' : 'Use the safest evacuation site';
+  evacItem.setAttribute('aria-checked', String(toEvacSite));
+  ownItem.textContent = ownPin ? 'Move my destination on the map' : 'Choose my own destination instead';
 }
 
 function buildPinPopupContent(role) {
@@ -2908,7 +2928,7 @@ function syncEarthquakeRouteUi() {
   if (pinFieldHelp) {
     pinFieldHelp.textContent = isEarthquakeMode()
       ? 'Choose on Map, then tap the spot. Drag a pin to adjust it.'
-      : 'Choose on Map, then tap the spot, or show the evacuation sites to go to the one with the safest route. Drag a pin to adjust it.';
+      : 'Routes go to the evacuation site with the safest route. To go somewhere else, click the destination, then Choose my own destination. Drag a pin to adjust it.';
   }
 
   if (earthquakeRoutePanel) {
@@ -3495,7 +3515,12 @@ async function selectBarangay(name) {
   clearBarangaySelections();
   // The visitor may be outside the new barangay: locate again there.
   clearVisitorLocation();
-  if (selectedHazard === 'Flood') floodHazardOverlayMode = 'all';
+  if (selectedHazard === 'Flood') {
+    floodHazardOverlayMode = 'all';
+    // The new barangay's evacuation sites are the destination, as on
+    // choosing Flood (selectHazard).
+    floodToEvacSite = true;
+  }
 
   await loadBarangayMapOnly(name);
   revealMapWhenBaseReady();
@@ -3503,6 +3528,7 @@ async function selectBarangay(name) {
   showPinningLegend();
   advanceStep(selectedHazard ? 3 : 2);
   if (selectedHazard) setPinPlacementRole(getNextUnpinnedRole());
+  if (selectedHazard === 'Flood') await useFloodEvacSitesByDefault();
   syncRouteInfoBox();
 }
 
@@ -3594,7 +3620,7 @@ function buildRouteInfoHtml() {
   const pinPrompt = (role, target) => pinPlacementRole === role
     ? `Tap the map to pin ${target}.`
     : role === 'end'
-    ? `Choose ${target}: click <strong>${PIN_ROLE_COPY.end.empty}</strong>, then <strong>Show Evacuation Sites</strong> or a spot on the map.`
+    ? `Choose ${target}: click <strong>${PIN_ROLE_COPY.end.empty}</strong>, then the evacuation site or a spot of your own.`
     : `Pin ${target}: click <strong>${PIN_ROLE_COPY[role].empty}</strong>, then <strong>Choose on Map</strong>.`;
 
   if (!selectedHazard) {
@@ -3620,6 +3646,9 @@ function buildRouteInfoHtml() {
     return `The system will compare routes from <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the evacuation sites that can still be reached.<br>Click <strong>Run Earthquake Simulation</strong> to view the results.`;
   }
 
+  if (pinPlacementRole === 'end' && !endPin) {
+    return `${pinPrompt('end', 'your <strong>destination</strong>')} To keep the evacuation site instead, click the destination again.`;
+  }
   if (startPin && endPin) {
     // The box is justified, and the wide monospace names leave "Click" only a
     // word or two of company on its line, so the spaces there stretch wide.
@@ -3649,7 +3678,9 @@ async function selectHazard(name, el) {
     .filter(role => role === 'start' || name === 'Flood')
     .map(role => [role, getReadyPin(role)])
     .filter(([, pin]) => pin);
-  const carriesEvacSites = name === 'Flood' && isFloodToEvacSite();
+  // Flood routes go to the evacuation sites unless a destination of the
+  // visitor's own carries over.
+  const toEvacSites = name === 'Flood' && !carriedPins.some(([role]) => role === 'end');
 
   selectedHazard = name;
   // The panel's colours change with the hazard: cross-fade them rather
@@ -3675,6 +3706,9 @@ async function selectHazard(name, el) {
   const keepBoundary = shownBarangayMap === selectedBarangay && mapLayers.boundaries.length > 0;
   clearBarangaySelections({ keepBoundary });
   floodHazardOverlayMode = name === 'Flood' ? 'all' : 'none';
+  // Before any pin is placed, so a start pin never arms the map for an end
+  // pin: a stray tap would pin a destination nobody chose.
+  if (toEvacSites) floodToEvacSite = true;
   if (!keepBoundary) await loadBarangayMapOnly(selectedBarangay);
   revealMapWhenBaseReady();
   // Flood areas and the severity filter only show with a result, so for
@@ -3689,7 +3723,23 @@ async function selectHazard(name, el) {
   } else {
     setPinPlacementRole(getNextUnpinnedRole());
   }
-  if (carriesEvacSites) await showFloodEvacuationSites({ fit: false });
+  if (toEvacSites) await useFloodEvacSitesByDefault();
+}
+
+// Flood's default destination: the barangay's evacuation sites, on the map
+// at once, the run picking the one with the safest route (floodToEvacSite).
+// A destination of one's own is the menu's second choice. If the sites
+// can't load, the visitor pins one instead.
+async function useFloodEvacSitesByDefault() {
+  if (selectedHazard !== 'Flood' || routePins.end) return;
+  floodToEvacSite = true;
+  await showFloodEvacuationSites({ fit: false });
+  if (selectedHazard === 'Flood' && !floodEvacSites.length && !routePins.end) {
+    floodToEvacSite = false;
+    setFloodLegendContent();
+    if (!pinPlacementRole) setPinPlacementRole(getNextUnpinnedRole());
+    onRoutePinsChange();
+  }
 }
 
 function getCompletedSteps() {
@@ -4243,8 +4293,21 @@ async function followSimulationJob(startJob, context) {
     const result = await waitForSimulationJob(job, syncLoaderWithJob);
     setLoaderStep('review', 76);
     // With the result if it fits; otherwise the job id stays, and the
-    // backend keeps the result for a while.
-    saveSimulationSession({ ...context.session, jobId: job.job_id, result });
+    // backend keeps the result for a while. Not the replay: a run restored
+    // after a reload goes straight to its results.
+    const { replay: replayData, ...storedResult } = result;
+    saveSimulationSession({ ...context.session, jobId: job.job_id, result: storedResult });
+    delete result.replay;
+
+    // The ant colony's search plays between the loader and the results; it
+    // is set up behind the loader, which then fades to it.
+    const replay = await prepareSimulationReplay(result, replayData, context);
+    if (replay) {
+      setLoaderStep('complete', 100);
+      await waitMs(LOADER_REPLAY_HANDOFF_MS);
+      hideLoader(0);
+      await replay.play();
+    }
 
     await showSimulationResult(result, context);
     // Only hide once the bar has eased up to 100, so it never jumps to results
@@ -4272,6 +4335,217 @@ async function followSimulationJob(startJob, context) {
     }
     syncRouteInfoBox();
   }
+}
+
+// ---- The ant colony replay (aco-replay.js) ----
+// A fresh run's search plays on the map between the loader and the results:
+// the ants spreading out, their trails growing, then Route 1 walked with the
+// camera following. A run restored after a reload goes straight to its
+// results, and so does every run under reduced motion.
+
+// The loader's bar eases up to 100 before it fades to the replay.
+const LOADER_REPLAY_HANDOFF_MS = 450;
+const REPLAY_RESIZE_SETTLE_MS = 220;
+
+// Where the replay's panel goes: the phone/tablet sheet, a card over the map
+// on a short screen (its panels cover the whole screen there), or the
+// results column on a desktop.
+function getReplayHost() {
+  if (window.mobileSim?.isActive()) return 'sheet';
+  return MOBILE_PANEL_QUERY.matches ? 'card' : 'column';
+}
+
+function mountReplayPanel(panel) {
+  const host = getReplayHost();
+  const shell = document.getElementById('appShell');
+  const content = document.getElementById('routeSafetyContent');
+  panel.classList.toggle('aco-replay--card', host === 'card');
+  shell?.classList.toggle('aco-replay-card', host === 'card');
+  if (host !== 'column' && content?.contains(panel)) {
+    content.hidden = true;
+    setRouteSafetyPanelVisible(false);
+  }
+  if (host === 'sheet') {
+    window.mobileSim.showReplay(panel);
+  } else {
+    window.mobileSim?.endReplay();
+    if (host === 'card') {
+      document.querySelector('.map-wrap')?.appendChild(panel);
+    } else if (content) {
+      content.replaceChildren(panel);
+      content.hidden = false;
+      setRouteSafetyPanelVisible(true);
+    }
+  }
+  return host;
+}
+
+// The map's fit padding (getMapFitPadding) plus the replay's card, which on
+// a short screen covers the map's left side.
+function getReplayFitPadding() {
+  const padding = getMapFitPadding();
+  const card = document.querySelector('.aco-replay--card');
+  const mapEl = document.getElementById('map');
+  if (card && mapEl && padding.paddingTopLeft && card.getClientRects().length) {
+    const cover = card.getBoundingClientRect().right - mapEl.getBoundingClientRect().left + 16;
+    padding.paddingTopLeft = [Math.max(padding.paddingTopLeft[0], cover), padding.paddingTopLeft[1]];
+  }
+  return padding;
+}
+
+// The hazards and sites the results will show, on the map for the replay.
+async function drawReplayMapContext(result, isEarthquakeRun, chosenSiteId) {
+  if (isEarthquakeRun) {
+    window.earthquakeUI?.renderHazardLayers({
+      map: gMap,
+      hazardLayers: result.hazard_layers,
+      activeView: result.active_view || 'overall',
+    });
+    window.earthquakeUI?.drawEvacuationSites({
+      map: gMap,
+      sites: Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites,
+      highlightedSiteId: chosenSiteId,
+    });
+    return;
+  }
+  const { vars } = getFloodOverlayConfig();
+  try {
+    const hazardLayers = await window.floodHazardUI?.loadHazardLayers({ scope: 'barangay_buffer', barangay: selectedBarangay, vars });
+    window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers, visibleVars: vars });
+  } catch (err) {
+    console.warn('Failed to load flood hazard overlay for the replay:', err);
+  }
+  if (result.to_evacuation_site) {
+    window.floodHazardUI?.drawEvacuationSites({
+      map: gMap,
+      sites: floodEvacSites.length ? floodEvacSites : result.evacuation_sites,
+      highlightedSiteId: chosenSiteId,
+    });
+  }
+}
+
+// The replay legend's pin rows, like the results legend's.
+function buildReplayLegendPins(result, isEarthquakeRun) {
+  const pinRow = (style, label) => `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span>${label}</span></div>`;
+  let destination = buildPinLegendRow('end');
+  if (isEarthquakeRun) {
+    destination = pinRow({ fill: '#22c55e', stroke: '#14532d' }, 'Chosen evacuation site')
+      + pinRow({ fill: '#f59e0b', stroke: '#9a3412' }, 'Open area');
+  } else if (result.to_evacuation_site && window.floodHazardUI?.evacMarkerStyles) {
+    const styles = window.floodHazardUI.evacMarkerStyles;
+    destination = pinRow(styles.chosen, 'Chosen evacuation site') + pinRow(styles.site, 'Evacuation site');
+  }
+  return buildPinLegendRow('start') + destination + buildBoundaryLegendRow();
+}
+
+// Sets the replay up behind the loader -- its panel, the map's hazards and
+// sites, the view -- and returns { play() }, or null when this result has no
+// replay to show.
+async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) {
+  if (!replayData || !window.acoReplay || !gMap || prefersReducedMotion()) return null;
+  if (!Array.isArray(replayData.rounds) || !replayData.rounds.length) return null;
+  const view = isEarthquakeRun ? result.views?.[result.active_view || 'overall'] : result;
+  const routes = decorateRoutesForDisplay(normalizeRoutes(view?.routes || []));
+  const route1 = routes.find(route => Number(route.display_route_no) === 1) || routes[0];
+  if (!route1) return null;
+
+  let controller;
+  try {
+    // The previous run's routes and result panels make way.
+    clearRenderedRoutesOnly();
+    simData = null;
+    syncFloodFilterControl();
+    syncEarthquakeViewSelector();
+    setResultsSidebarActionsVisible(false);
+    syncMobilePanelBarLabel();
+
+    const tier = getRouteSafetyTier(route1);
+    const color = getBestRouteColor(route1);
+    const aco = view?.aco || result.aco || null;
+    const chosenSiteId = isEarthquakeRun
+      ? view?.summary?.selected_evacuation_site?.id ?? null
+      : result.selected_evacuation_site?.id ?? null;
+    const endName = isEarthquakeRun || result.to_evacuation_site
+      ? route1.destination_name || result.end
+      : result.end || getReadyPin('end')?.label || PIN_ROLE_COPY.end.fallbackLabel;
+
+    await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+    controller = window.acoReplay.create({
+      map: gMap,
+      replay: replayData,
+      mode: isEarthquakeRun ? 'earthquake' : 'flood',
+      route1: {
+        points: getRoutePoints(route1),
+        number: route1.display_route_no ?? 1,
+        name: getTopRouteTitle(route1),
+        distance: Number(route1.distance) || 0,
+        durationText: route1.display_duration || formatRouteWalkingDuration(route1),
+        tier,
+        color,
+        edgeColor: getRouteEdgeColor(color),
+        // A flood route 1 that is not safe crosses water over 1.5 m deep,
+        // which the results say not to walk (getNoSafeRouteAction); after
+        // an earthquake the route is still walked, with care.
+        walk: isEarthquakeRun || tier !== 'unsafe',
+        wading: routeHasWadingTime(route1),
+      },
+      startName: result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel,
+      endName,
+      antsTotal: Number(aco?.ants_sent_all_sites ?? aco?.ants_sent) || 0,
+      legendBody: document.getElementById('mapLegendBody'),
+      legendExtra: buildReplayLegendPins(result, isEarthquakeRun),
+      getPadding: getReplayFitPadding,
+      onPanelChange: () => window.mobileSim?.scheduleSync(),
+      onWalkChange: walking => document.getElementById('appShell')?.classList.toggle('aco-replay-walking', walking),
+    });
+
+    const shell = document.getElementById('appShell');
+    const layoutBefore = shell?.className;
+    shell?.classList.add('aco-replaying');
+    mountReplayPanel(controller.panel);
+    applySetupSidebarState(true);
+    setMapLegendVisible(true);
+    // The panels finish sliding first, and initMap's resize handling (which
+    // settles 150 ms after the map's last size change) with them, so the
+    // view is fitted once, to the map's final size.
+    if (shell && shell.className !== layoutBefore) await waitMs(PANEL_SLIDE_MS + REPLAY_RESIZE_SETTLE_MS);
+    gMap.invalidateSize({ pan: false });
+    gMap.fitBounds(controller.getSearchBounds(), mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, animate: false }));
+  } catch (err) {
+    console.error('Could not set up the replay:', err);
+    endSimulationReplay(controller);
+    return null;
+  }
+
+  return {
+    async play() {
+      let host = getReplayHost();
+      // Turning a phone or resizing the window mid-replay moves the panel
+      // to the new layout's place for it.
+      const onResize = () => {
+        if (getReplayHost() === host) return;
+        host = mountReplayPanel(controller.panel);
+        controller.resize();
+      };
+      window.addEventListener('resize', onResize);
+      try {
+        await controller.start();
+      } catch (err) {
+        console.error('The replay stopped:', err);
+        controller.skip();
+      } finally {
+        window.removeEventListener('resize', onResize);
+        endSimulationReplay(controller);
+      }
+    },
+  };
+}
+
+function endSimulationReplay(controller) {
+  controller?.skip();
+  controller?.panel.remove();
+  window.mobileSim?.endReplay();
+  document.getElementById('appShell')?.classList.remove('aco-replaying', 'aco-replay-card', 'aco-replay-walking');
 }
 
 // Puts a finished run's result on the map and in the panels.
@@ -4338,6 +4612,12 @@ async function restoreSimulationSession(session) {
     const pin = session.pins?.[role];
     routePins[role] = pin ? { ...pin, status: 'ready' } : null;
   });
+  // Flood starts at the evacuation sites (selectHazard); a run to a
+  // destination of the visitor's own goes back to it.
+  if (routePins.end) {
+    floodToEvacSite = false;
+    setFloodLegendContent();
+  }
   setPinPlacementRole(getNextUnpinnedRole());
   onRoutePinsChange();
   if (session.toEvacuationSite) await showFloodEvacuationSites({ fit: false });
@@ -5431,7 +5711,7 @@ document.addEventListener('click', event => {
 document.querySelectorAll('.pin-input-menu').forEach(menu => {
   menu.addEventListener('keydown', event => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    const items = [...menu.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+    const items = [...menu.querySelectorAll('[role^="menuitem"]:not(:disabled)')];
     if (!items.length) return;
     event.preventDefault();
     const down = event.key === 'ArrowDown';

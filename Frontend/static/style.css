@@ -637,6 +637,25 @@ body.dark .workflow-card.active {
   color: var(--accent2);
 }
 
+/* The destination is the evacuation sites (flood's default): a house, in
+   the blue of their "EVAC SITE" pins. */
+.pin-input-icon-evac,
+.pin-input-row-end.is-evac .pin-input-icon-pin {
+  display: none;
+}
+
+.pin-input-row-end.is-evac .pin-input-icon-evac {
+  display: block;
+}
+
+.pin-input-row-end.is-evac .pin-input-icon {
+  color: #2563eb;
+}
+
+body.dark .pin-input-row-end.is-evac .pin-input-icon {
+  color: #60a5fa;
+}
+
 /* Dotted connector from the start icon down to the destination icon. */
 .pin-inputs:not(.is-single) .pin-input-row-start .pin-input-icon::after {
   content: '';
@@ -772,8 +791,8 @@ body.dark .pin-input-menu {
   outline: none;
 }
 
-/* The destination menu's "Show Evacuation Sites": the earthquake panel's
-   button, across the menu above "Or choose where you want to go". */
+/* The destination menu's evacuation-site choice: the earthquake panel's
+   button, across the menu above the choice of a spot of one's own. */
 .pin-input-menu-evac {
   display: block;
   width: 100%;
@@ -3614,8 +3633,10 @@ body.dark .leaflet-popup-close-button {
 
 .mslot--end .mslot-badge { background: #9333ea; }
 .mslot--evac .mslot-badge { background: #d97706; }
-/* Flood evacuation sites are blue on the map (flood.js). */
-.mslot--evac.mslot--flood .mslot-badge { background: #2563eb; }
+/* Flood evacuation sites are blue on the map (flood.js), also as the End
+   slot's default (mobile-sim.js syncPinSlot). */
+.mslot--evac.mslot--flood .mslot-badge,
+.mslot--end.mslot--to-evac .mslot-badge { background: #2563eb; }
 
 .mslot-badge svg {
   width: 13px;
@@ -4512,6 +4533,358 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   }
 }
 
+/* ---------- ANT COLONY REPLAY ----------
+   aco-replay.js's panel while a run's search plays: in the results column
+   (desktop), the phone sheet (mobile-sim.js), or a card over the map on a
+   short screen (.aco-replay--card). The cards are the results panel's own
+   .safety-result-card. */
+.aco-replay [hidden] {
+  display: none;
+}
+
+.aco-replay-label {
+  margin-top: 2px;
+}
+
+.aco-replay-chip {
+  margin: 0 0 10px;
+}
+
+.aco-steps {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: .8rem;
+}
+
+.aco-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 2px;
+}
+
+.aco-step + .aco-step {
+  border-top: 1px dashed var(--border);
+}
+
+.aco-step-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--border2);
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+.aco-step-icon svg {
+  display: none;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.aco-step-icon i {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.aco-step.is-done .aco-step-icon {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green-ink);
+}
+
+.aco-step.is-done .aco-step-icon svg {
+  display: block;
+}
+
+.aco-step.is-current .aco-step-icon {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.aco-step.is-current .aco-step-icon i {
+  display: block;
+  animation: acoStepPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes acoStepPulse {
+  50% { opacity: .35; }
+}
+
+.aco-step-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 3px;
+}
+
+.aco-step-title {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.aco-step.is-current .aco-step-title,
+.aco-step.is-done .aco-step-title {
+  color: var(--ink-strong);
+}
+
+.aco-step-detail {
+  display: none;
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.aco-step.is-current .aco-step-detail {
+  display: block;
+}
+
+.aco-card-text {
+  min-width: 0;
+}
+
+.aco-card-text .safety-card-value,
+.aco-card-text .safety-card-sub {
+  font-variant-numeric: tabular-nums;
+}
+
+.aco-card-text .safety-card-sub:empty {
+  display: none;
+}
+
+.aco-replay-meta {
+  margin: 10px 2px 0;
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.45;
+}
+
+.aco-replay-skip {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1.5px solid var(--border2);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-strong);
+  font: 700 .8rem var(--font-body);
+  cursor: pointer;
+  transition: border-color .16s ease, color .16s ease, scale .12s ease;
+}
+
+.aco-replay-skip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The legend while it plays (aco-replay.js renderLegend). */
+.aco-legend-ant {
+  flex: none;
+  width: 22px;
+  height: 13px;
+  fill: var(--map-ui-text);
+  stroke: var(--map-ui-text);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.aco-legend-walker {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0 2px;
+}
+
+.aco-legend-trail,
+.aco-legend-route {
+  flex: none;
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+  background: #2563eb;
+  opacity: .75;
+}
+
+.aco-legend-route {
+  height: 4px;
+  opacity: 1;
+}
+
+.aco-legend-stuck {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin: 0 5px 0 6px;
+  border: 2px solid #475569;
+  border-radius: 50%;
+}
+
+body.dark .aco-legend-stuck {
+  border-color: #94a3b8;
+}
+
+.aco-legend .legend-row span {
+  font-size: .78rem;
+}
+
+.aco-legend-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 9px;
+  margin-top: 5px;
+  color: var(--map-ui-muted);
+  font-size: .74rem;
+}
+
+.aco-legend-levels i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+/* Short screens: a card down the map's left side; the bottom bar would only
+   open a full-screen panel over the replay, so it waits. */
+.aco-replay--card {
+  position: absolute;
+  z-index: 8;
+  top: 10px;
+  bottom: 10px;
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  width: min(290px, 44%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--map-ui-shadow);
+}
+
+.aco-replay--card .aco-replay-chip,
+.aco-replay--card .aco-step:not(.is-current) {
+  display: none;
+}
+
+.aco-replay--card .aco-step {
+  border-top: 0;
+}
+
+.aco-replay--card .aco-replay-skip {
+  position: sticky;
+  bottom: -10px;
+  box-shadow: 0 -10px 12px -2px var(--surface);
+}
+
+#appShell.aco-replaying .mobile-panel-bar,
+#appShell.aco-replay-card .sidebar-reopen-tab {
+  display: none;
+}
+
+/* The legend moves to the right of the card and keeps to the ants. */
+#appShell.aco-replay-card .map-legend {
+  left: auto;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+#appShell.aco-replay-card .map-legend .legend-head,
+#appShell.aco-replay-card .map-legend .aco-legend-pins {
+  display: none;
+}
+
+/* The phone sheet: only the current step (the top bar already says
+   "Simulation"), and the walk's three cards side by side as numbers only,
+   so the sheet leaves the map in view. Its legend keeps to the ants. */
+.msheet .aco-replay-label,
+.msheet .aco-replay-chip,
+.msheet .aco-step:not(.is-current),
+.msim-maplegend .aco-legend-pins {
+  display: none;
+}
+
+.msheet .aco-step {
+  border-top: 0;
+}
+
+.msheet .aco-steps {
+  margin-top: 2px;
+}
+
+.msheet .aco-replay-skip {
+  min-height: 44px;
+}
+
+@media (max-height: 700px) {
+  .msheet .aco-replay-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .msheet .aco-cards--walk {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .msheet .aco-cards--walk .safety-result-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 8px;
+  }
+
+  .msheet .aco-cards--walk .safety-icon-box,
+  .msheet .aco-cards--walk .safety-card-sub {
+    display: none;
+  }
+
+  /* While the ant walks, the legend would sit on the route it follows. */
+  #appShell.aco-replay-walking .msim-maplegend {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .aco-replay-skip {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  #appShell.aco-replay-walking .map-legend {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aco-step.is-current .aco-step-icon i {
+    animation: none;
+  }
+}
+
 /* ---------- PRESS FEEDBACK ----------
    Buttons sink a touch while pressed, so a tap feels received before the
    app answers (a run or a pin check can take a moment). `scale` composes
@@ -4521,7 +4894,7 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   :is(.run-btn, .evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
       .reset-btn, .safety-download-btn, .safety-all-routes-btn, .route-modal-btn,
       .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
-      .safety-card-action, .msummary-rescue):active:not(:disabled) {
+      .safety-card-action, .msummary-rescue, .aco-replay-skip):active:not(:disabled) {
     scale: .97;
   }
 }
@@ -4546,7 +4919,9 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 .mverdict-sub,
 .msummary-far,
 .msheet-source,
-.maccordion p {
+.maccordion p,
+.aco-step-detail,
+.aco-replay-meta {
   text-align: justify;
   /* Balances the last lines, so a paragraph never ends on one stray word. */
   text-wrap: pretty;

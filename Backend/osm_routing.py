@@ -94,6 +94,10 @@ BACKUP_ROUTE_EDGE_PENALTY = 1.8
 # compares each site's main colony on its few safest routes to pick the site;
 # only that site gets alternative colonies.
 SITE_PICK_ROUTES_PER_SITE = 5
+# The results open with a replay of the main colony's search (aco-replay.js):
+# every ant's walk in the first rounds -- while the best route still improves,
+# at most this many rounds -- then only each road's trail strength per round.
+REPLAY_WALKED_ROUNDS = 6
 
 NUM_ANTS = 40
 NUM_ITERATIONS = 30
@@ -2050,7 +2054,11 @@ def construct_ant_route(
     rng,
     edge_route_usage=None,
     edge_penalty=None,
+    walk=None,
 ):
+    """One ant's walk from start_node: its route, or None when it gets stuck
+    or runs out of steps. walk, a list, receives every node the ant steps on,
+    arrived or not (the results' replay draws the ants that got stuck too)."""
     if start_node == end_node:
         return [start_node]
 
@@ -2060,6 +2068,8 @@ def construct_ant_route(
     current_node = start_node
     route = [current_node]
     visit_counts = {current_node: 1}
+    if walk is not None:
+        walk.append(current_node)
 
     for _ in range(max_steps):
         if current_node == end_node:
@@ -2098,6 +2108,8 @@ def construct_ant_route(
 
         next_node = rng.choices(choices, weights=weights, k=1)[0]
         route.append(next_node)
+        if walk is not None:
+            walk.append(next_node)
         visit_counts[next_node] = visit_counts.get(next_node, 0) + 1
         current_node = next_node
 
@@ -2119,13 +2131,14 @@ def _deposit_pheromone(edge_pheromone, route, weight=1.0):
         )
 
 
-def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalty=None, report_progress=True):
+def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalty=None, report_progress=True, record=None):
     """One ant colony from colony["start"] to colony["end"]: rounds of
     num_ants ants, each round's best routes reinforced (ranked safety first,
     like the results) plus the best so far (elitist), until the best stops
     improving. Returns the distinct routes its ants completed (by path), its
     pheromone, its best route and its round count; adds its ant counts to
-    colony["stats"]."""
+    colony["stats"]. record (start_aco) collects each round for the results'
+    replay; it never changes what the ants do."""
     G = colony["G"]
     start_node, end_node = colony["start"], colony["end"]
     edge_pheromone = initialize_edge_pheromone(G)
@@ -2138,8 +2151,11 @@ def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalt
 
     for _ in range(max_iterations):
         completed = {}
+        walks = [] if record is not None else None
+        sent_before, arrived_before = stats["ants_sent"], stats["ants_arrived"]
         for _ in range(num_ants):
             stats["ants_sent"] += 1
+            walk = [] if walks is not None else None
             ant_route = construct_ant_route(
                 G,
                 start_node,
@@ -2150,12 +2166,15 @@ def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalt
                 colony["rng"],
                 edge_route_usage=edge_route_usage,
                 edge_penalty=edge_penalty,
+                walk=walk,
             )
-            if not ant_route or ant_route[-1] != end_node:
-                continue
-
-            ant_route = simplify_route_path(ant_route)
-            if len(ant_route) < 2 or ant_route[0] != start_node or ant_route[-1] != end_node:
+            arrived = False
+            if ant_route and ant_route[-1] == end_node:
+                ant_route = simplify_route_path(ant_route)
+                arrived = len(ant_route) >= 2 and ant_route[0] == start_node and ant_route[-1] == end_node
+            if walks is not None and len(walk) > 1:
+                walks.append((walk, arrived))
+            if not arrived:
                 continue
 
             stats["ants_arrived"] += 1
@@ -2174,6 +2193,8 @@ def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalt
             bump_progress()
         _evaporate_pheromone(edge_pheromone)
 
+        best_before = best
+        round_best = []
         if completed:
             round_best = sorted(completed.values(), key=safety_sort_key)[:TOP_ACO_REINFORCERS]
             for route in round_best:
@@ -2187,6 +2208,19 @@ def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalt
         else:
             stagnant_iterations += 1
 
+        if record is not None:
+            _record_colony_round(
+                record,
+                edge_pheromone,
+                iterations,
+                walks,
+                round_best + ([best] if best is not None else []),
+                best,
+                improved=best is not best_before,
+                sent=stats["ants_sent"] - sent_before,
+                arrived=stats["ants_arrived"] - arrived_before,
+            )
+
         if iterations >= min_iterations and stagnant_iterations >= ACO_STAGNATION_LIMIT:
             break
 
@@ -2195,10 +2229,36 @@ def _run_colony(colony, *, num_ants, max_iterations, min_iterations, edge_penalt
     return found, edge_pheromone, best, iterations
 
 
-def start_aco(G, start_node, end_node, rng):
+def _record_colony_round(record, edge_pheromone, round_no, walks, deposited, best, *, improved, sent, arrived):
+    """One round for the replay: the ants' walks, the trail on every road the
+    colony has reinforced so far, and the best route so far."""
+    trail_edges = record["trail_edges"]
+    for route in deposited:
+        trail_edges.update(route_edges(route["path"]))
+    # Every road starts at 1.0 and evaporates each round like the rest; what
+    # lies above that level is what the ants laid.
+    untouched = max((1 - EVAPORATION) ** round_no, EDGE_PHEROMONE_MIN)
+    record["rounds"].append({
+        "sent": sent,
+        "arrived": arrived,
+        "walks": walks,
+        "untouched": untouched,
+        "trail": {
+            edge_key: edge_pheromone[edge_key] - untouched
+            for edge_key in trail_edges
+            if edge_pheromone.get(edge_key, 0.0) - untouched > untouched * 1e-3
+        },
+        "best": best,
+        "improved": improved,
+    })
+
+
+def start_aco(G, start_node, end_node, rng, record=False):
     """Runs the main colony (NUM_ANTS ants for up to NUM_ITERATIONS rounds,
     one progress step per round) and returns its state for
-    add_alternative_routes() and finish_candidate_pool()."""
+    add_alternative_routes() and finish_candidate_pool(). record: keep each
+    round for the results' replay (colony["replay_record"],
+    build_colony_replay)."""
     colony = {
         "G": G,
         "start": start_node,
@@ -2232,12 +2292,19 @@ def start_aco(G, start_node, end_node, rng):
     debug_print(f"[ACO] Reachable nodes to destination: {len(colony['goal_distance_map'])}")
     debug_print(f"[ACO] Ant step limit: {colony['step_limit']}")
 
+    replay_record = {"rounds": [], "trail_edges": set()} if record else None
     found, edge_pheromone, best, rounds = _run_colony(
         colony,
         num_ants=NUM_ANTS,
         max_iterations=NUM_ITERATIONS,
         min_iterations=ACO_MIN_ITERATIONS,
+        record=replay_record,
     )
+    if replay_record is not None:
+        # This colony's own routes: the alternative colonies add theirs to
+        # colony["routes"] later.
+        replay_record["found"] = set(found)
+        colony["replay_record"] = replay_record
     colony["routes"] = found
     colony["pheromone"] = edge_pheromone
     colony["best"] = best
@@ -2362,18 +2429,138 @@ def finish_candidate_pool(colony):
     return candidate_routes
 
 
-def run_aco(G, start_node, end_node, rng=None, alternatives=FINAL_ROUTES_TO_SHOW - 1):
+def run_aco(G, start_node, end_node, rng=None, alternatives=FINAL_ROUTES_TO_SHOW - 1, record=False):
     """The whole search for one start/end pair: the main colony, then
     `alternatives` alternative colonies, then the candidate pool. Takes
     NUM_ITERATIONS + alternatives progress steps. Returns (candidate routes,
-    the main colony's pheromone, stats)."""
-    colony = start_aco(G, start_node, end_node, rng or random.Random())
+    the main colony's pheromone, stats, the colony -- for
+    build_colony_replay when record)."""
+    colony = start_aco(G, start_node, end_node, rng or random.Random(), record=record)
     if start_node == end_node:
         bump_progress(alternatives)
-        return [evaluate_route(G, [start_node], 1, include_coordinates=False)], colony["pheromone"], colony["stats"]
+        return [evaluate_route(G, [start_node], 1, include_coordinates=False)], colony["pheromone"], colony["stats"], colony
 
     add_alternative_routes(colony, alternatives)
-    return finish_candidate_pool(colony), colony["pheromone"], colony["stats"]
+    return finish_candidate_pool(colony), colony["pheromone"], colony["stats"], colony
+
+
+def _replay_route_summary(route):
+    """What the replay's "Best route so far" card says about a route."""
+    flood_vars = route.get("flood_vars_encountered") or []
+    return {
+        "distance": round(float(route["distance"]), 1),
+        "max_hazard": route.get("max_hazard"),
+        "flood_var": max(int(value) for value in flood_vars) if flood_vars else 0,
+        "unsafe": route.get("unsafe_distance", 0) > 0,
+    }
+
+
+def flood_replay_span_levels(edge):
+    """A road's flood class (0 outside every flood zone), for the replay's
+    walk along Route 1."""
+    return [int(edge.get("flood_var") or 0)]
+
+
+def build_colony_replay(colony, route, span_levels, extra=None):
+    """The main colony's search, for the replay the results open with
+    (aco-replay.js), or None when it was not recorded or no ant arrived.
+
+    Roads are listed once each, as integer offsets in 1e-5 degrees (about
+    1 m) from `origin`, in the direction an ant first walked them; a walk or
+    trail names roads by number, negative when walked the other way. Each
+    round carries the pheromone the ants laid per road, over `untouched`
+    (the level of a road no ant reinforced), and its best route so far; the
+    first `walked_rounds` rounds also carry every ant's walk, led by 1 for an
+    ant that arrived and 0 for one that got stuck. route is the result's
+    Route 1: span_levels(edge) gives the levels the replay shows while
+    walking each of its roads (flood: the flood class; earthquake:
+    liquefaction and ground shaking), merged into [metres, *levels] spans.
+    extra joins the payload as is."""
+    record = colony.get("replay_record")
+    if not record or not record["rounds"] or colony.get("best") is None or not route:
+        return None
+
+    G = colony["G"]
+    rounds = record["rounds"]
+    last_improved = max((number for number, item in enumerate(rounds, start=1) if item["improved"]), default=1)
+    walked_rounds = min(REPLAY_WALKED_ROUNDS, last_improved)
+
+    edge_numbers = {}
+    edge_coords = []
+
+    def edge_number(u, v):
+        number = edge_numbers.get((u, v))
+        if number is not None:
+            return number
+        edge = get_best_edge(G, u, v)
+        coords = edge_geometry_to_coords(G, u, v, edge) if edge else []
+        if len(coords) < 2:
+            coords = [{"lat": float(G.nodes[node]["y"]), "lng": float(G.nodes[node]["x"])} for node in (u, v)]
+        edge_coords.append(coords)
+        edge_numbers[(u, v)] = len(edge_coords)
+        edge_numbers[(v, u)] = -len(edge_coords)
+        return len(edge_coords)
+
+    replay_rounds = []
+    for number, item in enumerate(rounds, start=1):
+        trail = {}
+        for (u, v), level in item["trail"].items():
+            road = abs(edge_number(u, v))
+            trail[road] = max(trail.get(road, 0.0), level)
+        entry = {
+            "sent": item["sent"],
+            "arrived": item["arrived"],
+            "untouched": float(f"{item['untouched']:.4g}"),
+            "trail": [[road, float(f"{level:.3g}")] for road, level in sorted(trail.items())],
+            "best": _replay_route_summary(item["best"]) if item["best"] is not None else None,
+        }
+        if number <= walked_rounds:
+            entry["walks"] = [
+                [1 if arrived else 0, *(edge_number(u, v) for u, v in zip(walk[:-1], walk[1:]))]
+                for walk, arrived in item["walks"]
+            ]
+        replay_rounds.append(entry)
+
+    resolved_edges = hydrate_route_edge_records(G, route.get("path_edges")) or resolve_route_edge_records(G, route.get("path", []))
+    spans = []
+    for _, _, _, edge in resolved_edges:
+        length = float(edge.get("length", 0))
+        levels = span_levels(edge)
+        if spans and spans[-1][1:] == levels:
+            spans[-1][0] += length
+        else:
+            spans.append([length, *levels])
+
+    path = tuple(route.get("path", []))
+    found_by = route.get("found_by") or "aco"
+    source = "main" if path in record["found"] else found_by if found_by != "aco" else "alternative"
+
+    lats = [point["lat"] for coords in edge_coords for point in coords]
+    lngs = [point["lng"] for coords in edge_coords for point in coords]
+    origin = [math.floor(min(lats) * 1e5), math.floor(min(lngs) * 1e5)]
+    node_point = lambda node: [round(float(G.nodes[node]["y"]), 6), round(float(G.nodes[node]["x"]), 6)]
+    return {
+        "origin": origin,
+        "edges": [
+            [offset for point in coords for offset in (
+                round(point["lat"] * 1e5) - origin[0],
+                round(point["lng"] * 1e5) - origin[1],
+            )]
+            for coords in edge_coords
+        ],
+        "rounds": replay_rounds,
+        "walked_rounds": walked_rounds,
+        "ants": NUM_ANTS,
+        "max_rounds": NUM_ITERATIONS,
+        "stagnation": ACO_STAGNATION_LIMIT,
+        "start": node_point(colony["start"]),
+        "end": node_point(colony["end"]),
+        "route1": {
+            "source": source,
+            "spans": [[round(span[0], 1), *span[1:]] for span in spans],
+        },
+        **(extra or {}),
+    }
 
 
 def finalize_routes(G, candidate_routes, edge_pheromone):
@@ -2486,7 +2673,7 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
         "flood", normalize_barangay_name(scope_name), hazard_type,
         float(start_lat), float(start_lng), float(end_lat), float(end_lng),
     ))
-    candidate_routes, edge_pheromone, aco_stats = run_aco(G, start_node, end_node, rng, alternatives)
+    candidate_routes, edge_pheromone, aco_stats, colony = run_aco(G, start_node, end_node, rng, alternatives, record=True)
     now = time.perf_counter()
     debug_print(f"[OSM] Phase 3/4 complete in {now - phase_started:.2f}s")
 
@@ -2526,7 +2713,8 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
         "safe_threshold": HAZARD_THRESHOLD,
         "total_candidate_routes": len(candidate_routes),
         "aco": aco_stats,
-        "routes": final_routes
+        "routes": final_routes,
+        "replay": build_colony_replay(colony, final_routes[0] if final_routes else None, flood_replay_span_levels),
     }
 
 
@@ -2623,7 +2811,7 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
             "flood-evacuation", canonical_name, hazard_type,
             float(start_lat), float(start_lng), site["id"],
         ))
-        colony = start_aco(G, start_node, site_nodes[site["id"]], rng)
+        colony = start_aco(G, start_node, site_nodes[site["id"]], rng, record=True)
         ants_sent += colony["stats"]["ants_sent"]
         ants_arrived += colony["stats"]["ants_arrived"]
         if not colony["routes"] and colony["baseline"] is None:
@@ -2697,4 +2885,11 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         "total_candidate_routes": len(candidate_routes),
         "aco": aco_stats,
         "routes": final_routes,
+        # The replay follows the chosen site's colony; the others are counted.
+        "replay": build_colony_replay(
+            colony,
+            final_routes[0] if final_routes else None,
+            flood_replay_span_levels,
+            {"sites_searched": len(reachable_sites)},
+        ),
     }

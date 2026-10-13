@@ -1,3 +1,4 @@
+import gzip
 import hashlib
 import json
 import os
@@ -87,6 +88,30 @@ def _version_static_urls(endpoint, values):
 def _cache_versioned_static(response):
     if request.endpoint == "static" and request.args.get("v") and response.status_code in (200, 304):
         response.headers["Cache-Control"] = f"public, max-age={STATIC_CACHE_SECONDS}, immutable"
+    return response
+
+# A finished run's JSON carries the replay's ant walks (a few hundred kB for
+# a long route); gzipped it is about a fifth of that, which matters on phone
+# data. Only these endpoints: the rest are small, static or ETag-cached.
+GZIP_ENDPOINTS = {"simulation_job", "run_simulation", "run_earthquake"}
+GZIP_MIN_BYTES = 16 * 1024
+
+@app.after_request
+def _gzip_simulation_results(response):
+    if (
+        request.endpoint not in GZIP_ENDPOINTS
+        or response.status_code != 200
+        or response.direct_passthrough
+        or "Content-Encoding" in response.headers
+        or "gzip" not in request.headers.get("Accept-Encoding", "").lower()
+    ):
+        return response
+    data = response.get_data()
+    if len(data) < GZIP_MIN_BYTES:
+        return response
+    response.set_data(gzip.compress(data, compresslevel=5))
+    response.headers["Content-Encoding"] = "gzip"
+    response.vary.add("Accept-Encoding")
     return response
 
 @app.context_processor
@@ -792,12 +817,7 @@ def _stop_old_dev_servers(port):
         print(f"[dev] stopped the old AGNAS server on port {port} (PID {pid})")
 
 if __name__ == "__main__":
-    # Local dev only (gunicorn never runs this block): always revalidate static
-    # files instead of caching them, so edits to script.js/style.css show up on
-    # a plain reload instead of silently running stale JS/CSS from an old tab.
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
-    # Simulation logs show pins; fine on a developer's own machine, never on
-    # the server (osm_routing.DEBUG).
     osm_routing.DEBUG = True
     _stop_old_dev_servers(5000)
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
