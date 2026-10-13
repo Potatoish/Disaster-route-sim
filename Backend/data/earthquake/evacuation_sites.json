@@ -8,6 +8,13 @@
       "address": "Urbano Velasco Ave., Pinagbuhatan, Pasig City"
     },
     {
+      "id": "near-greenwood-ave",
+      "name": "Near GreenWood Ave.",
+      "lat": 14.561501,
+      "lng": 121.095986,
+      "address": "Near GreenWood Ave., Pinagbuhatan, Pasig City"
+    },
+    {
       "id": "sandoval-ave",
       "name": "Sandoval Ave.",
       "lat": 14.55033,
@@ -22,18 +29,11 @@
       "address": "Near Pasig City Jail, Pinagbuhatan, Pasig City"
     },
     {
-      "id": "ilugin-open-basketball-court",
-      "name": "Ilugin Open Basketball Court",
-      "lat": 14.552876,
-      "lng": 121.098832,
-      "address": "Ilugin Open Basketball Court, Pinagbuhatan, Pasig City"
-    },
-    {
-      "id": "near-greenwood-ave",
-      "name": "Near GreenWood Ave.",
-      "lat": 14.561501,
-      "lng": 121.095986,
-      "address": "Near GreenWood Ave., Pinagbuhatan, Pasig City"
+      "id": "near-ilugin-elementary-school",
+      "name": "Near Ilugin Elementary School",
+      "lat": 14.552092,
+      "lng": 121.098781,
+      "address": "Near Ilugin Elementary School, Pinagbuhatan, Pasig City"
     },
     {
       "id": "santos-alipinin-basketball-court",
@@ -41,6 +41,13 @@
       "lat": 14.541974,
       "lng": 121.103773,
       "address": "Santos Alipinin Basketball Court, Pinagbuhatan, Pasig City"
+    },
+    {
+      "id": "pinagbuhatan-elementary-school",
+      "name": "Pinagbuhatan Elementary School",
+      "lat": 14.557699,
+      "lng": 121.091356,
+      "address": "Pinagbuhatan Elementary School, Pinagbuhatan, Pasig City"
     }
   ],
   "sta lucia": [
