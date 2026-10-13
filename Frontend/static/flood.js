@@ -146,6 +146,36 @@
     fadeInHazardPane(map);
   }
 
+  // The flood areas on a canvas (the PDF report's map), as on the map after
+  // a run with every level shown: the same fills, High drawn last, over the
+  // lower levels.
+  function paintHazardLayers(ctx, hazardLayers, project) {
+    const features = [...(hazardLayers?.features || [])].sort(
+      (a, b) => Number(a?.properties?.flood_var) - Number(b?.properties?.flood_var)
+    );
+    features.forEach(feature => {
+      const style = FLOOD_LAYER_STYLES[Number(feature?.properties?.flood_var)] || FLOOD_LAYER_STYLES[1];
+      if (traceGeoJsonGeometry(ctx, feature?.geometry, project) !== 'area') return;
+      ctx.globalAlpha = style.fillOpacity;
+      ctx.fillStyle = style.fillColor;
+      ctx.fill('evenodd');
+      ctx.globalAlpha = style.strokeOpacity;
+      ctx.strokeStyle = style.strokeColor;
+      ctx.lineWidth = style.strokeWeight;
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // The PDF legend's rows for those areas, in the map legend's names.
+  function getLegendItems() {
+    return [[1, 'Low flood'], [2, 'Medium flood'], [3, 'High flood']].map(([floodVar, label]) => ({
+      color: FLOOD_LAYER_STYLES[floodVar].fillColor,
+      edge: FLOOD_LAYER_STYLES[floodVar].strokeColor,
+      label,
+    }));
+  }
+
   async function loadEvacuationSites(barangay) {
     if (!barangay) {
       throw new Error('Barangay is required to load evacuation sites.');
@@ -231,6 +261,8 @@
   window.floodHazardUI = {
     loadHazardLayers,
     renderHazardLayers,
+    paintHazardLayers,
+    getLegendItems,
     loadEvacuationSites,
     drawEvacuationSites,
     clearEvacuationSites,

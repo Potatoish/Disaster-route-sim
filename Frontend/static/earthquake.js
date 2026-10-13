@@ -219,9 +219,7 @@
     }
 
     // "Overall" has no geometry of its own, so render both real layers together.
-    const layerKeys = activeView === 'overall'
-      ? Object.keys(LAYER_STYLES)
-      : (LAYER_STYLES[activeView] ? [activeView] : []);
+    const layerKeys = getViewLayerKeys(activeView);
 
     layerKeys.forEach(layerKey => {
       const collection = hazardLayers[layerKey];
@@ -236,6 +234,55 @@
       if (layer._isHazardLine) layer.bringToFront();
     });
     fadeInHazardPane(map);
+  }
+
+  // The layers renderHazardLayers shows for a lens ("Overall": both).
+  function getViewLayerKeys(activeView) {
+    return activeView === 'overall'
+      ? Object.keys(LAYER_STYLES)
+      : (LAYER_STYLES[activeView] ? [activeView] : []);
+  }
+
+  // The lens's layers on a canvas (the PDF report's map), with the map's
+  // fills and outlines; line features go over the fills, as on the map.
+  function paintHazardLayers(ctx, hazardLayers, activeView, project) {
+    const lines = [];
+    getViewLayerKeys(activeView).forEach(layerKey => {
+      const style = LAYER_STYLES[layerKey];
+      (hazardLayers?.[layerKey]?.features || []).forEach(feature => {
+        const kind = traceGeoJsonGeometry(ctx, feature?.geometry, project);
+        if (kind === 'line') {
+          lines.push({ feature, style, emphasis: getLayerEmphasis(layerKey, activeView, true) });
+          return;
+        }
+        if (kind !== 'area') return;
+        const emphasis = getLayerEmphasis(layerKey, activeView);
+        ctx.globalAlpha = emphasis.fillOpacity;
+        ctx.fillStyle = style.fillColor;
+        ctx.fill('evenodd');
+        ctx.globalAlpha = emphasis.strokeOpacity;
+        ctx.strokeStyle = style.strokeColor;
+        ctx.lineWidth = emphasis.strokeWeight;
+        ctx.stroke();
+      });
+    });
+    lines.forEach(({ feature, style, emphasis }) => {
+      traceGeoJsonGeometry(ctx, feature.geometry, project);
+      ctx.globalAlpha = emphasis.strokeOpacity;
+      ctx.strokeStyle = style.strokeColor;
+      ctx.lineWidth = emphasis.strokeWeight;
+      ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // The PDF legend's rows for the lens, in the map legend's names.
+  function getLegendItems(activeView = 'overall') {
+    return getViewLayerKeys(activeView).map(layerKey => ({
+      color: LAYER_STYLES[layerKey].fillColor,
+      edge: LAYER_STYLES[layerKey].strokeColor,
+      label: layerKey === 'ground_shaking' ? 'Ground shaking' : LAYER_STYLES[layerKey].label,
+    }));
   }
 
   // showRouteKeys / showHazardLayers: whether a result's routes and hazard
@@ -283,6 +330,8 @@
     loadEvacuationSites,
     drawEvacuationSites,
     renderHazardLayers,
+    paintHazardLayers,
+    getLegendItems,
     syncLegend,
     reset,
   };

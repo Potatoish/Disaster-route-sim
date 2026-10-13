@@ -5346,7 +5346,7 @@ function buildFlatFitProjection(minLat, maxLat, minLng, maxLng, width, height, p
 // they can be fetched (see the section header), else a flat schematic
 // background. Returns the canvas and whether a basemap was used (it then
 // needs an attribution line).
-async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = false } = {}) {
+async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = false, paintHazards = null } = {}) {
   const width = 900;
   const height = 540;
   const pad = 56;
@@ -5402,6 +5402,16 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
     project = buildFlatFitProjection(minLat, maxLat, minLng, maxLng, width, height, pad);
   }
 
+  // The disaster layer goes under the route, as on the live map.
+  if (paintHazards) {
+    try {
+      paintHazards(ctx, project);
+    } catch (err) {
+      console.warn('Report map: hazard layer left out —', err.message);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   const tracePath = () => {
     ctx.beginPath();
     points.forEach((p, i) => {
@@ -5436,8 +5446,9 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
 }
 
 // The legend strip under the report map: each mark on the map, in the
-// live legend's names. Items flow left to right and wrap. Returns the y
-// below the strip.
+// live legend's names. Items flow left to right and wrap; items sharing a
+// `group` (the hazard levels) start a new row together rather than split.
+// Returns the y below the strip.
 function drawReportMapLegend(doc, items, { x, y, width }) {
   const padX = 10;
   const rowHeight = 16;
@@ -5449,17 +5460,23 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
   const itemsLeft = x + padX + doc.getTextWidth(title) + 14;
   doc.setFont('helvetica', 'normal');
 
+  const sized = items.map(item => {
+    const swatch = item.kind === 'line' ? 22 : item.kind === 'area' ? 12 : 10;
+    return { ...item, swatch, itemWidth: swatch + swatchGap + doc.getTextWidth(item.label) };
+  });
   let row = 0;
   let cursor = itemsLeft;
-  const placed = items.map(item => {
-    const swatch = item.kind === 'line' ? 22 : 10;
-    const itemWidth = swatch + swatchGap + doc.getTextWidth(item.label);
-    if (cursor > itemsLeft && cursor + itemWidth > x + width - padX) {
+  const placed = sized.map((item, index) => {
+    const startsGroup = item.group && sized[index - 1]?.group !== item.group;
+    const needed = startsGroup
+      ? sized.filter(other => other.group === item.group).reduce((sum, other) => sum + other.itemWidth + itemGap, -itemGap)
+      : item.itemWidth;
+    if (cursor > itemsLeft && cursor + needed > x + width - padX) {
       row += 1;
       cursor = itemsLeft;
     }
-    const spot = { ...item, swatch, left: cursor, row };
-    cursor += itemWidth + itemGap;
+    const spot = { ...item, left: cursor, row };
+    cursor += item.itemWidth + itemGap;
     return spot;
   });
 
@@ -5487,6 +5504,12 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
       doc.setLineWidth(3);
       doc.line(item.left + 2, cy, item.left + item.swatch - 2, cy);
       doc.setLineCap('butt');
+    } else if (item.kind === 'area') {
+      // A hazard fill: a small tile in its color and outline.
+      doc.setFillColor(item.color);
+      doc.setDrawColor(item.edge);
+      doc.setLineWidth(0.8);
+      doc.roundedRect(item.left, cy - 4.5, item.swatch, 9, 1.5, 1.5, 'FD');
     } else {
       doc.setFillColor(item.color);
       doc.setDrawColor(item.edge);
@@ -5498,6 +5521,38 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
   doc.setDrawColor(0);
   doc.setTextColor(0);
   return y + height;
+}
+
+// The result's disaster layer for the report map: { paint(ctx, project),
+// legend }, or null without one. Flood shows every level (the map's severity
+// filter only highlights one); earthquake shows the lens on screen, whose
+// routes the report lists.
+async function getReportHazardLayer(isEq) {
+  if (isEq) {
+    const ui = window.earthquakeUI;
+    const layers = simData?.hazard_layers;
+    if (!ui?.paintHazardLayers || !layers) return null;
+    return {
+      paint: (ctx, project) => ui.paintHazardLayers(ctx, layers, activeEarthquakeView, project),
+      legend: ui.getLegendItems(activeEarthquakeView),
+    };
+  }
+  const ui = window.floodHazardUI;
+  if (!ui?.paintHazardLayers) return null;
+  try {
+    const layers = await ui.loadHazardLayers({
+      scope: 'barangay_buffer',
+      barangay: selectedBarangay,
+      vars: FLOOD_OVERLAY_VIEWS.all.vars,
+    });
+    return {
+      paint: (ctx, project) => ui.paintHazardLayers(ctx, layers, project),
+      legend: ui.getLegendItems(),
+    };
+  } catch (err) {
+    console.warn('Report map: flood areas could not be loaded —', err.message);
+    return null;
+  }
 }
 
 async function downloadSimulationReport() {
@@ -5540,7 +5595,9 @@ async function downloadSimulationReport() {
     const endIsChosenSite = isEq || !!simData.to_evacuation_site;
     const endPin = endIsChosenSite ? REPORT_PIN_COLORS.chosenSite : REPORT_PIN_COLORS.end;
     const mapLabels = { start, end: endLabel, endPin };
-    let mapResult = await renderBestRouteMapCanvas(best, mapLabels);
+    const hazardLayer = await getReportHazardLayer(isEq);
+    const paintHazards = hazardLayer?.paint || null;
+    let mapResult = await renderBestRouteMapCanvas(best, mapLabels, { paintHazards });
     let mapDataUrl;
     try {
       mapDataUrl = mapResult.canvas.toDataURL('image/png');
@@ -5549,7 +5606,7 @@ async function downloadSimulationReport() {
       // despite the ACAO/crossOrigin handling, redo it without the basemap
       // instead of failing the whole report.
       console.warn('Report map canvas was tainted, redrawing without basemap —', err.message);
-      mapResult = await renderBestRouteMapCanvas(best, mapLabels, { skipBasemap: true });
+      mapResult = await renderBestRouteMapCanvas(best, mapLabels, { skipBasemap: true, paintHazards });
       mapDataUrl = mapResult.canvas.toDataURL('image/png');
     }
 
@@ -5583,6 +5640,7 @@ async function downloadSimulationReport() {
       { kind: 'line', color: routeColor, edge: getRouteEdgeColor(routeColor), label: getTopRouteTitle(best) },
       { kind: 'pin', ...REPORT_PIN_COLORS.start, label: 'Start' },
       { kind: 'pin', ...endPin, label: endIsChosenSite ? 'Chosen evacuation site' : 'Destination' },
+      ...(hazardLayer?.legend || []).map(item => ({ kind: 'area', group: 'hazard', ...item })),
     ], { x: margin, y, width: mapWidth }) + 12;
 
     if (mapResult.usedBasemap) {

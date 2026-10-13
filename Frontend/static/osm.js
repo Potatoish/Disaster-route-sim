@@ -140,6 +140,30 @@ function syncRouteColorsToBaseMap(mapLayers) {
   });
 }
 
+// Traces a GeoJSON (Multi)Polygon or (Multi)LineString as one canvas path,
+// for the PDF report's map (flood.js / earthquake.js paintHazardLayers).
+// project({ lat, lng }) -> [x, y]. Returns 'area', 'line', or null for any
+// other geometry.
+function traceGeoJsonGeometry(ctx, geometry, project) {
+  const type = geometry?.type;
+  const coords = Array.isArray(geometry?.coordinates) ? geometry.coordinates : [];
+  const trace = (points, closed) => {
+    points.forEach((point, index) => {
+      const [x, y] = project({ lat: Number(point[1]), lng: Number(point[0]) });
+      if (index) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    });
+    if (closed) ctx.closePath();
+  };
+  ctx.beginPath();
+  if (type === 'Polygon') coords.forEach(ring => trace(ring, true));
+  else if (type === 'MultiPolygon') coords.forEach(polygon => polygon.forEach(ring => trace(ring, true)));
+  else if (type === 'LineString') trace(coords, false);
+  else if (type === 'MultiLineString') coords.forEach(line => trace(line, false));
+  else return null;
+  return type.endsWith('Polygon') ? 'area' : 'line';
+}
+
 // Hazard overlays get their own pane under Leaflet's overlayPane (z-index
 // 400), so route lines always paint above them no matter how often either
 // is redrawn -- e.g. toggling a flood severity filter after a simulation.
