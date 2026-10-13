@@ -41,7 +41,7 @@ import os
 import re
 import secrets
 import time
-from threading import Lock, Thread
+from threading import Condition, Lock, Thread
 
 import requests
 
@@ -90,6 +90,9 @@ MIN_DUPLICATE_CHECK_LENGTH = 20
 # How long the homepage's visitor count is reused before the sheet is asked
 # again, so each page view doesn't wait on Apps Script.
 VISITOR_COUNT_CACHE_SECONDS = 120
+# With no count at all yet, a failed read is tried again this much sooner,
+# so the homepage isn't left without a number for the whole cache time.
+VISITOR_COUNT_RETRY_SECONDS = 5
 
 # A local dev server has no FEEDBACK_SHEET_URL (it lives in Railway's
 # variables), so app.py turns this on when run directly and the homepage there
@@ -116,6 +119,8 @@ _RECENT_TEXTS_LOCK = Lock()
 _RECENT_TEXTS = {}
 
 _VISITOR_COUNT_LOCK = Lock()
+# Notified when a read of the count finishes.
+_VISITOR_COUNT_READ = Condition(_VISITOR_COUNT_LOCK)
 _VISITOR_COUNT = {"count": None, "fetched_at": 0.0, "refreshing": False}
 
 
@@ -423,68 +428,100 @@ def _ask_visitor_sheet(action):
     return int(count)
 
 
-def _remember_visitor_count(count):
-    with _VISITOR_COUNT_LOCK:
-        _VISITOR_COUNT.update(count=count, fetched_at=time.monotonic())
-
-
-def _refresh_visitor_count():
-    started_at = time.monotonic()
-    fetched = _ask_visitor_sheet("visitors")
-    with _VISITOR_COUNT_LOCK:
-        _VISITOR_COUNT["refreshing"] = False
-        # A visit counted while this read was on its way is newer than it.
-        if _VISITOR_COUNT["fetched_at"] > started_at:
-            return
-        if fetched is not None:
-            _VISITOR_COUNT["count"] = fetched
-        # A failed read keeps the last number and still waits out the cache
-        # time, so an unreachable sheet isn't asked on every page view.
-        _VISITOR_COUNT["fetched_at"] = time.monotonic()
-
-
-def warm_visitor_count():
-    """Reads the count at startup, so the first homepage view after a deploy
-    doesn't wait on Apps Script."""
-    if os.environ.get("FEEDBACK_SHEET_URL", "").strip():
-        _refresh_visitor_count()
-
-
-def _live_visitor_count():
+def _ask_live_site():
     """The live site's count, for a local dev server without the sheet."""
     try:
         response = requests.get(LIVE_VISITOR_COUNT_URL, timeout=UPSTREAM_TIMEOUT_SECONDS)
         body = response.json()
     except (requests.RequestException, ValueError) as exc:
         print(f"[visitors] Could not read the live site's visitor count: {exc}")
-        body = None
+        return None
     count = body.get("count") if isinstance(body, dict) and body.get("error") is False else None
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-        return _error("The visitor count isn't available right now.", 502, "fetch_failed")
-    return {"error": False, "count": count}, 200
+        return None
+    return count
+
+
+def _visitor_count_set_up():
+    return bool(os.environ.get("FEEDBACK_SHEET_URL", "").strip()) or USE_LIVE_VISITOR_COUNT
+
+
+def _remember_visitor_count(count):
+    with _VISITOR_COUNT_LOCK:
+        _VISITOR_COUNT.update(count=count, fetched_at=time.monotonic())
+
+
+def _claim_visitor_count_read():
+    """With the lock held: True if the count is due to be read again and no
+    read is on its way, marking one as started."""
+    if _VISITOR_COUNT["refreshing"]:
+        return False
+    fetched_at = _VISITOR_COUNT["fetched_at"]
+    max_age = VISITOR_COUNT_CACHE_SECONDS if _VISITOR_COUNT["count"] is not None else VISITOR_COUNT_RETRY_SECONDS
+    if fetched_at and time.monotonic() - fetched_at < max_age:
+        return False
+    _VISITOR_COUNT["refreshing"] = True
+    return True
+
+
+def _refresh_visitor_count():
+    """Reads the count; the caller has claimed the read."""
+    started_at = time.monotonic()
+    if os.environ.get("FEEDBACK_SHEET_URL", "").strip():
+        fetched = _ask_visitor_sheet("visitors")
+    else:
+        fetched = _ask_live_site()
+    with _VISITOR_COUNT_READ:
+        _VISITOR_COUNT["refreshing"] = False
+        # A visit counted while this read was on its way is newer than it.
+        if _VISITOR_COUNT["fetched_at"] <= started_at:
+            if fetched is not None:
+                _VISITOR_COUNT["count"] = fetched
+            # A failed read keeps the last number and still waits out the
+            # cache time, so an unreachable sheet isn't asked on every page
+            # view.
+            _VISITOR_COUNT["fetched_at"] = time.monotonic()
+        _VISITOR_COUNT_READ.notify_all()
+
+
+def warm_visitor_count():
+    """Reads the count at startup, so the first homepage view after a deploy
+    already has it."""
+    if not _visitor_count_set_up():
+        return
+    with _VISITOR_COUNT_LOCK:
+        claimed = _claim_visitor_count_read()
+    if claimed:
+        _refresh_visitor_count()
+
+
+def peek_visitor_count():
+    """The count to write straight into the homepage, or None. Never waits:
+    Apps Script takes seconds to answer, so an old count is still given and
+    read again in the background."""
+    if not _visitor_count_set_up():
+        return None
+    with _VISITOR_COUNT_LOCK:
+        count = _VISITOR_COUNT["count"]
+        claimed = _claim_visitor_count_read()
+    if claimed:
+        Thread(target=_refresh_visitor_count, name="visitor-count", daemon=True).start()
+    return count
 
 
 def get_visitor_count():
-    if not os.environ.get("FEEDBACK_SHEET_URL", "").strip():
-        if USE_LIVE_VISITOR_COUNT:
-            return _live_visitor_count()
+    if not _visitor_count_set_up():
         return _error("The visitor count isn't set up yet.", 503, "not_configured")
 
-    with _VISITOR_COUNT_LOCK:
-        count = _VISITOR_COUNT["count"]
-        fetched_at = _VISITOR_COUNT["fetched_at"]
-        stale = not fetched_at or time.monotonic() - fetched_at >= VISITOR_COUNT_CACHE_SECONDS
-        in_background = stale and count is not None and not _VISITOR_COUNT["refreshing"]
-        if in_background:
-            _VISITOR_COUNT["refreshing"] = True
-    # Apps Script takes seconds to answer, so a stale count is still shown at
-    # once and refreshed behind it; only having no number at all waits.
-    if stale and count is None:
-        _refresh_visitor_count()
-        with _VISITOR_COUNT_LOCK:
+    count = peek_visitor_count()
+    if count is None:
+        # No number yet (the server just started): wait for the read on its
+        # way rather than asking the sheet a second time.
+        with _VISITOR_COUNT_READ:
+            _VISITOR_COUNT_READ.wait_for(
+                lambda: not _VISITOR_COUNT["refreshing"], timeout=UPSTREAM_TIMEOUT_SECONDS + 5,
+            )
             count = _VISITOR_COUNT["count"]
-    elif in_background:
-        Thread(target=_refresh_visitor_count, name="visitor-count", daemon=True).start()
 
     if count is None:
         return _error("The visitor count isn't available right now.", 502, "fetch_failed")

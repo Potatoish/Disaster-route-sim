@@ -225,7 +225,7 @@ server, so the live site keeps no record of where visitors pinned, and on for th
 - `GET /simulation-status` — whether a simulation is running, and the queue length
 - `POST /contact` — About page contact form → email to the team inbox
 - `POST /feedback` — feedback widget → row in the team's Google Sheet
-- `GET /visitors` — the visitor count (cached for two minutes); `POST /visitors` — counts a new visitor
+- `GET /visitors` — the visitor count (cached for two minutes; the homepage also comes with it already written in); `POST /visitors` — counts a new visitor
 
 ## Notes
 

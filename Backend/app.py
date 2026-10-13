@@ -14,6 +14,7 @@ import contact_service
 from contact_service import (
     get_visitor_count,
     issue_form_token,
+    peek_visitor_count,
     record_feedback,
     record_visitor,
     send_contact_message,
@@ -658,7 +659,9 @@ def visitors():
 
 @app.route("/", methods=["GET"])
 def home():
-    return render_template("home.html", active_page="home")
+    # The count is written into the page, so it shows with the page instead
+    # of after a request of its own (visitor-count.js asks only without it).
+    return render_template("home.html", active_page="home", visitor_count=peek_visitor_count())
 
 
 @app.route("/about", methods=["GET"])
@@ -695,6 +698,10 @@ def _warm_caches():
     print(f"[warm-up] caches ready in {time.time() - started:.1f}s")
 
 Thread(target=_warm_caches, name="cache-warm-up", daemon=True).start()
+# Run directly (the local dev server, never gunicorn) there is no
+# FEEDBACK_SHEET_URL, so the homepage shows the live site's visitor count
+# (contact_service.USE_LIVE_VISITOR_COUNT). Set before the warm-up reads it.
+contact_service.USE_LIVE_VISITOR_COUNT = __name__ == "__main__"
 # Its own thread: the sheet answers in seconds, the graphs take longer.
 Thread(target=warm_visitor_count, name="visitor-count-warm-up", daemon=True).start()
 
@@ -758,8 +765,5 @@ if __name__ == "__main__":
     # Simulation logs show pins; fine on a developer's own machine, never on
     # the server (osm_routing.DEBUG).
     osm_routing.DEBUG = True
-    # Without FEEDBACK_SHEET_URL the homepage shows the live site's visitor
-    # count (contact_service.USE_LIVE_VISITOR_COUNT).
-    contact_service.USE_LIVE_VISITOR_COUNT = True
     _stop_old_dev_servers(5000)
     app.run(debug=True, use_reloader=False, host="127.0.0.1", port=5000, threaded=True)
