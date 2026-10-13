@@ -13,6 +13,7 @@ from osm_routing import (
     FINAL_ROUTES_TO_SHOW,
     HAZARD_THRESHOLD,
     NUM_ITERATIONS,
+    SITE_PICK_ROUTES_PER_SITE,
     UNKNOWN_HAZARD_LEVEL,
     add_alternative_routes,
     add_road_access_nodes,
@@ -46,9 +47,6 @@ from osm_routing import (
 )
 from simulation_progress import bump_progress, reset_progress
 
-# Each site's main colony is compared on its few safest routes, evaluated the
-# earthquake way, to pick the site; only that site gets alternative colonies.
-SITE_PICK_ROUTES_PER_SITE = 5
 # A layer above the safety limit on at least this share of a barangay's road
 # length is area-wide there: no route can avoid it, so the results say so
 # instead of a bare "No safe route" (PHIVOLCS rates the ground shaking of each

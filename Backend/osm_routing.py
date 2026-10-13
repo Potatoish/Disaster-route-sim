@@ -90,6 +90,10 @@ ALTERNATIVE_ROUTE_EDGE_PENALTY = 4.0
 # iterative-penalization shortest paths (see generate_backup_routes).
 BACKUP_ROUTE_SEARCH_ATTEMPTS = 14
 BACKUP_ROUTE_EDGE_PENALTY = 1.8
+# A run to evacuation sites (earthquake, and flood "to the evacuation sites")
+# compares each site's main colony on its few safest routes to pick the site;
+# only that site gets alternative colonies.
+SITE_PICK_ROUTES_PER_SITE = 5
 
 NUM_ANTS = 40
 NUM_ITERATIONS = 30
@@ -2523,4 +2527,174 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
         "total_candidate_routes": len(candidate_routes),
         "aco": aco_stats,
         "routes": final_routes
+    }
+
+
+def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_type="Flood", barangay_name=None):
+    """Flood routes from the start to whichever of the barangay's flood
+    evacuation sites has the best route, ranked like the results. A main
+    colony goes to every site reachable by road; the site whose few safest
+    routes rank first gets the alternative colonies and the candidate pool --
+    the earthquake site choice (earthquake_service) works the same way."""
+    debug_print("\n" + "=" * 60)
+    debug_print("[OSM] EVACUATION SITE SIMULATION START")
+    debug_print(f"[OSM] From: {start_name} ({start_lat}, {start_lng})")
+
+    scope_name = barangay_name or find_barangay_for_point(start_lat, start_lng)
+    if not scope_name or get_barangay_boundary(scope_name) is None:
+        return {
+            "error": True,
+            "message": f"{start_name} is outside the barangays this system has hazard data for.",
+        }
+
+    simulation_started = time.perf_counter()
+    G = prepare_routing_graph(scope_name)
+    scope_display_name = get_barangay_boundary(scope_name)["display_name"]
+    pin_check = check_route_pin(G, start_lat, start_lng, f"{scope_display_name}'s flood hazard data", "The start point")
+    if not pin_check["valid"]:
+        return {
+            "error": True,
+            "message": pin_check["message"],
+        }
+
+    evacuation_sites = get_flood_evacuation_sites(scope_name)
+    covered_sites = [
+        site for site in evacuation_sites
+        if is_point_in_hazard_coverage(G, site["lat"], site["lng"])
+    ]
+    if not covered_sites:
+        return {
+            "error": True,
+            "message": f"No flood evacuation sites are listed for Brgy. {scope_display_name}.",
+        }
+
+    G, access_nodes = add_road_access_nodes(
+        G,
+        [(start_lat, start_lng)] + [(site["lat"], site["lng"]) for site in covered_sites],
+        annotate_flood_edge,
+    )
+    start_node = access_nodes[0]
+    if start_node is None:
+        return {
+            "error": True,
+            "message": "No walkable road was found to start the route on.",
+        }
+    site_nodes = {
+        site["id"]: node
+        for site, node in zip(covered_sites, access_nodes[1:])
+        if node is not None
+    }
+    here = next((site for site in covered_sites if site_nodes.get(site["id"]) == start_node), None)
+    if here is not None:
+        return {
+            "error": True,
+            "message": f"The start point is already at {here['name']}, an evacuation site.",
+        }
+
+    try:
+        road_distances = nx.single_source_dijkstra_path_length(G, start_node, weight="length")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        road_distances = {}
+    reachable_sites = [
+        dict(site, road_distance=round(float(road_distances[site_nodes[site["id"]]]), 2))
+        for site in covered_sites
+        if site_nodes.get(site["id"]) in road_distances
+    ]
+    if not reachable_sites:
+        return {
+            "error": True,
+            "message": (
+                "No evacuation site can be reached from this start point without "
+                "leaving the area covered by flood hazard data."
+            ),
+        }
+    debug_print(f"[OSM] Road-reachable evacuation sites: {len(reachable_sites)}")
+
+    alternatives = FINAL_ROUTES_TO_SHOW - 1
+    # Progress: a main colony per site (one step per round), the chosen
+    # site's alternative colonies, and one step for finalizing.
+    reset_progress(len(reachable_sites) * NUM_ITERATIONS + alternatives + 1)
+    canonical_name = normalize_barangay_name(scope_name)
+
+    best_pick = None
+    ants_sent = ants_arrived = 0
+    for site in reachable_sites:
+        rng = random.Random(route_search_seed(
+            "flood-evacuation", canonical_name, hazard_type,
+            float(start_lat), float(start_lng), site["id"],
+        ))
+        colony = start_aco(G, start_node, site_nodes[site["id"]], rng)
+        ants_sent += colony["stats"]["ants_sent"]
+        ants_arrived += colony["stats"]["ants_arrived"]
+        if not colony["routes"] and colony["baseline"] is None:
+            continue
+
+        # The site's safety-first shortest path counts too, under the rule
+        # finish_candidate_pool adds it by: ants bound for a far site can miss
+        # its safest road, and the site would then lose to a nearer, less
+        # safe one.
+        shortlist = sorted(colony["routes"].values(), key=safety_sort_key)[:SITE_PICK_ROUTES_PER_SITE]
+        baseline = colony["baseline"]
+        if baseline is not None and (
+            not shortlist or safety_sort_key(baseline)[:3] < safety_sort_key(shortlist[0])[:3]
+        ):
+            shortlist.append(baseline)
+        site_best = min(
+            (
+                dict(route, final_pheromone=route_pheromone_score(route["path"], colony["pheromone"]))
+                for route in shortlist
+            ),
+            key=display_sort_key,
+        )
+        debug_print(
+            f"[OSM]   {site['name']}: unsafe={site_best['unsafe_distance']:.0f}m "
+            f"risk={site_best['risk_distance']:.0f}m distance={site_best['distance']:.0f}m"
+        )
+        if best_pick is None or display_sort_key(site_best) < display_sort_key(best_pick[2]):
+            best_pick = (site, colony, site_best)
+
+    if best_pick is None:
+        return {
+            "error": True,
+            "message": "No route to an evacuation site was found inside the area covered by hazard data.",
+        }
+
+    site, colony, _ = best_pick
+    main_sent, main_arrived = colony["stats"]["ants_sent"], colony["stats"]["ants_arrived"]
+    add_alternative_routes(colony, alternatives)
+    candidate_routes = finish_candidate_pool(colony)
+    aco_stats = dict(colony["stats"])
+    aco_stats["sites_searched"] = len(reachable_sites)
+    aco_stats["ants_sent_all_sites"] = ants_sent + colony["stats"]["ants_sent"] - main_sent
+    aco_stats["ants_arrived_all_sites"] = ants_arrived + colony["stats"]["ants_arrived"] - main_arrived
+
+    final_routes = finalize_routes(G, candidate_routes, colony["pheromone"])
+    bump_progress()
+    for route in final_routes:
+        route["path_label"] = f"{start_name} -> {site['name']}"
+        route["segments"] = max(1, len(route.get("path", [])) - 1)
+        route["start_lat"] = float(start_lat)
+        route["start_lng"] = float(start_lng)
+        route["destination_id"] = site["id"]
+        route["destination_name"] = site["name"]
+        route["destination_lat"] = float(site["lat"])
+        route["destination_lng"] = float(site["lng"])
+
+    debug_print(f"[OSM] Chosen evacuation site: {site['name']}")
+    debug_print(f"[OSM] Total simulation time: {time.perf_counter() - simulation_started:.2f}s")
+    debug_print("[OSM] EVACUATION SITE SIMULATION END")
+    debug_print("=" * 60 + "\n")
+
+    return {
+        "error": False,
+        "start": start_name,
+        "end": site["name"],
+        "hazard_type": hazard_type,
+        "safe_threshold": HAZARD_THRESHOLD,
+        "to_evacuation_site": True,
+        "selected_evacuation_site": site,
+        "evacuation_sites": evacuation_sites,
+        "total_candidate_routes": len(candidate_routes),
+        "aco": aco_stats,
+        "routes": final_routes,
     }

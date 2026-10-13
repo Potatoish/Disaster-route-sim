@@ -2,7 +2,7 @@ import sys
 
 sys.dont_write_bytecode = True
 
-from osm_routing import parse_route_pin, simulate_osm_routes
+from osm_routing import parse_route_pin, simulate_flood_to_evacuation_sites, simulate_osm_routes
 
 def simulate(start, end, hazard_type="Flood", barangay=None):
     if not start:
@@ -50,6 +50,37 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
         )
         return result
 
+    except Exception as e:
+        return {
+            "error": True,
+            "message": f"OSM routing failed: {str(e)}"
+        }
+
+
+def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None):
+    """A flood run whose destination is the barangay's evacuation sites: the
+    run picks the site (simulate_flood_to_evacuation_sites)."""
+    if not start:
+        return {
+            "error": True,
+            "message": "Start location is required"
+        }
+
+    start_location, start_error = parse_route_pin(start, "Start")
+    if start_error:
+        return {
+            "error": True,
+            "message": start_error
+        }
+
+    try:
+        return simulate_flood_to_evacuation_sites(
+            start_name=start_location["name"],
+            start_lat=start_location["lat"],
+            start_lng=start_location["lng"],
+            hazard_type=hazard_type,
+            barangay_name=barangay,
+        )
     except Exception as e:
         return {
             "error": True,

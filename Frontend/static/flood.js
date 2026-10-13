@@ -4,19 +4,32 @@
     dataLayer: null,
     highlightVar: null,
     evacuationSitesCache: new Map(),
-    evacuationSites: null,
     evacuationMarkers: [],
+    evacuationDrawn: null,
+    evacuationPopup: null,
   };
 
   // Blue, not the earthquake open areas' amber: amber and orange are the
-  // Low/Medium flood fills these pins sit on after a run.
-  const EVAC_MARKER_STYLE = {
-    fill: '#2563eb',
-    stroke: '#1e3a8a',
-    accent: '#1d4ed8',
-    label: 'EVAC SITE',
-    badgeWidth: 76,
-    labelSize: 10,
+  // Low/Medium flood fills these pins sit on after a run. The site a run
+  // picks is the earthquake mode's green "CHOSEN" pin.
+  const EVAC_MARKER_STYLES = {
+    site: {
+      fill: '#2563eb',
+      stroke: '#1e3a8a',
+      accent: '#1d4ed8',
+      label: 'EVAC SITE',
+      badgeWidth: 76,
+      labelSize: 10,
+    },
+    chosen: {
+      fill: '#22c55e',
+      stroke: '#14532d',
+      accent: '#166534',
+      label: 'CHOSEN',
+      badgeWidth: 56,
+      labelSize: 11,
+      halo: true,
+    },
   };
 
   // Strong enough to read against the OSM basemap's own beige/tan fills;
@@ -155,41 +168,58 @@
   }
 
   function clearEvacuationSites() {
-    state.evacuationMarkers.forEach(({ marker }) => marker.remove());
+    state.evacuationPopup?.remove();
+    state.evacuationPopup = null;
+    state.evacuationMarkers.forEach(marker => marker.remove());
     state.evacuationMarkers = [];
-    state.evacuationSites = null;
+    state.evacuationDrawn = null;
   }
 
-  // A site is picked as the destination, so a tap on its pin hands it to
-  // onPick instead of opening a popup. The site the destination pin stands
-  // on (hiddenSiteId) is left off: that pin already marks it.
-  function drawEvacuationSites({ map, sites, hiddenSiteId = null, onPick = null }) {
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // The sites while they are the destination; highlightedSiteId is the one
+  // a run picked. Redrawn only when either changes, so the pins don't
+  // flicker on every pin or panel sync.
+  function drawEvacuationSites({ map, sites, highlightedSiteId = null }) {
     if (!map || !Array.isArray(sites) || !sites.length) {
       clearEvacuationSites();
       return;
     }
-
-    // Pins already on the map only show or hide, so they don't flicker each
-    // time the destination moves.
-    if (state.evacuationSites !== sites) {
-      clearEvacuationSites();
-      state.evacuationSites = sites;
-      state.evacuationMarkers = sites.map(site => {
-        const marker = L.marker({ lat: Number(site.lat), lng: Number(site.lng) }, {
-          title: site.name,
-          alt: `Evacuation site: ${site.name}`,
-          zIndexOffset: 3000,
-          icon: buildEvacSiteMarkerIcon(EVAC_MARKER_STYLE),
-        });
-        marker.on('click', () => onPick?.(site));
-        return { site, marker };
-      });
+    if (state.evacuationDrawn?.sites === sites
+      && state.evacuationDrawn.highlightedSiteId === highlightedSiteId
+      && state.evacuationMarkers.every(marker => map.hasLayer(marker))) {
+      return;
     }
 
-    state.evacuationMarkers.forEach(({ site, marker }) => {
-      const shown = site.id !== hiddenSiteId;
-      if (shown && !map.hasLayer(marker)) marker.addTo(map);
-      else if (!shown && map.hasLayer(marker)) marker.remove();
+    clearEvacuationSites();
+    state.evacuationDrawn = { sites, highlightedSiteId };
+    state.evacuationMarkers = sites.map(site => {
+      const isChosen = site.id === highlightedSiteId;
+      const marker = L.marker({ lat: Number(site.lat), lng: Number(site.lng) }, {
+        title: site.name,
+        alt: `${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}: ${site.name}`,
+        zIndexOffset: isChosen ? 3100 : 3000,
+        icon: buildEvacSiteMarkerIcon(isChosen ? EVAC_MARKER_STYLES.chosen : EVAC_MARKER_STYLES.site),
+      }).addTo(map);
+      marker.on('click', () => {
+        state.evacuationPopup?.remove();
+        state.evacuationPopup = L.popup({ offset: [0, -52] })
+          .setLatLng(marker.getLatLng())
+          .setContent(`
+            <div class="popup-shell">
+              <div class="popup-title">${escapeHtml(site.name)}</div>
+              <div class="popup-row"><span>Role</span><span>${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}</span></div>
+            </div>`)
+          .openOn(map);
+      });
+      return marker;
     });
   }
 
@@ -204,7 +234,7 @@
     loadEvacuationSites,
     drawEvacuationSites,
     clearEvacuationSites,
-    evacMarkerStyle: EVAC_MARKER_STYLE,
+    evacMarkerStyles: EVAC_MARKER_STYLES,
     reset,
   };
 })();

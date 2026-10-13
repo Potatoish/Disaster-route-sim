@@ -25,7 +25,7 @@ from earthquake_service import (
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
-from main import simulate
+from main import simulate, simulate_to_evacuation_site
 import osm_routing
 from osm_routing import (
     BARANGAY_BOUNDARY_FILES,
@@ -548,18 +548,24 @@ def run_simulation():
     try:
         data = request.get_json() or {}
         start = data.get("start")
-        end = data.get("end")
         hazard = data.get("hazard", "Flood")
         barangay = data.get("barangay")
+        # The destination is either a pin or the barangay's evacuation sites,
+        # in which case the run picks the site.
+        to_evacuation_site = data.get("to_evacuation_site") is True
+        end = None if to_evacuation_site else data.get("end")
         request_summary = {
             "mode": "flood",
             "hazard": hazard,
             "barangay": barangay,
             "start": start,
             "end": end,
+            "to_evacuation_site": to_evacuation_site,
         }
 
         def work():
+            if to_evacuation_site:
+                return simulate_to_evacuation_site(start, hazard, barangay=barangay)
             return simulate(start, end, hazard, barangay=barangay)
 
         return _run_simulation_request("flood", request_summary, work, data)

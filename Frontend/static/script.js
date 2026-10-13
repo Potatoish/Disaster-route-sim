@@ -11,12 +11,11 @@ let isBackendLive = false;
 let activeEarthquakeView = 'overall';
 let earthquakeEvacSites = [];
 let earthquakeEvacSitesVisible = false;
-// Flood evacuation sites, offered as destinations by the destination field's
-// "Show Evacuation Sites". floodEvacPicking: shown for picking, and no site
-// or spot chosen since, so a map tap is not armed for the destination.
+// The destination field's "Show Evacuation Sites" (flood) makes the
+// destination the barangay's evacuation sites instead of a pin: the run
+// picks the site, as in earthquake mode.
 let floodEvacSites = [];
-let floodEvacSitesVisible = false;
-let floodEvacPicking = false;
+let floodToEvacSite = false;
 let mapLayers = { boundaries: [], routes: [], routeGroups: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
@@ -297,8 +296,6 @@ const HAZARD_THEME_PALETTES = {
 // uses only 'start'; its destinations are the evacuation sites). Each pin is
 // null or { lat, lng, status: 'checking' | 'ready', label, street, roadDistance }
 // -- only a 'ready' pin, one the backend's /check-pin accepted, can be routed.
-// A flood destination set on an evacuation site also has evacSite { id, name },
-// and the site's name is its label.
 const PIN_ROLES = ['start', 'end'];
 const PIN_ROLE_COPY = {
   start: {
@@ -318,8 +315,6 @@ const PIN_ROLE_COPY = {
 // Street") rather than beside it ("Near Tramo Street").
 const PIN_ON_STREET_METERS = 15;
 const PIN_HINT_ERROR_MS = 5000;
-const FLOOD_EVAC_PICK_HINT = 'Tap an evacuation site to make it your destination';
-const FLOOD_EVAC_PLACING_HINT = 'Tap the map, or an evacuation site, to pin your destination';
 // "Choose on Map" zooms to at least street level so a tap lands where meant.
 const PIN_PLACEMENT_ZOOM = 17;
 const routePins = { start: null, end: null };
@@ -741,7 +736,7 @@ document.addEventListener('keydown', event => {
   } else if (PIN_ROLES.some(role => document.getElementById(`${role}PinMenu`)?.hidden === false)) {
     event.preventDefault();
     closePinMenus();
-  } else if (pinPlacementRole || isPickingFloodEvacSite()) {
+  } else if (pinPlacementRole) {
     event.preventDefault();
     cancelPinPlacement();
   } else if (MOBILE_PANEL_QUERY.matches) {
@@ -2337,13 +2332,20 @@ function resetEarthquakeState() {
 
 function resetFloodEvacState() {
   floodEvacSites = [];
-  floodEvacSitesVisible = false;
-  floodEvacPicking = false;
+  floodToEvacSite = false;
   window.floodHazardUI?.clearEvacuationSites();
 }
 
-function isPickingFloodEvacSite() {
-  return floodEvacPicking && floodEvacSitesVisible && selectedHazard === 'Flood';
+function isFloodToEvacSite() {
+  return floodToEvacSite && selectedHazard === 'Flood';
+}
+
+// The evacuation site a flood result's routes lead to, while that result
+// still matches the setup.
+function getFloodResultEvacSite() {
+  return hasFloodSimulationResult() && simData.pins_key === getRoutePinsKey()
+    ? simData.selected_evacuation_site || null
+    : null;
 }
 
 function getReadyPin(role) {
@@ -2356,7 +2358,7 @@ function getActivePinRoles() {
 }
 
 function canRunFloodSimulation() {
-  return !!(selectedHazard === 'Flood' && getReadyPin('start') && getReadyPin('end'));
+  return !!(selectedHazard === 'Flood' && getReadyPin('start') && (getReadyPin('end') || isFloodToEvacSite()));
 }
 
 function canRunEarthquakeSimulation() {
@@ -2386,7 +2388,6 @@ function buildPinLabel(role, street, roadDistance) {
 // How the Run panel names a pin: its street, or for a spot with no named
 // street close by, the nearest one (nearby_street from /check-pin).
 function describePinPlace(pin) {
-  if (pin.evacSite) return pin.evacSite.name;
   if (pin.street) {
     return Number(pin.roadDistance) <= PIN_ON_STREET_METERS ? pin.street : `near ${pin.street}`;
   }
@@ -2411,11 +2412,11 @@ function canPlaceRoutePins() {
   );
 }
 
-// The destination is left unarmed while an evacuation site is being picked
-// for it: a stray map tap would otherwise pin it somewhere else.
+// A destination that is the evacuation sites needs no pin, so the map is not
+// armed for one.
 function getNextUnpinnedRole() {
   return getActivePinRoles().find(role => (
-    !routePins[role] && !(role === 'end' && isPickingFloodEvacSite())
+    !routePins[role] && !(role === 'end' && isFloodToEvacSite())
   )) || null;
 }
 
@@ -2445,17 +2446,11 @@ function syncPinHint() {
   if (!hint || !text) return;
 
   const message = pinHintMessage?.text
-    || (pinPlacementRole === 'end' && floodEvacSitesVisible
-      ? FLOOD_EVAC_PLACING_HINT
-      : pinPlacementRole
-      ? PIN_ROLE_COPY[pinPlacementRole].hint
-      : isPickingFloodEvacSite()
-      ? FLOOD_EVAC_PICK_HINT
-      : '');
+    || (pinPlacementRole ? PIN_ROLE_COPY[pinPlacementRole].hint : '');
   hint.hidden = !message;
   hint.classList.toggle('is-error', !!pinHintMessage?.isError);
   text.textContent = message;
-  if (closeBtn) closeBtn.hidden = !pinPlacementRole && !isPickingFloodEvacSite();
+  if (closeBtn) closeBtn.hidden = !pinPlacementRole;
   syncMapOverlayLayout();
 }
 
@@ -2483,9 +2478,6 @@ function setPinPlacementRole(role) {
   const nextRole = role && canPlaceRoutePins() && getActivePinRoles().includes(role) ? role : null;
   const changed = nextRole !== pinPlacementRole;
   pinPlacementRole = nextRole;
-  // Arming the destination for a map tap ("Or choose where you want to go")
-  // ends picking an evacuation site for it.
-  if (nextRole === 'end') floodEvacPicking = false;
   // Done or cancelled: drop a "Change" focus so the workflow moves on to
   // whatever step is next instead of leaving the route card pinned open.
   if (changed && !nextRole) workflowFocusSection = null;
@@ -2568,13 +2560,7 @@ function closeMobilePanelForMapInteraction() {
 function cancelPinPlacement() {
   closePinMenus();
   clearPinHintError();
-  const wasPicking = isPickingFloodEvacSite();
-  floodEvacPicking = false;
   setPinPlacementRole(null);
-  if (wasPicking) {
-    syncRouteInfoBox();
-    syncRoutePinFields();
-  }
 }
 
 function syncRoutePinFields() {
@@ -2588,20 +2574,29 @@ function syncRoutePinFields() {
     if (!row || !input || !value || !meta) return;
 
     const pin = routePins[role];
-    const pickingSite = role === 'end' && isPickingFloodEvacSite();
+    // No pin: the destination is the evacuation sites, or after a run, the
+    // one it picked.
+    const toEvacSite = role === 'end' && !pin && isFloodToEvacSite();
+    const resultSite = toEvacSite ? getFloodResultEvacSite() : null;
     input.disabled = locked || !canPlaceRoutePins();
     if (input.disabled) {
       document.getElementById(`${role}PinMenu`)?.setAttribute('hidden', '');
       input.setAttribute('aria-expanded', 'false');
     }
-    row.classList.toggle('is-placing', pinPlacementRole === role || pickingSite);
-    row.classList.toggle('is-set', !!pin);
+    row.classList.toggle('is-placing', pinPlacementRole === role);
+    row.classList.toggle('is-set', !!pin || toEvacSite);
 
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
-      : pin?.label || (pickingSite ? 'Tap an evacuation site' : PIN_ROLE_COPY[role].empty);
-    meta.hidden = !pin;
-    meta.textContent = pin ? formatPinCoordinates(pin) : '';
+      : toEvacSite
+      ? resultSite?.name || 'Evacuation site'
+      : pin?.label || PIN_ROLE_COPY[role].empty;
+    meta.hidden = !pin && !toEvacSite;
+    meta.textContent = pin
+      ? formatPinCoordinates(pin)
+      : toEvacSite
+      ? (resultSite ? 'Evacuation site with the safest route' : 'The one with the safest route')
+      : '';
     input.title = pin ? `${pin.label || PIN_ROLE_COPY[role].fallbackLabel} (${formatPinCoordinates(pin)})` : '';
   });
 
@@ -2616,6 +2611,8 @@ function syncRoutePinFields() {
       ? ''
       : isEarthquakeMode()
       ? (start ? 'Your location is pinned. Drag its pin on the map to change it.' : 'Pin your location on the map.')
+      : start && isFloodToEvacSite() && !routePins.end
+      ? 'Your location is pinned. Routes lead to the evacuation site with the safest route.'
       : start && end
       ? 'Both points are pinned. Drag a pin on the map to change it.'
       : 'Pin your location and destination on the map.';
@@ -2628,7 +2625,7 @@ function syncRoutePinFields() {
 function buildPinPopupContent(role) {
   const pin = routePins[role];
   const rows = [
-    ['Role', pin.evacSite ? 'Destination (evacuation site)' : PIN_ROLE_COPY[role].popupRole],
+    ['Role', PIN_ROLE_COPY[role].popupRole],
     ['Coordinates', formatPinCoordinates(pin)],
   ];
   if (Number.isFinite(pin.roadDistance)) {
@@ -2779,24 +2776,15 @@ function syncRoutePinMarkers() {
   syncFloodEvacMarkers();
 }
 
-// The flood evacuation sites on the map, minus the one the destination pin
-// stands on -- unless the phone's center pin is moving that pin away.
+// The flood evacuation sites on the map while they are the destination, the
+// one a run picked marked "CHOSEN".
 function syncFloodEvacMarkers() {
   if (!gMap) return;
-  const endSite = routePins.end?.evacSite;
   window.floodHazardUI?.drawEvacuationSites({
     map: gMap,
-    sites: floodEvacSitesVisible && selectedHazard === 'Flood' ? floodEvacSites : null,
-    hiddenSiteId: endSite && !window.mobileSim?.isCenterPinRole('end') ? endSite.id : null,
-    onPick: pickFloodEvacuationSite,
+    sites: isFloodToEvacSite() ? floodEvacSites : null,
+    highlightedSiteId: getFloodResultEvacSite()?.id ?? null,
   });
-}
-
-// A tap on an evacuation site's pin: the destination goes there.
-function pickFloodEvacuationSite(site) {
-  if (!site || selectedHazard !== 'Flood' || !canPlaceRoutePins()) return;
-  closePinMenus();
-  placeRoutePin('end', Number(site.lat), Number(site.lng), { evacSite: { id: site.id, name: site.name } });
 }
 
 function resetRoutePins() {
@@ -2830,9 +2818,8 @@ async function fetchPinCheck(lat, lng) {
 
 // Places (or moves) a pin and has the backend confirm a route can start or
 // end there. A spot it rejects restores the pin's previous position, so a bad
-// drag or tap never loses a pin that was already fine. evacSite: the flood
-// evacuation site the destination is set on (a drag drops it).
-async function placeRoutePin(role, lat, lng, { evacSite = null } = {}) {
+// drag or tap never loses a pin that was already fine.
+async function placeRoutePin(role, lat, lng) {
   if (!canPlaceRoutePins() || !getActivePinRoles().includes(role)) {
     syncRoutePinMarkers();
     return;
@@ -2850,7 +2837,7 @@ async function placeRoutePin(role, lat, lng, { evacSite = null } = {}) {
     return;
   }
 
-  routePins[role] = { lat, lng, status: 'checking', label: '', street: null, roadDistance: null, evacSite };
+  routePins[role] = { lat, lng, status: 'checking', label: '', street: null, roadDistance: null };
   onRoutePinsChange();
 
   let check;
@@ -2878,11 +2865,13 @@ async function placeRoutePin(role, lat, lng, { evacSite = null } = {}) {
     street: check.street || null,
     nearbyStreet: check.nearby_street || null,
     roadDistance: Number(check.road_distance),
-    label: evacSite ? evacSite.name : buildPinLabel(role, check.street, check.road_distance),
-    evacSite,
+    label: buildPinLabel(role, check.street, check.road_distance),
   };
-  // A destination is chosen (a site or a spot): picking a site is done.
-  if (role === 'end') floodEvacPicking = false;
+  // A pinned destination replaces the evacuation sites.
+  if (role === 'end' && floodToEvacSite) {
+    floodToEvacSite = false;
+    setFloodLegendContent();
+  }
   if (pinPlacementRole === role || !pinPlacementRole) {
     setPinPlacementRole(getNextUnpinnedRole());
   }
@@ -2919,7 +2908,7 @@ function syncEarthquakeRouteUi() {
   if (pinFieldHelp) {
     pinFieldHelp.textContent = isEarthquakeMode()
       ? 'Choose on Map, then tap the spot. Drag a pin to adjust it.'
-      : 'Choose on Map, then tap the spot, or pick an evacuation site as your destination. Drag a pin to adjust it.';
+      : 'Choose on Map, then tap the spot, or show the evacuation sites to go to the one with the safest route. Drag a pin to adjust it.';
   }
 
   if (earthquakeRoutePanel) {
@@ -3054,10 +3043,12 @@ function buildPinLegendRow(role) {
   return `<div class="legend-row">${pin}<span style="font-size:.78rem;">${label}</span></div>`;
 }
 
-function buildFloodEvacLegendRow() {
-  const style = window.floodHazardUI?.evacMarkerStyle;
-  if (!style) return '';
-  return `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span style="font-size:.78rem;">Evacuation site</span></div>`;
+function buildFloodEvacLegendRows() {
+  const styles = window.floodHazardUI?.evacMarkerStyles;
+  if (!styles) return '';
+  const row = (style, label) => `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span style="font-size:.78rem;">${label}</span></div>`;
+  return (getFloodResultEvacSite() ? row(styles.chosen, 'Chosen evacuation site') : '')
+    + row(styles.site, 'Evacuation site');
 }
 
 // Route rows only once a result is on the map: while pinning there are no
@@ -3071,8 +3062,7 @@ function setFloodLegendContent() {
     ${showRouteKeys ? buildRouteLegendRows() : ''}
     <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
       ${buildPinLegendRow('start')}
-      ${buildPinLegendRow('end')}
-      ${floodEvacSitesVisible ? buildFloodEvacLegendRow() : ''}
+      ${isFloodToEvacSite() ? buildFloodEvacLegendRows() : buildPinLegendRow('end')}
       ${buildBoundaryLegendRow()}
     </div>`;
 }
@@ -3533,7 +3523,8 @@ function getRoutePinsKey() {
   return getActivePinRoles()
     .map(role => {
       const pin = getReadyPin(role);
-      return pin ? `${pin.lat},${pin.lng}` : '-';
+      if (pin) return `${pin.lat},${pin.lng}`;
+      return role === 'end' && isFloodToEvacSite() ? 'evacuation-sites' : '-';
     })
     .join('|');
 }
@@ -3601,9 +3592,9 @@ function buildRouteInfoHtml() {
   const startPin = getReadyPin('start');
   const endPin = getReadyPin('end');
   const pinPrompt = (role, target) => pinPlacementRole === role
-    ? `Tap the map${role === 'end' && floodEvacSitesVisible ? ', or an <strong>evacuation site</strong>,' : ''} to pin ${target}.`
+    ? `Tap the map to pin ${target}.`
     : role === 'end'
-    ? `Choose ${target}: click <strong>${PIN_ROLE_COPY.end.empty}</strong>, then pick an <strong>evacuation site</strong> or a spot on the map.`
+    ? `Choose ${target}: click <strong>${PIN_ROLE_COPY.end.empty}</strong>, then <strong>Show Evacuation Sites</strong> or a spot on the map.`
     : `Pin ${target}: click <strong>${PIN_ROLE_COPY[role].empty}</strong>, then <strong>Choose on Map</strong>.`;
 
   if (!selectedHazard) {
@@ -3636,8 +3627,10 @@ function buildRouteInfoHtml() {
     // forced break isn't stretched.
     return `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to <strong>${escapeHtml(describePinPlace(endPin))}</strong>.<br>Click <strong>Run Simulation</strong>.`;
   }
-  if (startPin && isPickingFloodEvacSite()) {
-    return 'Location pinned. Tap an <strong>evacuation site</strong> on the map to make it your destination.';
+  if (isFloodToEvacSite() && !routePins.end) {
+    return startPin
+      ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the safest route.<br>Click <strong>Run Simulation</strong>.`
+      : `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
   if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;
@@ -3656,6 +3649,7 @@ async function selectHazard(name, el) {
     .filter(role => role === 'start' || name === 'Flood')
     .map(role => [role, getReadyPin(role)])
     .filter(([, pin]) => pin);
+  const carriesEvacSites = name === 'Flood' && isFloodToEvacSite();
 
   selectedHazard = name;
   // The panel's colours change with the hazard: cross-fade them rather
@@ -3691,12 +3685,11 @@ async function selectHazard(name, el) {
   onRoutePinsChange();
 
   if (carriedPins.length && canPlaceRoutePins()) {
-    carriedPins.forEach(([role, pin]) => placeRoutePin(role, pin.lat, pin.lng, { evacSite: pin.evacSite || null }));
-    // A destination on an evacuation site keeps the sites around it.
-    if (carriedPins.some(([, pin]) => pin.evacSite)) showFloodEvacuationSites({ fit: false, pick: false });
+    carriedPins.forEach(([role, pin]) => placeRoutePin(role, pin.lat, pin.lng));
   } else {
     setPinPlacementRole(getNextUnpinnedRole());
   }
+  if (carriesEvacSites) await showFloodEvacuationSites({ fit: false });
 }
 
 function getCompletedSteps() {
@@ -3706,7 +3699,7 @@ function getCompletedSteps() {
     3: !!getReadyPin('start'),
     4: isEarthquakeMode()
       ? earthquakeEvacSitesVisible
-      : !!getReadyPin('end'),
+      : !!getReadyPin('end') || isFloodToEvacSite(),
     5: canRunCurrentSimulation(),
   };
 }
@@ -3723,7 +3716,7 @@ function getMaxReachableStep() {
   }
 
   if (!getReadyPin('start')) return 3;
-  if (!getReadyPin('end')) return 4;
+  if (!getReadyPin('end') && !isFloodToEvacSite()) return 4;
   return 5;
 }
 
@@ -4003,11 +3996,11 @@ function fitMapToFloodEvacSites() {
   gMap.fitBounds(bounds, mapMoveOptions({ ...padding, maxZoom: PIN_PLACEMENT_ZOOM }));
 }
 
-// The destination field's "Show Evacuation Sites" (flood): puts the
-// barangay's evacuation sites on the map, and a tap on one makes it the
-// destination. pick: false only redraws them (a destination already on a
-// site, after a hazard re-select or a reload).
-async function showFloodEvacuationSites({ fit = true, pick = true } = {}) {
+// The destination field's "Show Evacuation Sites" (flood): the destination
+// becomes the barangay's evacuation sites, shown on the map, in place of a
+// pin -- the run picks the one with the safest route -- and the setup moves
+// straight on to Run.
+async function showFloodEvacuationSites({ fit = true } = {}) {
   closePinMenus();
   if (isSimulationInteractionLocked() || selectedHazard !== 'Flood' || !selectedBarangay) return;
 
@@ -4028,19 +4021,16 @@ async function showFloodEvacuationSites({ fit = true, pick = true } = {}) {
   }
 
   floodEvacSites = sites;
-  floodEvacSitesVisible = true;
-  if (pick) {
-    floodEvacPicking = true;
-    clearPinHintError();
-    // A site, not a map tap, sets the destination now.
-    if (pinPlacementRole === 'end') setPinPlacementRole(null);
+  floodToEvacSite = true;
+  clearPinHintError();
+  if (routePins.end) {
+    routePins.end = null;
+    pinCheckSeq.end += 1;
   }
-  syncFloodEvacMarkers();
+  if (pinPlacementRole === 'end') setPinPlacementRole(getNextUnpinnedRole());
   setFloodLegendContent();
   setMapLegendVisible(true);
-  syncPinHint();
-  syncRouteInfoBox();
-  syncRoutePinFields();
+  onRoutePinsChange();
   if (fit) fitMapToFloodEvacSites();
 }
 
@@ -4146,6 +4136,7 @@ function buildSimulationSessionBase(isEarthquakeRun) {
     hazard: selectedHazard,
     isEarthquake: isEarthquakeRun,
     pins: Object.fromEntries(PIN_ROLES.map(role => [role, getReadyPin(role)])),
+    toEvacuationSite: !isEarthquakeRun && isFloodToEvacSite() && !routePins.end,
   };
 }
 
@@ -4172,6 +4163,8 @@ async function runSimulation() {
   }
   const [endpoint, payload, label] = isEarthquakeRun
     ? ['/earthquake/simulate', { start: buildPinRequestPoint('start'), barangay: selectedBarangay }, 'Earthquake simulation']
+    : isFloodToEvacSite() && !routePins.end
+    ? ['/simulate', { start: buildPinRequestPoint('start'), to_evacuation_site: true, hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation']
     : ['/simulate', { start: buildPinRequestPoint('start'), end: buildPinRequestPoint('end'), hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation'];
 
   await followSimulationJob(() => submitSimulationJob(endpoint, payload), {
@@ -4303,6 +4296,8 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
     earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
   } else {
     setFloodLegendContent();
+    // The destination field names the evacuation site the run picked.
+    syncRoutePinFields();
   }
 
   setLoaderStep('draw', 92);
@@ -4345,9 +4340,7 @@ async function restoreSimulationSession(session) {
   });
   setPinPlacementRole(getNextUnpinnedRole());
   onRoutePinsChange();
-  if (!session.isEarthquake && routePins.end?.evacSite) {
-    await showFloodEvacuationSites({ fit: false, pick: false });
-  }
+  if (session.toEvacuationSite) await showFloodEvacuationSites({ fit: false });
 
   const context = {
     label: session.isEarthquake ? 'Earthquake simulation' : 'Simulation',
@@ -4438,12 +4431,6 @@ function resetRouteSafetyPanel() {
   setRouteSafetyPanelVisible(false);
   closeRouteListModal();
   window.mobileSim?.clearResults();
-}
-
-// The last turn step of a flood route: the evacuation site it ends at, by
-// name, or just "Your destination".
-function getFloodDestinationName() {
-  return getReadyPin('end')?.evacSite?.name || 'Your destination';
 }
 
 function getRouteTurnSteps(route) {
@@ -4625,7 +4612,7 @@ function renderRouteSafetyPanel(result) {
       <li class="turn-step">
         <span class="turn-step-icon">${safetyIcon('flag')}</span>
         <span class="turn-step-text">
-          <span class="turn-step-instruction">${escapeHtml(isEarthquakeRouteRecord(best) ? 'Your destination' : getFloodDestinationName())}</span>
+          <span class="turn-step-instruction">${escapeHtml(!isEarthquakeRouteRecord(best) && best?.destination_name ? best.destination_name : 'Your destination')}</span>
         </span>
       </li>
     </ol>`
@@ -5186,7 +5173,9 @@ async function downloadSimulationReport() {
     // evacuation site the ACO run picked, so label it with that instead.
     const isEq = isEarthquakeSimulationResult(simData);
     const eqSummary = isEq ? (simData.active_summary || getActiveEarthquakeViewData(simData)?.summary || null) : null;
-    const endLabel = isEq ? (eqSummary?.selected_evacuation_site?.name || 'Evacuation site') : end;
+    const endLabel = isEq
+      ? (eqSummary?.selected_evacuation_site?.name || 'Evacuation site')
+      : (simData.selected_evacuation_site?.name || end);
     const withPinCoordinates = (label, role) => {
       const pin = getReadyPin(role);
       return pin ? `${label} (${formatPinCoordinates(pin)})` : label;

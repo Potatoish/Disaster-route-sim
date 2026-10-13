@@ -547,10 +547,11 @@
     syncPinSlot('start');
     $('msimSlot-end').hidden = earthquake;
     if (!earthquake) syncPinSlot('end');
-    // Flood: the sites are only a way to choose the end point, so their slot
-    // goes once one is set (and is back while it is being moved) -- a third
-    // row would leave a short phone little map to tap a site on.
-    $('msimSlot-evac').hidden = !earthquake && !!routePins.end && getPinRole() !== 'end';
+    // Flood: the sites are one way to choose the end point, so their slot
+    // shows only while it is still open -- unset, or a pinned one being
+    // moved. Once they are the end point, the End slot says so.
+    $('msimSlot-evac').hidden = !earthquake
+      && (isFloodToEvacSite() || (!!routePins.end && getPinRole() !== 'end'));
     syncEvacSlot();
 
     const role = getPinRole();
@@ -578,11 +579,14 @@
 
     const pin = routePins[role];
     const placing = getPinRole() === role;
-    const waiting = role === 'end' && !pin && !getReadyPin('start');
+    // An end point that is the evacuation sites (or the one a run picked).
+    const toEvacSite = role === 'end' && !pin && isFloodToEvacSite();
+    const set = !!pin || toEvacSite;
+    const waiting = role === 'end' && !set && !getReadyPin('start');
     const pointName = role === 'start' ? 'start point' : 'end point';
 
     slot.classList.toggle('is-active', placing);
-    slot.classList.toggle('is-empty', !pin);
+    slot.classList.toggle('is-empty', !set);
     slot.classList.toggle('is-disabled', waiting && !placing);
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
@@ -590,12 +594,14 @@
       ? pin.label || PIN_ROLE_COPY[role].fallbackLabel
       : placing
       ? `Move the map, then tap “Set ${role} here”`
+      : toEvacSite
+      ? getFloodResultEvacSite()?.name || 'Evacuation site with the safest route'
       : waiting
       ? 'Set the start point first'
       : 'Not set yet';
 
     // Edit moves a set pin, Cancel stops moving it, Set arms an empty one.
-    const label = pin ? (placing ? 'Cancel' : 'Edit') : (placing || waiting ? '' : 'Set');
+    const label = set ? (placing ? 'Cancel' : 'Edit') : (placing || waiting ? '' : 'Set');
     edit.hidden = !label
       || pin?.status === 'checking'
       || !canPlaceRoutePins()
@@ -604,8 +610,8 @@
     edit.setAttribute('aria-label', label ? `${label} ${pointName}` : '');
   }
 
-  // Earthquake: the sites the run chooses from. Flood: sites to pick as the
-  // end point (a tap on one on the map), like the desktop's destination menu.
+  // The sites the run chooses from: earthquake's destination, and flood's
+  // when Show makes them the end point (the desktop's destination menu).
   function syncEvacSlot() {
     const slot = $('msimSlot-evac');
     const value = $('msimSlotValue-evac');
@@ -614,15 +620,12 @@
     slot.classList.toggle('mslot--flood', !isEarthquakeMode());
 
     if (!isEarthquakeMode()) {
-      const shown = floodEvacSitesVisible;
-      slot.classList.toggle('is-empty', !shown);
-      slot.classList.toggle('is-disabled', !hasStart && !shown);
-      value.textContent = shown
-        ? `${floodEvacSites.length} on the map. Tap one to make it your end point.`
-        : hasStart
-        ? 'Tap Show to pick one as your end point'
+      slot.classList.add('is-empty');
+      slot.classList.toggle('is-disabled', !hasStart);
+      value.textContent = hasStart
+        ? 'Tap Show to go to the one with the safest route'
         : 'Set the start point first';
-      button.hidden = shown || !hasStart || !canPlaceRoutePins();
+      button.hidden = !hasStart || !canPlaceRoutePins();
       button.disabled = isSimulationInteractionLocked();
       return;
     }
@@ -649,11 +652,7 @@
       return `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
     }
     if (checking) return 'Checking that the pinned spot can be reached by road…';
-    if (role === 'end' && floodEvacSitesVisible) {
-      return 'Drag the map so the pin sits on the end point, or tap an evacuation site.';
-    }
     if (role) return `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.`;
-    if (isPickingFloodEvacSite()) return 'Tap an evacuation site on the map to make it your end point.';
     if (isEarthquakeMode() && getReadyPin('start') && !earthquakeEvacSitesVisible) {
       return 'Tap Show to put the evacuation sites on the map, then run the simulation.';
     }
@@ -693,9 +692,7 @@
     const steps = getRouteTurnSteps(route);
     if (!steps.length) return '';
 
-    const destination = isEarthquakeRouteRecord(route)
-      ? route.destination_name || 'Your destination'
-      : getFloodDestinationName();
+    const destination = route.destination_name || 'Your destination';
     const items = steps.map((step, index) => `
       <li class="turn-step">
         <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>
@@ -724,7 +721,7 @@
       : route.category === 'available' ? 'available' : 'eliminated';
     const tag = isBest ? ` · ${getTopRouteName(route).toLowerCase()}` : route.category === 'eliminated' ? ' · eliminated' : '';
     const risk = describeRouteRisk(route);
-    const destination = isEarthquakeRouteRecord(route) && route.destination_name
+    const destination = route.destination_name
       ? `<span class="mroute-dest">To ${escapeHtml(route.destination_name)}</span>`
       : '';
 
@@ -786,8 +783,8 @@
     $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
 
     const destination = $('msimSummaryDest');
-    destination.hidden = !(isEarthquake && best?.destination_name);
-    destination.textContent = isEarthquake && best?.destination_name ? `To ${best.destination_name}` : '';
+    destination.hidden = !best?.destination_name;
+    destination.textContent = best?.destination_name ? `To ${best.destination_name}` : '';
     const farNote = $('msimFarNote');
     farNote.hidden = !isFarFromOpenArea(best);
     farNote.textContent = farNote.hidden ? '' : FAR_FROM_OPEN_AREA_NOTE;
@@ -933,8 +930,8 @@
     clearPinHintError();
 
     if (getPinRole() === role) {
-      // Cancel: keep the pin where it was.
-      if (pin) setPinPlacementRole(getNextUnpinnedRole());
+      // Cancel: keep the pin where it was (or the evacuation sites).
+      if (pin || (role === 'end' && isFloodToEvacSite())) setPinPlacementRole(getNextUnpinnedRole());
       return;
     }
 
