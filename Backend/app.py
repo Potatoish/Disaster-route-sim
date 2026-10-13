@@ -54,12 +54,6 @@ app = Flask(
 )
 CORS(app)
 
-# Static URLs carry a hash of the file's content (?v=...), so browsers can
-# keep them for a year without asking again: a changed file gets a new URL.
-# Without this every page view re-asked the server about each file, a full
-# round trip each before the page could use its cached CSS. The hash is of
-# the content, not the mtime, because Railway gives every file the commit's
-# time, so one deploy would have re-downloaded every unchanged file too.
 STATIC_CACHE_SECONDS = 365 * 24 * 60 * 60
 _STATIC_HASHES = {}
 
@@ -197,23 +191,9 @@ def _mark_simulation_finished():
         _SIMULATION_STATE["started_at"] = None
         _SIMULATION_STATE["request"] = None
 
-
-# ---- Simulation queue ----
-# Simulations run one at a time on a single worker thread, first come first
-# served: the graph caches, the progress counter and the CPU are shared. The
-# frontend submits with {"async": true} and polls GET /simulation-jobs/<id>,
-# so a page reload can pick its run back up; without "async" the request
-# waits for its result. A request identical to a recent one (same mode,
-# barangay, hazard and pins -- the colony is seeded from those) gets that
-# job back instead of running again.
 JOB_RESULT_TTL_SECONDS = 30 * 60
 MAX_KEPT_JOBS = 40
 SYNC_WAIT_TIMEOUT_SECONDS = 300
-# One worker runs every simulation, so a script sending new pins in a loop
-# would make everyone else wait behind it. A person runs one at a time (the
-# page sends a per-tab client_id), but a class on one Wi-Fi, or phones on one
-# mobile network, share an IP, so the per-IP cap is much higher. A run takes
-# a few seconds, so a full queue clears in a few minutes.
 MAX_ACTIVE_JOBS_PER_BROWSER = 2
 MAX_ACTIVE_JOBS_PER_IP = 40
 MAX_QUEUED_JOBS = 60
@@ -757,18 +737,11 @@ def _warm_caches():
     print(f"[warm-up] caches ready in {time.time() - started:.1f}s")
 
 Thread(target=_warm_caches, name="cache-warm-up", daemon=True).start()
-# Run directly (the local dev server, never gunicorn) there is no
-# FEEDBACK_SHEET_URL, so the homepage shows the live site's visitor count
-# (contact_service.USE_LIVE_VISITOR_COUNT). Set before the warm-up reads it.
 contact_service.USE_LIVE_VISITOR_COUNT = __name__ == "__main__"
 # Its own thread: the sheet answers in seconds, the graphs take longer.
 Thread(target=warm_visitor_count, name="visitor-count-warm-up", daemon=True).start()
 
 def _stop_old_dev_servers(port):
-    # Werkzeug binds with SO_REUSEADDR, which on Windows lets a second server
-    # listen on a port that is already taken instead of failing. A dev server
-    # left running in another terminal then keeps answering with its old data
-    # and caches, so the restarted one looks like it ignored every change.
     if os.name != "nt":
         return
     import subprocess
@@ -778,9 +751,6 @@ def _stop_old_dev_servers(port):
         ).stdout
     except (OSError, subprocess.SubprocessError):
         return
-    # netstat, not Get-NetTCPConnection: that lists only one of several
-    # sockets sharing the port. A listening socket's remote end is 0.0.0.0:0,
-    # which holds in every Windows language (the "LISTENING" word does not).
     pids = set()
     for row in netstat.splitlines():
         cols = row.split()
