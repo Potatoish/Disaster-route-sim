@@ -5206,6 +5206,13 @@ const REPORT_MAP_MAX_ZOOM = 19; // matches the live street layer's maxZoom
 const REPORT_MAP_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const REPORT_MAP_TILE_TIMEOUT_MS = 8000;
 const REPORT_MAP_ATTRIBUTION = 'Map data © OpenStreetMap contributors';
+// The report map's pins, in the live map's colors (the S/E pins, and the green
+// "CHOSEN" evacuation site); the edge colors are for the legend's dots.
+const REPORT_PIN_COLORS = {
+  start: { color: '#06b6d4', edge: '#155e75' },
+  end: { color: '#a855f7', edge: '#6b21a8' },
+  chosenSite: { color: '#22c55e', edge: '#14532d' },
+};
 
 function reportMercatorX(lng, zoom) {
   return (lng + 180) / 360 * REPORT_MAP_TILE_SIZE * Math.pow(2, zoom);
@@ -5422,10 +5429,75 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
 
   const [sx, sy] = project(startPin);
   const [ex, ey] = project(endPin);
-  drawReportPin(ctx, sx, sy, '#06b6d4', labels.start || 'Start');
-  drawReportPin(ctx, ex, ey, '#a855f7', labels.end || 'Destination');
+  drawReportPin(ctx, sx, sy, REPORT_PIN_COLORS.start.color, labels.start || 'Start');
+  drawReportPin(ctx, ex, ey, (labels.endPin || REPORT_PIN_COLORS.end).color, labels.end || 'Destination');
 
   return { canvas, usedBasemap };
+}
+
+// The legend strip under the report map: each mark on the map, in the
+// live legend's names. Items flow left to right and wrap. Returns the y
+// below the strip.
+function drawReportMapLegend(doc, items, { x, y, width }) {
+  const padX = 10;
+  const rowHeight = 16;
+  const itemGap = 18;
+  const swatchGap = 5;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  const title = 'Legend';
+  const itemsLeft = x + padX + doc.getTextWidth(title) + 14;
+  doc.setFont('helvetica', 'normal');
+
+  let row = 0;
+  let cursor = itemsLeft;
+  const placed = items.map(item => {
+    const swatch = item.kind === 'line' ? 22 : 10;
+    const itemWidth = swatch + swatchGap + doc.getTextWidth(item.label);
+    if (cursor > itemsLeft && cursor + itemWidth > x + width - padX) {
+      row += 1;
+      cursor = itemsLeft;
+    }
+    const spot = { ...item, swatch, left: cursor, row };
+    cursor += itemWidth + itemGap;
+    return spot;
+  });
+
+  const height = (row + 1) * rowHeight + 8;
+  doc.setLineWidth(0.6);
+  doc.setDrawColor(203, 213, 225);
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(x, y, width, height, 4, 4, 'FD');
+
+  // Middle of each row; text sits 3.2pt below it to look centered at 9pt.
+  const middle = rowNo => y + 4 + rowNo * rowHeight + rowHeight / 2;
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.text(title, x + padX, middle(0) + 3.2);
+  doc.setFont('helvetica', 'normal');
+  placed.forEach(item => {
+    const cy = middle(item.row);
+    if (item.kind === 'line') {
+      // Like the route on the map: a thin darker edge around the color.
+      doc.setLineCap('round');
+      doc.setDrawColor(item.edge);
+      doc.setLineWidth(4.4);
+      doc.line(item.left + 2, cy, item.left + item.swatch - 2, cy);
+      doc.setDrawColor(item.color);
+      doc.setLineWidth(3);
+      doc.line(item.left + 2, cy, item.left + item.swatch - 2, cy);
+      doc.setLineCap('butt');
+    } else {
+      doc.setFillColor(item.color);
+      doc.setDrawColor(item.edge);
+      doc.setLineWidth(1);
+      doc.circle(item.left + item.swatch / 2, cy, 4, 'FD');
+    }
+    doc.text(item.label, item.left + item.swatch + swatchGap, cy + 3.2);
+  });
+  doc.setDrawColor(0);
+  doc.setTextColor(0);
+  return y + height;
 }
 
 async function downloadSimulationReport() {
@@ -5463,7 +5535,12 @@ async function downloadSimulationReport() {
 
     const peak = getPeakRiskRow(best, isEq);
 
-    let mapResult = await renderBestRouteMapCanvas(best, { start, end: endLabel });
+    // An evacuation site the run chose (earthquake, or flood's default) is the
+    // green CHOSEN pin, as on the live map; a destination of one's own is E.
+    const endIsChosenSite = isEq || !!simData.to_evacuation_site;
+    const endPin = endIsChosenSite ? REPORT_PIN_COLORS.chosenSite : REPORT_PIN_COLORS.end;
+    const mapLabels = { start, end: endLabel, endPin };
+    let mapResult = await renderBestRouteMapCanvas(best, mapLabels);
     let mapDataUrl;
     try {
       mapDataUrl = mapResult.canvas.toDataURL('image/png');
@@ -5472,7 +5549,7 @@ async function downloadSimulationReport() {
       // despite the ACAO/crossOrigin handling, redo it without the basemap
       // instead of failing the whole report.
       console.warn('Report map canvas was tainted, redrawing without basemap —', err.message);
-      mapResult = await renderBestRouteMapCanvas(best, { start, end: endLabel }, { skipBasemap: true });
+      mapResult = await renderBestRouteMapCanvas(best, mapLabels, { skipBasemap: true });
       mapDataUrl = mapResult.canvas.toDataURL('image/png');
     }
 
@@ -5499,7 +5576,14 @@ async function downloadSimulationReport() {
     const mapWidth = pageWidth - margin * 2;
     const mapHeight = mapWidth * (mapResult.canvas.height / mapResult.canvas.width);
     doc.addImage(mapDataUrl, 'PNG', margin, y, mapWidth, mapHeight);
-    y += mapHeight + 12;
+    y += mapHeight + 6;
+
+    const routeColor = getBestRouteColor(best);
+    y = drawReportMapLegend(doc, [
+      { kind: 'line', color: routeColor, edge: getRouteEdgeColor(routeColor), label: getTopRouteTitle(best) },
+      { kind: 'pin', ...REPORT_PIN_COLORS.start, label: 'Start' },
+      { kind: 'pin', ...endPin, label: endIsChosenSite ? 'Chosen evacuation site' : 'Destination' },
+    ], { x: margin, y, width: mapWidth }) + 12;
 
     if (mapResult.usedBasemap) {
       doc.setFont('helvetica', 'normal');
@@ -5512,6 +5596,16 @@ async function downloadSimulationReport() {
       y += 12;
     }
 
+    // A block that would run off the page starts a new one.
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const ensureSpace = height => {
+      if (y + height > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
+    ensureSpace(48);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.text('Simulation Summary', margin, y);
@@ -5550,6 +5644,7 @@ async function downloadSimulationReport() {
     const valueWidth = pageWidth - margin * 2 - labelColWidth;
     rows.forEach(([label, value]) => {
       const valueLines = doc.splitTextToSize(String(value), valueWidth);
+      ensureSpace((valueLines.length - 1) * 13 + 4);
       doc.setFont('helvetica', 'bold');
       doc.text(String(label), margin, y);
       doc.setFont('helvetica', 'normal');
@@ -5563,17 +5658,10 @@ async function downloadSimulationReport() {
     doc.setTextColor(120);
     const rankingText = `How routes are ordered: ${getUserFriendlyRankingExplanation()}`;
     const wrappedRanking = doc.splitTextToSize(rankingText, pageWidth - margin * 2);
+    ensureSpace(wrappedRanking.length * 12);
     doc.text(wrappedRanking, margin, y);
     y += wrappedRanking.length * 12 + 10;
 
-    // A block that would run off the page starts a new one.
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const ensureSpace = height => {
-      if (y + height > pageHeight - margin) {
-        doc.addPage();
-        y = margin;
-      }
-    };
     const LINK_RGB = [29, 78, 216];
 
     // Data sources: what this simulation used, each with a clickable link,
