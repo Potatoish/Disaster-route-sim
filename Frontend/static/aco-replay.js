@@ -1044,7 +1044,8 @@
     function start() {
       return new Promise(resolve => {
         state.resolve = resolve;
-        if (!roundCount) {
+        // Skipped before it began (Skip is on screen while the loader fades).
+        if (state.done || !roundCount) {
           state.done = true;
           resolve();
           return;
