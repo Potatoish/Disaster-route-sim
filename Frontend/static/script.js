@@ -2595,11 +2595,11 @@ function syncRoutePinFields() {
       : placingOwn
       ? 'Tap the map where you want to go'
       : pin?.label || PIN_ROLE_COPY[role].empty;
-    meta.hidden = !pin && !toEvacSite && !placingOwn;
+    meta.hidden = !pin && !resultSite && !placingOwn;
     meta.textContent = pin
       ? formatPinCoordinates(pin)
-      : toEvacSite
-      ? (resultSite ? 'Evacuation site with the safest route' : 'AGNAS picks the one with the safest route')
+      : resultSite
+      ? 'Chosen evacuation site'
       : placingOwn
       ? 'Your own destination'
       : '';
