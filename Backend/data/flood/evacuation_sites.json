@@ -1,0 +1,48 @@
+{
+  "pinagbuhatan": [
+    {
+      "id": "sunrise-ville-nagpayong-basketball-court",
+      "name": "Sunrise Ville Nagpayong Basketball Court",
+      "lat": 14.539484,
+      "lng": 121.102068
+    },
+    {
+      "id": "ilugin-elementary-school",
+      "name": "Ilugin Elementary School",
+      "lat": 14.552776,
+      "lng": 121.099927
+    },
+    {
+      "id": "pinagbuhatan-multi-purpose-hall-damayan",
+      "name": "Pinagbuhatan Multi Purpose Hall Damayan",
+      "lat": 14.554896,
+      "lng": 121.091416
+    },
+    {
+      "id": "nagpayong-multipurpose-hall",
+      "name": "Nagpayong Multipurpose Hall",
+      "lat": 14.544851,
+      "lng": 121.103073
+    }
+  ],
+  "sta lucia": [
+    {
+      "id": "de-castro-elementary-school",
+      "name": "De Castro Elementary School",
+      "lat": 14.587088,
+      "lng": 121.098459
+    },
+    {
+      "id": "sta-lucia-bliss-multipurpose-hall",
+      "name": "Sta. Lucia Bliss Multipurpose Hall",
+      "lat": 14.588174,
+      "lng": 121.099527
+    },
+    {
+      "id": "countryside-multipurpose-center",
+      "name": "Countryside Multipurpose Center",
+      "lat": 14.587375,
+      "lng": 121.101185
+    }
+  ]
+}

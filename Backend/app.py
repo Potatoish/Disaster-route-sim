@@ -33,6 +33,7 @@ from osm_routing import (
     check_flood_pin,
     get_barangay_boundary,
     get_barangay_boundary_payload,
+    get_flood_evacuation_sites,
 )
 from simulation_progress import get_progress, reset_progress
 
@@ -567,6 +568,33 @@ def run_simulation():
             "error": True,
             "message": str(e)
         }), 500
+
+@app.route("/flood/evac-sites", methods=["GET"])
+def flood_evac_sites():
+    barangay = (request.args.get("barangay") or "").strip()
+    if not barangay:
+        return jsonify({
+            "error": True,
+            "message": "Barangay name is required"
+        }), 400
+
+    try:
+        sites = get_flood_evacuation_sites(barangay)
+    except ValueError as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+
+    return jsonify({
+        "error": False,
+        "evacuation_sites": sites,
+    })
 
 @app.route("/earthquake/evac-sites", methods=["GET"])
 def earthquake_evac_sites():

@@ -469,7 +469,7 @@ body.dark .workflow-card.active {
   font-weight: 800;
 }
 
-.earthquake-evac-btn {
+.evac-btn {
   appearance: none;
   border: none;
   border-radius: 10px;
@@ -485,12 +485,12 @@ body.dark .workflow-card.active {
   box-shadow: 0 6px 20px var(--hazard-button-shadow);
 }
 
-.earthquake-evac-btn:hover {
+.evac-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 26px var(--hazard-button-hover-shadow);
 }
 
-.earthquake-evac-btn:disabled {
+.evac-btn:disabled {
   opacity: .48;
   cursor: not-allowed;
   transform: none;
@@ -770,6 +770,15 @@ body.dark .pin-input-menu {
   /* A tint alone is too faint to count as a focus indicator. */
   box-shadow: inset 0 0 0 2px var(--accent);
   outline: none;
+}
+
+/* The destination menu's "Show Evacuation Sites": the earthquake panel's
+   button, across the menu above "Or choose where you want to go". */
+.pin-input-menu-evac {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+  text-align: center;
 }
 
 .pin-input-menu-icon {
@@ -2214,7 +2223,7 @@ body.dark .emergency-modal {
 
 .card-action-btn:focus-visible,
 .run-btn:focus-visible,
-.earthquake-evac-btn:focus-visible,
+.evac-btn:focus-visible,
 .eqtab:focus-visible,
 .reset-btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -2626,7 +2635,7 @@ body.dark .leaflet-popup-close-button {
   .card-action-btn,
   .panel-back-btn,
   .pin-input,
-  .earthquake-evac-btn,
+  .evac-btn,
   .panel-barangay-seg button,
   .safety-card-action {
     min-height: 44px;
@@ -3605,6 +3614,8 @@ body.dark .leaflet-popup-close-button {
 
 .mslot--end .mslot-badge { background: #9333ea; }
 .mslot--evac .mslot-badge { background: #d97706; }
+/* Flood evacuation sites are blue on the map (flood.js). */
+.mslot--evac.mslot--flood .mslot-badge { background: #2563eb; }
 
 .mslot-badge svg {
   width: 13px;
@@ -4507,7 +4518,7 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
    with the hover lifts that use `transform`; each control lists it in its
    own transition. */
 @media (prefers-reduced-motion: no-preference) {
-  :is(.run-btn, .earthquake-evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
+  :is(.run-btn, .evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
       .reset-btn, .safety-download-btn, .safety-all-routes-btn, .route-modal-btn,
       .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
       .safety-card-action, .msummary-rescue):active:not(:disabled) {

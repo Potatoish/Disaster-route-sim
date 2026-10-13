@@ -119,6 +119,7 @@ _BARANGAY_BASE_GRAPH_CACHE = {}
 _FLOOD_ZONES_CACHE = None
 _FLOOD_LAYER_PAYLOAD_CACHE = {}
 _BARANGAY_BOUNDARIES_CACHE = None
+_FLOOD_EVACUATION_SITES_CACHE = None
 _STATIC_CACHE_LOCK = RLock()
 _GRAPH_BUILD_LOCK = RLock()
 _GRAPH_ANNOTATION_LOCK = RLock()
@@ -157,6 +158,7 @@ ox.settings.cache_folder = str(OSMNX_CACHE_DIR)
 FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
 BOUNDARIES_DIR = Path(__file__).parent / "data" / "boundaries"
 GRAPHS_DIR = Path(__file__).parent / "data" / "graphs"
+FLOOD_EVACUATION_SITES_FILE = Path(__file__).parent / "data" / "flood" / "evacuation_sites.json"
 FLOOD_ZONE_FILES = [
     FLOOD_CLASSES_DIR / "flood_var_1.geojson",
     FLOOD_CLASSES_DIR / "flood_var_2.geojson",
@@ -447,6 +449,31 @@ def get_barangay_boundary_payload(name):
         "canonical_name": boundary["canonical_name"],
         "paths": geometry_exterior_paths(boundary["geometry"]),
     }
+
+
+def get_flood_evacuation_sites(barangay_name):
+    """The barangay's flood evacuation centers, offered as destinations. Only a
+    picker: the frontend sets the destination pin on the chosen site, so the
+    route still ends on the street nearest it, like any other pin."""
+    global _FLOOD_EVACUATION_SITES_CACHE
+
+    canonical_name = normalize_barangay_name(barangay_name)
+    if canonical_name not in BARANGAY_BOUNDARY_FILES:
+        raise ValueError(f"No flood evacuation sites for '{barangay_name}'")
+
+    if _FLOOD_EVACUATION_SITES_CACHE is None:
+        with FLOOD_EVACUATION_SITES_FILE.open("r", encoding="utf-8-sig") as handle:
+            _FLOOD_EVACUATION_SITES_CACHE = json.load(handle)
+
+    return [
+        {
+            "id": str(site["id"]),
+            "name": str(site["name"]),
+            "lat": float(site["lat"]),
+            "lng": float(site["lng"]),
+        }
+        for site in _FLOOD_EVACUATION_SITES_CACHE.get(canonical_name, [])
+    ]
 
 
 def get_flood_var_risk_label(var_value):

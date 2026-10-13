@@ -53,44 +53,11 @@
     Object.values(state.hazardOverlays).forEach(overlays => clearMapObjects(overlays));
   }
 
+  // "OPEN AREA" is wider than "CHOSEN", so its text is a point smaller.
   function buildEvacMarkerIcon(isHighlighted) {
-    const fill = isHighlighted ? '#22c55e' : '#f59e0b';
-    const stroke = isHighlighted ? '#14532d' : '#9a3412';
-    const accent = isHighlighted ? '#166534' : '#b45309';
-    const label = isHighlighted ? 'CHOSEN' : 'OPEN AREA';
-    // "OPEN AREA" is wider than the 66-unit pin, so its badge overhangs it a
-    // little and its text is a point smaller.
-    const badgeWidth = isHighlighted ? 56 : 80;
-    const labelSize = isHighlighted ? 11 : 10;
-    const halo = isHighlighted
-      ? `<circle cx="46" cy="38" r="33" fill="rgba(34,197,94,0.18)" />`
-      : '';
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="92" height="110" viewBox="0 0 92 110">
-        <defs>
-          <filter id="evacShadow" x="-20%" y="-20%" width="140%" height="160%">
-            <feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="rgba(15,23,42,0.26)"/>
-          </filter>
-        </defs>
-        ${halo}
-        <g filter="url(#evacShadow)">
-          <path d="M46 8c-18.2 0-33 14.8-33 33 0 21.8 25.4 41.6 33 58 7.6-16.4 33-36.2 33-58 0-18.2-14.8-33-33-33z"
-            fill="${fill}" stroke="${stroke}" stroke-width="3"/>
-          <circle cx="46" cy="38" r="18" fill="#ffffff" opacity="0.98"/>
-          <path d="M34 40l12-10 12 10" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M38 40v11h16V40" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M46 45v6" fill="none" stroke="${accent}" stroke-width="3.2" stroke-linecap="round"/>
-          <rect x="${46 - badgeWidth / 2}" y="63" width="${badgeWidth}" height="18" rx="9" fill="#ffffff" opacity="0.98"/>
-          <text x="46" y="75.5" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="${labelSize}" font-weight="800" fill="${accent}">${label}</text>
-        </g>
-      </svg>
-    `;
-
-    return L.icon({
-      iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-      iconSize: [58, 70],
-      iconAnchor: [29, 63],
-    });
+    return buildEvacSiteMarkerIcon(isHighlighted
+      ? { fill: '#22c55e', stroke: '#14532d', accent: '#166534', label: 'CHOSEN', badgeWidth: 56, labelSize: 11, halo: true }
+      : { fill: '#f59e0b', stroke: '#9a3412', accent: '#b45309', label: 'OPEN AREA', badgeWidth: 80, labelSize: 10 });
   }
 
   // Setup and surroundings are safety claims, so a site without them in the

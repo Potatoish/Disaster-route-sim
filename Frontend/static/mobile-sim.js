@@ -546,9 +546,12 @@
 
     syncPinSlot('start');
     $('msimSlot-end').hidden = earthquake;
-    $('msimSlot-evac').hidden = !earthquake;
-    if (earthquake) syncEvacSlot();
-    else syncPinSlot('end');
+    if (!earthquake) syncPinSlot('end');
+    // Flood: the sites are only a way to choose the end point, so their slot
+    // goes once one is set (and is back while it is being moved) -- a third
+    // row would leave a short phone little map to tap a site on.
+    $('msimSlot-evac').hidden = !earthquake && !!routePins.end && getPinRole() !== 'end';
+    syncEvacSlot();
 
     const role = getPinRole();
     const checking = isAnyRoutePinChecking();
@@ -601,12 +604,30 @@
     edit.setAttribute('aria-label', label ? `${label} ${pointName}` : '');
   }
 
+  // Earthquake: the sites the run chooses from. Flood: sites to pick as the
+  // end point (a tap on one on the map), like the desktop's destination menu.
   function syncEvacSlot() {
     const slot = $('msimSlot-evac');
     const value = $('msimSlotValue-evac');
     const button = $('msimEvacBtn');
-    const supported = isEarthquakeBarangaySupported();
     const hasStart = !!getReadyPin('start');
+    slot.classList.toggle('mslot--flood', !isEarthquakeMode());
+
+    if (!isEarthquakeMode()) {
+      const shown = floodEvacSitesVisible;
+      slot.classList.toggle('is-empty', !shown);
+      slot.classList.toggle('is-disabled', !hasStart && !shown);
+      value.textContent = shown
+        ? `${floodEvacSites.length} on the map. Tap one to make it your end point.`
+        : hasStart
+        ? 'Tap Show to pick one as your end point'
+        : 'Set the start point first';
+      button.hidden = shown || !hasStart || !canPlaceRoutePins();
+      button.disabled = isSimulationInteractionLocked();
+      return;
+    }
+
+    const supported = isEarthquakeBarangaySupported();
     const loaded = earthquakeEvacSitesVisible;
 
     slot.classList.toggle('is-empty', !loaded);
@@ -628,7 +649,11 @@
       return `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
     }
     if (checking) return 'Checking that the pinned spot can be reached by road…';
+    if (role === 'end' && floodEvacSitesVisible) {
+      return 'Drag the map so the pin sits on the end point, or tap an evacuation site.';
+    }
     if (role) return `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.`;
+    if (isPickingFloodEvacSite()) return 'Tap an evacuation site on the map to make it your end point.';
     if (isEarthquakeMode() && getReadyPin('start') && !earthquakeEvacSitesVisible) {
       return 'Tap Show to put the evacuation sites on the map, then run the simulation.';
     }
@@ -668,9 +693,9 @@
     const steps = getRouteTurnSteps(route);
     if (!steps.length) return '';
 
-    const destination = isEarthquakeRouteRecord(route) && route.destination_name
-      ? route.destination_name
-      : 'Your destination';
+    const destination = isEarthquakeRouteRecord(route)
+      ? route.destination_name || 'Your destination'
+      : getFloodDestinationName();
     const items = steps.map((step, index) => `
       <li class="turn-step">
         <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>

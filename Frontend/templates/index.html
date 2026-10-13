@@ -152,9 +152,12 @@
                     <span class="pin-field-meta" id="endPinMeta" hidden></span>
                   </button>
                   <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
+                    <button type="button" class="evac-btn pin-input-menu-evac" role="menuitem" onclick="showFloodEvacuationSites()">
+                      Show Evacuation Sites
+                    </button>
                     <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('end')">
                       <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
-                      Choose on Map
+                      Or choose where you want to go
                     </button>
                   </div>
                 </div>
@@ -167,7 +170,7 @@
               <div class="earthquake-route-copy" id="earthquakeRouteCopy">
                 Click <strong>Show Evacuation Sites</strong> to reveal the available evacuation shelters for Pinagbuhatan.
               </div>
-              <button class="earthquake-evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
+              <button class="evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
                 Show Evacuation Sites
               </button>
               <div class="earthquake-route-status" id="evacStatusTxt">Evacuation sites are hidden.</div>
@@ -357,7 +360,7 @@
                   </div>
                   <button class="mslot-edit" id="msimSlotEdit-end" type="button" onclick="editMobilePin('end')" hidden>Edit</button>
                 </div>
-                <div class="mslot mslot--evac" id="msimSlot-evac" hidden>
+                <div class="mslot mslot--evac" id="msimSlot-evac">
                   <span class="mslot-badge" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>
                   </span>

@@ -3,6 +3,20 @@
     hazardCache: new Map(),
     dataLayer: null,
     highlightVar: null,
+    evacuationSitesCache: new Map(),
+    evacuationSites: null,
+    evacuationMarkers: [],
+  };
+
+  // Blue, not the earthquake open areas' amber: amber and orange are the
+  // Low/Medium flood fills these pins sit on after a run.
+  const EVAC_MARKER_STYLE = {
+    fill: '#2563eb',
+    stroke: '#1e3a8a',
+    accent: '#1d4ed8',
+    label: 'EVAC SITE',
+    badgeWidth: 76,
+    labelSize: 10,
   };
 
   // Strong enough to read against the OSM basemap's own beige/tan fills;
@@ -119,13 +133,78 @@
     fadeInHazardPane(map);
   }
 
+  async function loadEvacuationSites(barangay) {
+    if (!barangay) {
+      throw new Error('Barangay is required to load evacuation sites.');
+    }
+    if (state.evacuationSitesCache.has(barangay)) {
+      return state.evacuationSitesCache.get(barangay);
+    }
+
+    const response = await fetch(
+      `${getBackendBase()}/flood/evac-sites?barangay=${encodeURIComponent(barangay)}`
+    );
+    const data = await response.json();
+    if (!response.ok || data?.error) {
+      throw new Error(data?.message || 'Failed to load evacuation sites.');
+    }
+
+    const sites = Array.isArray(data.evacuation_sites) ? data.evacuation_sites : [];
+    state.evacuationSitesCache.set(barangay, sites);
+    return sites;
+  }
+
+  function clearEvacuationSites() {
+    state.evacuationMarkers.forEach(({ marker }) => marker.remove());
+    state.evacuationMarkers = [];
+    state.evacuationSites = null;
+  }
+
+  // A site is picked as the destination, so a tap on its pin hands it to
+  // onPick instead of opening a popup. The site the destination pin stands
+  // on (hiddenSiteId) is left off: that pin already marks it.
+  function drawEvacuationSites({ map, sites, hiddenSiteId = null, onPick = null }) {
+    if (!map || !Array.isArray(sites) || !sites.length) {
+      clearEvacuationSites();
+      return;
+    }
+
+    // Pins already on the map only show or hide, so they don't flicker each
+    // time the destination moves.
+    if (state.evacuationSites !== sites) {
+      clearEvacuationSites();
+      state.evacuationSites = sites;
+      state.evacuationMarkers = sites.map(site => {
+        const marker = L.marker({ lat: Number(site.lat), lng: Number(site.lng) }, {
+          title: site.name,
+          alt: `Evacuation site: ${site.name}`,
+          zIndexOffset: 3000,
+          icon: buildEvacSiteMarkerIcon(EVAC_MARKER_STYLE),
+        });
+        marker.on('click', () => onPick?.(site));
+        return { site, marker };
+      });
+    }
+
+    state.evacuationMarkers.forEach(({ site, marker }) => {
+      const shown = site.id !== hiddenSiteId;
+      if (shown && !map.hasLayer(marker)) marker.addTo(map);
+      else if (!shown && map.hasLayer(marker)) marker.remove();
+    });
+  }
+
   function reset() {
     clearLayer();
+    clearEvacuationSites();
   }
 
   window.floodHazardUI = {
     loadHazardLayers,
     renderHazardLayers,
+    loadEvacuationSites,
+    drawEvacuationSites,
+    clearEvacuationSites,
+    evacMarkerStyle: EVAC_MARKER_STYLE,
     reset,
   };
 })();
