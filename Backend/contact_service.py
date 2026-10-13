@@ -98,7 +98,7 @@ VISITOR_COUNT_RETRY_SECONDS = 5
 # variables), so app.py turns this on when run directly and the homepage there
 # shows the live site's count instead of a dash. Only read: local visits never
 # count.
-LIVE_VISITOR_COUNT_URL = "https://agnas-route.up.railway.app/visitors"
+LIVE_VISITOR_COUNT_URL = "https://agnas-nav.up.railway.app/visitors"
 USE_LIVE_VISITOR_COUNT = False
 
 FEEDBACK_RATINGS = {1: "Confusing", 2: "Okay", 3: "Clear"}
