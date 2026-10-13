@@ -10,13 +10,26 @@
 // a card over the map on short screens.
 (function initAcoReplay() {
   const TRAIL_PANE = 'acoTrailPane';
+  const ROUTE_PANE = 'acoRoutePane';
   const ANT_PANE = 'acoAntPane';
   // Above the hazard fills (350), under the route lines (overlayPane, 400)
-  // and the pins (markerPane, 600); the ants walk above the trails.
+  // and the pins (markerPane, 600); Route 1 is drawn over the trails, and
+  // the ants walk above both.
   const TRAIL_PANE_Z = 380;
+  const ROUTE_PANE_Z = 385;
   const ANT_PANE_Z = 450;
-  const TRAIL_COLOR = '#2563eb';
+  // The trail color, rgb.
   const SCENT = '37, 99, 235';
+  // Trails are stroked in this many strengths, one path each, so a frame
+  // costs a few strokes however many roads the ants took.
+  const TRAIL_STEPS = 24;
+  // Walks and roads are projected once, at this zoom; any other zoom is
+  // the same picture scaled (Web Mercator), so zooming costs no reprojection.
+  const REF_ZOOM = 18;
+  // The canvases reach this far past each edge of the map: a frame is drawn
+  // before a drag moves the map on, so the edge it moves towards is
+  // already drawn.
+  const VIEW_PAD = 120;
   const ANT_INK = '#111827';
   const STUCK_RING = '#475569';
   const ARRIVED_RING = '#16a34a';
@@ -170,6 +183,9 @@
       done: false,
       nav: null,
       scene: null,
+      trailOf: null,
+      trailFade: 1,
+      zoomAnim: false,
       chapter: -1,
       raf: 0,
       resolve: null,
@@ -349,73 +365,151 @@
     }
 
     // ---- map layers ----
+    // The trails and the ants are drawn on two canvases the size of the map,
+    // redrawn every frame at the current view, so they stay whole and in
+    // step with the map while the visitor drags or zooms it. (A Leaflet
+    // canvas renderer redraws only once a move has ended, and leaves out
+    // whatever lies past its padding until then.)
     ensurePane(map, TRAIL_PANE, TRAIL_PANE_Z);
-    const antPane = ensurePane(map, ANT_PANE, ANT_PANE_Z);
-    const renderer = L.canvas({ pane: TRAIL_PANE, padding: 0.4 });
-    const trailLayers = new Map(trailRoads.map(number => [number, L.polyline(edgePoints(number), {
-      renderer,
-      interactive: false,
-      color: TRAIL_COLOR,
-      weight: 0,
-      opacity: 0,
-      lineCap: 'round',
-      lineJoin: 'round',
-    })]));
-    const trailStyleKeys = new Map();
+    ensurePane(map, ROUTE_PANE, ROUTE_PANE_Z);
+    ensurePane(map, ANT_PANE, ANT_PANE_Z);
+    const renderer = L.canvas({ pane: ROUTE_PANE, padding: 0.4 });
     const routeLayers = hasRoute1 ? [
       L.polyline([], { renderer, interactive: false, color: route1Info.edgeColor, weight: ROUTE_BEST_WEIGHT + ROUTE_EDGE_EXTRA_WEIGHT, lineCap: 'round', lineJoin: 'round' }),
       L.polyline([], { renderer, interactive: false, color: route1Info.color, weight: ROUTE_BEST_WEIGHT, lineCap: 'round', lineJoin: 'round' }),
     ] : [];
-    const antCanvas = L.DomUtil.create('canvas', 'aco-ant-canvas', antPane);
-    const g = antCanvas.getContext('2d');
+    // leaflet-zoom-animated: the CSS transition Leaflet gives its own layers
+    // while a zoom animates (onZoomAnim).
+    const viewCanvas = (pane, className) => {
+      const canvas = L.DomUtil.create('canvas', `${className} leaflet-zoom-animated`, map.getPane(pane));
+      return { canvas, g: canvas.getContext('2d'), at: L.point(0, 0) };
+    };
+    const trailView = viewCanvas(TRAIL_PANE, 'aco-trail-canvas');
+    const antView = viewCanvas(ANT_PANE, 'aco-ant-canvas');
+    const views = [trailView, antView];
+    const g = antView.g;
     let pixelRatio = 1;
 
-    function sizeAntCanvas() {
-      const size = map.getSize();
+    const startRef = map.project(startLatLng, REF_ZOOM);
+    const trailRef = new Map(trailRoads.map(number => [number, edgePoints(number).map(point => map.project(point, REF_ZOOM))]));
+    const refPoints = walk => {
+      if (!walk.ref) walk.ref = walk.points.map(point => map.project(point, REF_ZOOM));
+      return walk.ref;
+    };
+
+    function sizeCanvases() {
+      const size = map.getSize().add([VIEW_PAD * 2, VIEW_PAD * 2]);
       pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      antCanvas.width = Math.round(size.x * pixelRatio);
-      antCanvas.height = Math.round(size.y * pixelRatio);
-      antCanvas.style.width = `${size.x}px`;
-      antCanvas.style.height = `${size.y}px`;
+      views.forEach(({ canvas }) => {
+        canvas.width = Math.round(size.x * pixelRatio);
+        canvas.height = Math.round(size.y * pixelRatio);
+        canvas.style.width = `${size.x}px`;
+        canvas.style.height = `${size.y}px`;
+      });
     }
 
-    // Leaflet doesn't zoom-animate a canvas of one's own: hide it while the
-    // map zooms, redraw it after.
+    // Clears a canvas and lines it up with the map (VIEW_PAD past it). While
+    // a zoom animates it keeps the place and scale onZoomAnim gave it.
+    function beginView(view) {
+      const size = map.getSize().add([VIEW_PAD * 2, VIEW_PAD * 2]);
+      if (!state.zoomAnim) {
+        view.at = map.containerPointToLayerPoint([-VIEW_PAD, -VIEW_PAD]);
+        L.DomUtil.setPosition(view.canvas, view.at);
+      }
+      view.g.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      view.g.clearRect(0, 0, size.x, size.y);
+    }
+
+    // From REF_ZOOM pixels to the canvas: x * k - ox. While a zoom animates,
+    // the frame from before it (view.frozen).
+    function frameOf(view) {
+      if (state.zoomAnim && view.frozen) return view.frozen;
+      const origin = map.getPixelOrigin().add(view.at);
+      return { k: map.getZoomScale(map.getZoom(), REF_ZOOM), ox: origin.x, oy: origin.y };
+    }
+
+    // A wheel, button or end-of-pinch zoom animates the map's layers with a
+    // CSS transform towards the new view; the canvases take the same one,
+    // and the ants keep walking in them, still drawn in the frame from
+    // before the zoom (Leaflet switches the map to the new zoom as soon as
+    // this event is over, while the picture is still animating).
+    function onZoomAnim(event) {
+      const scale = map.getZoomScale(event.zoom, map.getZoom());
+      const origin = map.getPixelOrigin();
+      const newOrigin = map._getNewPixelOrigin(event.center, event.zoom);
+      views.forEach(view => {
+        view.frozen = frameOf(view);
+        L.DomUtil.setTransform(view.canvas, view.at.add(origin).multiplyBy(scale).subtract(newOrigin), scale);
+      });
+      state.zoomAnim = true;
+    }
+
+    function onZoomEnd() {
+      state.zoomAnim = false;
+      views.forEach(view => { view.frozen = null; });
+      redraw();
+    }
+
+    function redraw() {
+      drawTrails(state.trailOf, state.trailFade);
+      drawAnts(state.scene);
+    }
+
     const mapHandlers = {
-      resize: () => { sizeAntCanvas(); drawAnts(state.scene); },
-      zoomstart: () => { antCanvas.style.visibility = 'hidden'; },
-      zoomend: () => { antCanvas.style.visibility = ''; drawAnts(state.scene); },
-      move: () => { if (!state.running && !state.nav) drawAnts(state.scene); },
+      resize: () => { sizeCanvases(); redraw(); },
+      zoomanim: onZoomAnim,
+      zoomend: onZoomEnd,
+      move: () => { if (!state.running && !state.nav) redraw(); },
     };
 
     function addLayers() {
       if (state.layersOn) return;
       state.layersOn = true;
-      trailLayers.forEach(layer => layer.addTo(map));
-      sizeAntCanvas();
+      sizeCanvases();
       map.on(mapHandlers);
     }
 
     function removeLayers() {
+      views.forEach(view => view.canvas.remove());
       if (!state.layersOn) return;
       state.layersOn = false;
       map.off(mapHandlers);
-      trailLayers.forEach(layer => layer.remove());
       routeLayers.forEach(layer => layer.remove());
-      antCanvas.remove();
+      renderer.remove();
     }
 
-    // strengthOf(road): 0-1 (trailStrength).
-    function setTrails(strengthOf, fade = 1) {
-      trailLayers.forEach((layer, number) => {
+    // strengthOf(road): 0-1 (trailStrength). Stronger trails are wider and
+    // darker, and drawn last, over the weaker ones.
+    function drawTrails(strengthOf, fade = 1) {
+      state.trailOf = strengthOf;
+      state.trailFade = fade;
+      beginView(trailView);
+      if (!strengthOf) return;
+      const t = trailView.g;
+      const f = frameOf(trailView);
+      const byStep = [];
+      trailRef.forEach((ref, number) => {
         const strength = strengthOf(number);
-        const shown = strength > 0.02;
-        const weight = shown ? +(1.5 + 7 * strength).toFixed(1) : 0;
-        const opacity = shown ? +((0.2 + 0.7 * strength) * fade).toFixed(2) : 0;
-        const key = `${weight}|${opacity}`;
-        if (trailStyleKeys.get(number) === key) return;
-        trailStyleKeys.set(number, key);
-        layer.setStyle({ weight, opacity });
+        if (!(strength > 0.02)) return;
+        const step = Math.max(1, Math.round(clamp01(strength) * TRAIL_STEPS));
+        if (!byStep[step]) byStep[step] = [];
+        byStep[step].push(ref);
+      });
+      t.lineCap = 'round';
+      t.lineJoin = 'round';
+      byStep.forEach((refs, step) => {
+        if (!refs) return;
+        const strength = step / TRAIL_STEPS;
+        t.lineWidth = 1.5 + 7 * strength;
+        t.strokeStyle = `rgba(${SCENT}, ${((0.2 + 0.7 * strength) * fade).toFixed(3)})`;
+        t.beginPath();
+        refs.forEach(ref => ref.forEach((point, index) => {
+          const x = point.x * f.k - f.ox;
+          const y = point.y * f.k - f.oy;
+          if (index) t.lineTo(x, y);
+          else t.moveTo(x, y);
+        }));
+        t.stroke();
       });
     }
 
@@ -428,36 +522,30 @@
     }
 
     // ---- drawing the ants ----
-    function projected(walk) {
-      const zoom = map.getZoom();
-      if (walk.zoom !== zoom) {
-        walk.zoom = zoom;
-        walk.px = walk.points.map(point => map.project(point, zoom));
-      }
-      return walk.px;
-    }
-
-    function pointOn(walk, px, origin, distance) {
+    // f: frameOf(antView).
+    function pointOn(walk, f, distance) {
+      const ref = refPoints(walk);
       const d = Math.max(0, Math.min(walk.len, distance));
       let index = 1;
       while (index < walk.cum.length - 1 && walk.cum[index] < d) index += 1;
-      const a = px[index - 1];
-      const b = px[index] || a;
+      const a = ref[index - 1];
+      const b = ref[index] || a;
       const share = (d - walk.cum[index - 1]) / ((walk.cum[index] - walk.cum[index - 1]) || 1);
       return {
-        x: a.x + (b.x - a.x) * share - origin.x,
-        y: a.y + (b.y - a.y) * share - origin.y,
+        x: (a.x + (b.x - a.x) * share) * f.k - f.ox,
+        y: (a.y + (b.y - a.y) * share) * f.k - f.oy,
         heading: Math.atan2(b.y - a.y, b.x - a.x),
         index,
       };
     }
 
-    function strokeSpan(walk, px, origin, from, to) {
-      const p0 = pointOn(walk, px, origin, from);
-      const p1 = pointOn(walk, px, origin, to);
+    function strokeSpan(walk, f, from, to) {
+      const ref = refPoints(walk);
+      const p0 = pointOn(walk, f, from);
+      const p1 = pointOn(walk, f, to);
       g.beginPath();
       g.moveTo(p0.x, p0.y);
-      for (let k = p0.index; k < p1.index; k += 1) g.lineTo(px[k].x - origin.x, px[k].y - origin.y);
+      for (let k = p0.index; k < p1.index; k += 1) g.lineTo(ref[k].x * f.k - f.ox, ref[k].y * f.k - f.oy);
       g.lineTo(p1.x, p1.y);
       g.stroke();
     }
@@ -520,15 +608,11 @@
     // (share of the walk done), walkMs, fade, live }.
     function drawAnts(scene) {
       state.scene = scene;
-      const size = map.getSize();
-      L.DomUtil.setPosition(antCanvas, map.containerPointToLayerPoint([0, 0]));
-      g.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      g.clearRect(0, 0, size.x, size.y);
+      beginView(antView);
       if (!scene || scene.kind === 'none') return;
-      const origin = map.getPixelBounds().min;
-      const start = map.project(startLatLng, map.getZoom());
-      const sx = start.x - origin.x;
-      const sy = start.y - origin.y;
+      const f = frameOf(antView);
+      const sx = startRef.x * f.k - f.ox;
+      const sy = startRef.y * f.k - f.oy;
       const now = performance.now();
       g.lineCap = 'round';
       g.lineJoin = 'round';
@@ -548,7 +632,7 @@
       g.lineWidth = 2.6;
       walks.forEach(walk => {
         const progress = (u - walk.depart) / walk.dur;
-        if (progress > 0) strokeSpan(walk, projected(walk), origin, 0, Math.min(1, progress) * walk.len);
+        if (progress > 0) strokeSpan(walk, f, 0, Math.min(1, progress) * walk.len);
       });
       if (!scene.live) return;
 
@@ -557,32 +641,30 @@
       walks.forEach(walk => {
         const progress = (u - walk.depart) / walk.dur;
         if (progress <= 0 || progress >= 1) return;
-        const px = projected(walk);
         const d = progress * walk.len;
-        const a = pointOn(walk, px, origin, d - SCENT_TAIL_METERS);
-        const b = pointOn(walk, px, origin, d);
+        const a = pointOn(walk, f, d - SCENT_TAIL_METERS);
+        const b = pointOn(walk, f, d);
         const gradient = g.createLinearGradient(a.x, a.y, b.x, b.y);
         gradient.addColorStop(0, `rgba(${SCENT}, 0)`);
         gradient.addColorStop(1, `rgba(${SCENT}, 0.9)`);
         g.strokeStyle = gradient;
-        strokeSpan(walk, px, origin, d - SCENT_TAIL_METERS, d);
+        strokeSpan(walk, f, d - SCENT_TAIL_METERS, d);
       });
 
       const waiting = [];
       walks.forEach((walk, index) => {
         const progress = (u - walk.depart) / walk.dur;
-        const px = projected(walk);
         if (progress <= 0) {
           waiting.push(index);
           return;
         }
         if (progress < 1) {
-          const point = pointOn(walk, px, origin, progress * walk.len);
+          const point = pointOn(walk, f, progress * walk.len);
           drawAnt(point.x, point.y, point.heading, 1, now / 45 + walk.gait);
           return;
         }
         const since = (u - walk.depart - walk.dur) * scene.walkMs;
-        const end = pointOn(walk, px, origin, walk.len);
+        const end = pointOn(walk, f, walk.len);
         if (walk.ok) {
           if (since < 700) ring(end.x, end.y, 5 + 17 * since / 700, ARRIVED_RING, 0.9 * (1 - since / 700), 2.4);
           if (since < 320) drawAnt(end.x, end.y, end.heading, 1 - since / 320, 0);
@@ -631,7 +713,7 @@
       const step = segment.step;
 
       if (step === 0) {
-        setTrails(() => 0);
+        drawTrails(() => 0);
         drawAnts({ kind: 'nest', alpha: ease(t * 2.5) });
         syncPanel(0, 0, false);
         return;
@@ -639,7 +721,7 @@
       if (step === DRAW_STEP) {
         const last = rounds[roundCount - 1].levels;
         const k = ease(t);
-        setTrails(number => last.get(number) || 0, 1 - 0.7 * k);
+        drawTrails(number => last.get(number) || 0, 1 - 0.7 * k);
         drawAnts(null);
         showRoute(cutLine(route1, k * route1.len));
         syncPanel(DRAW_STEP, 3, true);
@@ -660,7 +742,7 @@
         drawAnts(null);
         syncPanel(step, chapterOf(step), true);
       }
-      setTrails(number => {
+      drawTrails(number => {
         const from = previous ? previous.levels.get(number) || 0 : 0;
         const to = round.levels.get(number) || 0;
         return from + (to - from) * trailPhase;
@@ -740,7 +822,9 @@
     function drawWalker(latlng, heading, opts = {}) {
       const { arrived = 0, gait = 0, ripples = [], wet = 0, level = 0 } = opts;
       drawAnts({ kind: 'none' });
-      const p = map.latLngToContainerPoint(latlng);
+      const f = frameOf(antView);
+      const ref = map.project(latlng, REF_ZOOM);
+      const p = { x: ref.x * f.k - f.ox, y: ref.y * f.k - f.oy };
       const now = performance.now();
       if (isFlood && wet > 0.01 && WATER_POOL[level]) {
         g.globalAlpha = 1;
@@ -791,7 +875,7 @@
       }
       state.nav = { raf: 0, timer: 0 };
       setMapLocked(true);
-      setTrails(() => 0);
+      drawTrails(() => 0);
       panel.querySelector('[data-aco-cards="search"]').hidden = true;
       panel.querySelector('[data-aco-cards="walk"]').hidden = false;
       panel.classList.add('is-walking');
@@ -947,6 +1031,7 @@
       if (state.done) return;
       state.done = true;
       state.running = false;
+      state.zoomAnim = false;
       cancelAnimationFrame(state.raf);
       stopWalk();
       setMapLocked(false);
