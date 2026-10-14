@@ -722,6 +722,37 @@ body.dark .pin-input-row-end.is-evac .pin-input-icon {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+/* The destination's menu holds a second choice (a spot of one's own), so
+   the field carries a dropdown's caret, flipped while the menu is open. */
+.pin-input--menu {
+  position: relative;
+  padding-right: 36px;
+}
+
+.pin-input-caret {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .2s, stroke .2s;
+}
+
+.pin-input--menu:not(:disabled):hover .pin-input-caret,
+.pin-input--menu[aria-expanded="true"] .pin-input-caret {
+  stroke: var(--accent);
+}
+
+.pin-input--menu[aria-expanded="true"] .pin-input-caret {
+  transform: rotate(180deg);
+}
+
 .pin-field-value {
   font-family: var(--font-body);
   font-size: .86rem;

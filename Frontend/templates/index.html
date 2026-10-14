@@ -151,9 +151,10 @@
                   <svg class="pin-input-icon-evac" viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 10v9h11v-9M10.5 19v-4.5h3V19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </span>
                 <div class="pin-input-combo">
-                  <button type="button" class="pin-input" id="endPinBtn" onclick="togglePinMenu('end')" disabled aria-haspopup="menu" aria-expanded="false" aria-controls="endPinMenu">
+                  <button type="button" class="pin-input pin-input--menu" id="endPinBtn" onclick="togglePinMenu('end')" disabled aria-haspopup="menu" aria-expanded="false" aria-controls="endPinMenu">
                     <span class="pin-field-value" id="endPinValue">Choose destination</span>
                     <span class="pin-field-meta" id="endPinMeta" hidden></span>
+                    <svg class="pin-input-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
                   </button>
                   <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
                     <button type="button" class="evac-btn pin-input-menu-evac" id="endMenuEvacBtn" role="menuitemradio" aria-checked="true" onclick="showFloodEvacuationSites()">

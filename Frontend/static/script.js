@@ -3008,7 +3008,7 @@ function syncEarthquakeRouteUi() {
   if (pinFieldHelp) {
     pinFieldHelp.textContent = isEarthquakeMode()
       ? 'Choose on Map, then tap the spot. Drag a pin to adjust it.'
-      : 'Routes go to the evacuation site with the safest route. To go somewhere else, click the destination, then Choose my own destination. Drag a pin to adjust it.';
+      : 'To go somewhere else, click the destination, then Choose my own destination. Drag a pin to adjust it.';
   }
 
   if (earthquakeRoutePanel) {
