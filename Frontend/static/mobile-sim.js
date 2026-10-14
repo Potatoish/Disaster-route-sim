@@ -15,9 +15,6 @@
   const SHEET_QUERY = window.matchMedia('(max-width: 1023px) and (min-height: 500px)');
   // Tablets: the panel docked on the left (style.css, same breakpoint).
   const SIDE_QUERY = window.matchMedia('(min-width: 640px)');
-  // On a phone this short the open legend covers much of the route, so it
-  // starts folded there (until the visitor opens it once; that is remembered).
-  const LEGEND_STARTS_FOLDED_QUERY = window.matchMedia('(max-height: 700px)');
   // Gap between the top bar and a full-height sheet.
   const FULL_SHEET_TOP_GAP = 8;
   // Space kept under the last item that shows at peek height.
@@ -31,14 +28,20 @@
   // The on-map legend's gap above the sheet (style.css) plus a little air
   // under the top bar; it needs its own height on top of this.
   const LEGEND_ROOM_MARGIN = 32;
+  // The legend chip's gap above the sheet (style.css .msim-maplegend).
+  const LEGEND_CHIP_GAP = 8;
+  // Its height while the fonts load (the chip is measured once it shows).
+  const LEGEND_CHIP_FALLBACK_H = 28;
   // Below this the sheet is full height and the map is just a sliver.
   const MAP_COVERED_ROOM = 40;
   const ROUTES_SHOWN = 3;
   // A second tap inside this window is a double-tap zoom, not a pin move.
   const MAP_TAP_DELAY_MS = 260;
+  const TOAST_MS = 2200;
   const DISCLAIMER_SEEN_KEY = 'agnas-disclaimer-seen';
-  const LEGEND_FOLDED_KEY = 'agnas-map-legend-folded';
   const SNAP_ORDER = ['peek', 'half', 'full'];
+  // The replay only folds and unfolds: its steps fit in half the screen.
+  const REPLAY_SNAP_ORDER = ['peek', 'half'];
   // The Evacuation sites slot's house, for the End slot while the end point
   // is the sites.
   const EVAC_BADGE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>';
@@ -69,11 +72,21 @@
     barangayMenuOpen: false,
     baseLayers: null,
     mapTapTimer: null,
-    legendFolded: readLegendFolded(),
+    // Folded to its chip in every step until tapped open; never opened for
+    // the visitor, and nothing about it is remembered.
+    legendFolded: true,
     legendHtml: null,
+    legendChipH: 0,
     box: 0, // the sheet's laid-out height (--sheet-box-h), px; >= height while moving
     settleTimer: null,
     dragFrame: null,
+    // The replay's compact height, kept for the whole replay (its steps'
+    // texts differ in length; the sheet must not jump between them).
+    replayPeek: 0,
+    // The visitor panned or zoomed: the camera stops fitting the route or
+    // the ants' search until they tap the fit button.
+    autoFitPaused: false,
+    toastTimer: null,
   };
 
   function isActive() {
@@ -139,19 +152,44 @@
       && getMapRoom(height) >= PIN_MIN_ROOM;
   }
 
-  // What the sheet and top bar cover, so script.js can fit routes and the
-  // barangay into the part of the map that is actually visible.
+  // The map buttons' strip on the right (top-right on a phone, bottom-right
+  // beside a tablet's panel): all of its width is kept clear.
+  function getControlsCover() {
+    const controls = $('msimMapControls');
+    if (!controls?.getClientRects().length) return 0;
+    const mapRight = $('map')?.getBoundingClientRect().right || window.innerWidth;
+    return Math.max(0, mapRight - controls.getBoundingClientRect().left);
+  }
+
+  // The legend chip above the sheet (bottom-left), folded or not: the chip
+  // is what a fit keeps clear; the open legend is the visitor's to close.
+  function getLegendChipCover() {
+    const card = $('msimMapLegend');
+    const offset = card ? parseFloat(getComputedStyle(card).bottom) || 0 : LEGEND_CHIP_GAP;
+    return offset + (state.legendChipH || LEGEND_CHIP_FALLBACK_H);
+  }
+
+  // What the top bar, the sheet and the map's own buttons cover, so
+  // script.js can fit routes and the barangay into the part of the map that
+  // is actually visible. The legend chip is counted even before it first
+  // shows (its rows arrive just after a result is fitted).
   function getCoveredInsets() {
     if (!isActive()) return null;
-    if (isSide()) return { top: 0, bottom: 0, left: getSideCover() };
-    return { top: Math.max(0, getTopBarBottom() - getMapTop()), bottom: state.height, left: 0 };
+    const right = getControlsCover();
+    if (isSide()) return { top: 0, bottom: getLegendChipCover(), left: getSideCover(), right };
+    return {
+      top: Math.max(0, getTopBarBottom() - getMapTop()),
+      bottom: state.height + getLegendChipCover(),
+      left: 0,
+      right,
+    };
   }
 
   // ---- sheet height and snapping ----
 
   function getPeekEnd() {
     if (state.mode === 'results') return $('msimResultActions');
-    if (state.mode === 'replay') return $('msimReplay').querySelector('.aco-replay-skip');
+    if (state.mode === 'replay') return $('msimReplay').querySelector('.aco-replay-foot');
     if (!selectedHazard) return $('msimHazardSection');
     const help = $('msimSetupHelp');
     return help.textContent.trim() ? help : $('msimSetupActions');
@@ -181,8 +219,15 @@
       syncChrome();
       return;
     }
+    // Measured in the snap's own layout (the replay shows more when open).
+    sheet.dataset.snap = state.snap;
     const full = Math.max(160, Math.round(window.innerHeight - getTopBarBottom() - FULL_SHEET_TOP_GAP));
-    const peek = Math.min(full, measurePeek() || 200);
+    let peek = Math.min(full, measurePeek() || 200);
+    if (state.mode === 'replay') {
+      // Measured folded only, and never shrinking while the replay plays.
+      if (state.snap === 'peek' || !state.replayPeek) state.replayPeek = Math.max(state.replayPeek, peek);
+      peek = state.replayPeek;
+    }
     const half = Math.min(full, Math.max(peek, Math.round(window.innerHeight * 0.5)));
     state.snaps = { peek, half, full };
 
@@ -248,7 +293,10 @@
     }
   }
 
-  function snapTo(name, { animate = true } = {}) {
+  // refit: the visitor snapped the sheet (handle, drag, More, See details),
+  // so the route or the ants' search is brought back into the map left in
+  // view (script.js refitMapAfterSheetSnap).
+  function snapTo(name, { animate = true, refit = false } = {}) {
     if (isSide()) {
       // The docked panel shows everything at once; it only scrolls.
       state.snap = name;
@@ -256,24 +304,39 @@
       return;
     }
     if (!state.snaps[name]) measureSnaps();
+    const previous = state.height;
     state.snap = name;
     if (name === 'peek') scroller.scrollTop = 0;
     const target = state.snaps[name];
     if (target) applyHeight(target, { animate });
     else syncChrome();
+    // Not into a strip too thin to show a route (a full-height sheet).
+    if (refit && state.height !== previous && state.mode !== 'setup' && getMapRoom() >= CONTROLS_MIN_ROOM) {
+      window.refitMapAfterSheetSnap?.();
+    }
   }
 
-  // Handle tap / Enter: peek -> half -> full -> peek, skipping a stop that is
-  // no taller than the one before it (a short phone's half can equal peek).
+  function getSnapOrder() {
+    return state.mode === 'replay' ? REPLAY_SNAP_ORDER : SNAP_ORDER;
+  }
+
+  // Handle tap / Enter: peek -> half -> full -> peek (the replay: folded and
+  // open), skipping a stop that is no taller than the one before it (a short
+  // phone's half can equal peek).
   function cycleSnap() {
-    let next = SNAP_ORDER[(SNAP_ORDER.indexOf(state.snap) + 1) % SNAP_ORDER.length];
+    const order = getSnapOrder();
+    let next = order[(order.indexOf(state.snap) + 1) % order.length];
+    if (state.mode === 'replay') {
+      snapTo(next, { refit: true });
+      return;
+    }
     if (next === 'half' && state.snaps.half - state.snaps.peek < 24) next = 'full';
     if (next === 'full' && state.snaps.full - state.snaps[state.snap] < 24) next = 'peek';
-    snapTo(next);
+    snapTo(next, { refit: true });
   }
 
   function nearestSnap(height) {
-    return SNAP_ORDER.reduce((best, name) => (
+    return getSnapOrder().reduce((best, name) => (
       Math.abs(state.snaps[name] - height) < Math.abs(state.snaps[best] - height) ? name : best
     ), 'peek');
   }
@@ -282,9 +345,16 @@
   // that name the next size, the center pin and the map controls.
   function syncChrome() {
     sheet.dataset.snap = state.snap;
-    handle.setAttribute('aria-label', state.snap === 'full' ? 'Collapse panel' : 'Expand panel');
+    const last = getSnapOrder().at(-1);
+    handle.setAttribute('aria-label', state.snap === last ? 'Collapse panel' : 'Expand panel');
+    handle.setAttribute('aria-expanded', String(state.snap !== 'peek'));
     const detailsBtn = $('msimDetailsBtn');
     if (detailsBtn) detailsBtn.textContent = state.snap === 'full' ? 'Show map' : 'See details';
+    const more = $('msimReplay').querySelector('.aco-replay-more');
+    if (more) {
+      more.textContent = state.snap === 'peek' ? 'More' : 'Less';
+      more.setAttribute('aria-expanded', String(state.snap !== 'peek'));
+    }
     const room = getMapRoom();
     shell.classList.toggle('msim-controls-hidden', isActive() && room < CONTROLS_MIN_ROOM);
     shell.classList.toggle('msim-map-covered', isActive() && room < MAP_COVERED_ROOM);
@@ -354,7 +424,8 @@
     drag.lastTime = event.timeStamp;
 
     const min = state.snaps.peek * 0.7;
-    drag.target = Math.min(state.snaps.full, Math.max(min, drag.startHeight + travel));
+    const max = state.snaps[getSnapOrder().at(-1)];
+    drag.target = Math.min(max, Math.max(min, drag.startHeight + travel));
     // At most once a frame, however fast the pointer reports.
     if (!state.dragFrame) {
       state.dragFrame = window.requestAnimationFrame(() => {
@@ -384,7 +455,7 @@
       window.setTimeout(() => { state.suppressHandleClick = false; }, 0);
     }
     // A flick carries on in its direction (velocity is px per ms, up > 0).
-    snapTo(nearestSnap(state.height + drag.velocity * 180));
+    snapTo(nearestSnap(state.height + drag.velocity * 180), { refit: true });
   }
 
   sheet.addEventListener('pointerdown', onPointerDown);
@@ -432,12 +503,31 @@
     $('msimSetup').hidden = state.mode !== 'setup';
     $('msimReplay').hidden = state.mode !== 'replay';
     $('msimResults').hidden = state.mode !== 'results';
+    // The hazard fills step back while routes or trails are on them
+    // (style.css), and come back in full for setup.
+    shell.classList.toggle('msim-route-on', isActive() && state.mode !== 'setup');
     syncTopBar();
+    syncMapButtons();
     if (state.mode === 'setup') syncSetup();
     else if (state.mode === 'results') syncResultsChrome();
     if (state.layersOpen) syncLayersPanel();
     renderMapLegend();
     measureSnaps();
+  }
+
+  // Fit says what it frames in each step; My location waits out the
+  // replay, whose camera it would fight.
+  function syncMapButtons() {
+    const fit = $('msimRecenterBtn');
+    const fitLabel = state.mode === 'setup' ? 'Show the whole barangay' : 'Show the whole route';
+    fit.setAttribute('aria-label', fitLabel);
+    fit.title = fitLabel;
+    const locate = $('msimLocateBtn');
+    const replaying = state.mode === 'replay';
+    locate.disabled = replaying;
+    const locateLabel = replaying ? 'My location is off while the simulation plays' : 'Show my location';
+    locate.setAttribute('aria-label', locateLabel);
+    locate.title = locateLabel;
   }
 
   function syncTopBar() {
@@ -675,7 +765,9 @@
       return `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
     }
     if (checking) return 'Checking that the pinned spot can be reached by road…';
-    if (role) return `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.`;
+    // An empty slot being set already says what to do ("Move the map, then
+    // tap ..."; syncPinSlot), so the sheet says it once.
+    if (role) return routePins[role] ? `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.` : '';
     if (isEarthquakeMode() && getReadyPin('start') && !earthquakeEvacSitesVisible) {
       return 'Tap Show to put the evacuation sites on the map, then run the simulation.';
     }
@@ -797,15 +889,21 @@
     const duration = best?.display_duration || formatRouteWalkingDuration(best);
     const distance = best?.display_distance || formatDistanceCompact(best?.distance);
     // A flood route with no safe option is not to be walked, so its walking
-    // time gives way to the call for rescue (getNoSafeRouteAction); an
-    // earthquake route is still walked, with care.
+    // time gives way to "not walkable" (the homepage's word for High water)
+    // and the call for rescue (getNoSafeRouteAction) becomes the sheet's
+    // first action; an earthquake route is still walked, with care. Either
+    // way the summary row is the same: what the route is, then its risk.
     const action = getNoSafeRouteAction(best);
     const showRescue = !!action && !isEarthquake;
     $('msimSummaryMain').innerHTML = showRescue
-      ? `<button class="msummary-rescue" type="button" onclick="openEmergencyContactModal(event)">${safetyIcon('phone')}<span>${escapeHtml(action.title)}</span></button>`
+      ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong> · not walkable</span>`
       : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
-    // The rescue button already opens the hotlines; no second one in the details.
-    $('msimHotlines').hidden = showRescue;
+    $('msimSummaryMain').classList.toggle('is-danger', showRescue);
+    const rescue = $('msimRescue');
+    rescue.hidden = !showRescue;
+    $('msimRescueText').textContent = showRescue ? action.title : '';
+    // One primary action at a time: rescue, else the details.
+    $('msimDetailsBtn').classList.toggle('mbtn--primary', !showRescue);
     $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
 
     const destination = $('msimSummaryDest');
@@ -887,13 +985,22 @@
     } catch (err) {}
   }
 
+  // Each step starts at peek, with the legend folded and the camera the
+  // app's: the results are fitted once even if the visitor moved the map
+  // mid-replay.
+  function enterMode(mode) {
+    state.mode = mode;
+    state.snap = 'peek';
+    state.legendFolded = true;
+    state.autoFitPaused = false;
+    scroller.scrollTop = 0;
+  }
+
   // A finished run (runSimulation) or "See results": results mode at peek,
   // so the route on the map and the verdict are both in view.
   function showResults() {
     if (!simData) return;
-    state.mode = 'results';
-    state.snap = 'peek';
-    scroller.scrollTop = 0;
+    enterMode('results');
     syncNow();
 
     const disclaimer = $('msimDisclaimer');
@@ -910,30 +1017,34 @@
   function showReplay(panel) {
     if (!isActive()) return false;
     $('msimReplay').replaceChildren(panel);
-    state.mode = 'replay';
-    state.snap = 'peek';
-    scroller.scrollTop = 0;
+    enterMode('replay');
+    state.replayPeek = 0;
     syncNow();
     return true;
   }
 
   function endReplay() {
     $('msimReplay').replaceChildren();
-    if (state.mode === 'replay') state.mode = simData ? 'results' : 'setup';
+    state.replayPeek = 0;
+    if (state.mode === 'replay') enterMode(simData ? 'results' : 'setup');
     scheduleSync();
   }
 
   function showSetup() {
-    state.mode = 'setup';
-    state.snap = 'peek';
-    scroller.scrollTop = 0;
+    enterMode('setup');
     syncNow();
     if (isActive()) $('msimSetupTitle').focus({ preventScroll: true });
   }
 
   function toggleResultDetails() {
-    snapTo(state.snap === 'full' ? 'peek' : 'full');
+    snapTo(state.snap === 'full' ? 'peek' : 'full', { refit: true });
   }
+
+  // The replay's More / Less: its other steps and full texts.
+  $('msimReplay').addEventListener('click', event => {
+    if (!event.target.closest?.('.aco-replay-more')) return;
+    snapTo(state.snap === 'peek' ? 'half' : 'peek', { refit: true });
+  });
 
   // Scrolls el into the part of the sheet that will be visible once the
   // current snap settles (its box may still be animating to that height).
@@ -1029,6 +1140,7 @@
   // the whole map, which is under the sheet.
   function zoomBy(direction) {
     if (!gMap) return;
+    pauseAutoFit();
     const step = (gMap.options.zoomDelta || 1) * direction;
     const zoom = Math.max(gMap.getMinZoom(), Math.min(gMap.getMaxZoom(), gMap.getZoom() + step));
     gMap.setZoomAround(L.point(getPinX(), getPinY()), zoom, mapMoveOptions());
@@ -1036,12 +1148,47 @@
 
   // locateVisitor (script.js) finds the visitor and keeps them inside the
   // barangay; here the spot lands under the center pin, ready for "Set
-  // start here".
+  // start here". Off while the replay plays (syncMapButtons).
   function locate() {
+    if (state.mode === 'replay') return;
     locateVisitor({
       button: $('msimLocateBtn'),
-      moveTo: latlng => centerUnderPin(latlng, Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM), { fly: true }),
+      moveTo: latlng => {
+        // The visitor asked for this view; a sheet snap must not undo it.
+        pauseAutoFit();
+        centerUnderPin(latlng, Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM), { fly: true });
+      },
+      onFound: () => showToast('Showing your location'),
     });
+  }
+
+  // ---- camera: the app's or the visitor's ----
+
+  function pauseAutoFit() {
+    if (isActive()) state.autoFitPaused = true;
+  }
+
+  function resumeAutoFit() {
+    state.autoFitPaused = false;
+  }
+
+  // ---- a short notice under the top bar ----
+
+  function showToast(message, { error = false, durationMs = TOAST_MS } = {}) {
+    const toast = $('msimToast');
+    if (!toast || !isActive()) return;
+    window.clearTimeout(state.toastTimer);
+    toast.textContent = message;
+    toast.classList.toggle('is-error', error);
+    toast.hidden = false;
+    // Restarts the fade-in for a second notice while one shows.
+    toast.classList.remove('is-shown');
+    void toast.offsetWidth;
+    toast.classList.add('is-shown');
+    state.toastTimer = window.setTimeout(() => {
+      toast.classList.remove('is-shown');
+      state.toastTimer = window.setTimeout(() => { toast.hidden = true; }, 200);
+    }, durationMs);
   }
 
   // ---- legend on the map ----
@@ -1085,14 +1232,6 @@
     return html;
   }
 
-  function readLegendFolded() {
-    try {
-      const stored = localStorage.getItem(LEGEND_FOLDED_KEY);
-      if (stored === '1' || stored === '0') return stored === '1';
-    } catch (err) {}
-    return LEGEND_STARTS_FOLDED_QUERY.matches;
-  }
-
   // The legend on the map, bottom-left above the sheet, while there is
   // something to list.
   function renderMapLegend() {
@@ -1107,25 +1246,32 @@
     syncMapLegendChrome();
   }
 
-  // Folded to its header or open, and out of the way while the center pin
-  // shows (on a small phone it would sit under the pin) or when the map
-  // strip is too short to hold it below the top bar.
+  // Folded to its chip or open above it (scrolling inside the map left in
+  // view), and out of the way when the map strip is too short for the chip.
   function syncMapLegendChrome() {
     const card = $('msimMapLegend');
     if (!card) return;
     card.classList.toggle('is-folded', state.legendFolded);
     $('msimMapLegendBody').hidden = state.legendFolded;
     $('msimMapLegendToggle').setAttribute('aria-expanded', String(!state.legendFolded));
-    const fits = getMapRoom() >= card.offsetHeight + LEGEND_ROOM_MARGIN;
-    shell.classList.toggle('msim-legend-hidden', isActive() && (card.hidden || isCenterPinShown() || !fits));
+    if (state.legendFolded && card.offsetHeight) state.legendChipH = card.offsetHeight;
+    const room = getMapRoom();
+    const offset = parseFloat(getComputedStyle(card).bottom) || 0;
+    card.style.setProperty('--msim-legend-max-h', `${Math.max(0, Math.round(room - offset - (state.legendChipH || LEGEND_CHIP_FALLBACK_H) - LEGEND_ROOM_MARGIN))}px`);
+    const fits = room >= (state.legendChipH || LEGEND_CHIP_FALLBACK_H) + LEGEND_ROOM_MARGIN;
+    shell.classList.toggle('msim-legend-hidden', isActive() && (card.hidden || !fits));
   }
 
-  // Remembered per browser, so a visitor who folds it away keeps it folded.
+  // Only the visitor opens it (the chip), and a second tap on the chip, a
+  // tap on the map or a drag of it closes it again (attachMap).
   function toggleMapLegend() {
     state.legendFolded = !state.legendFolded;
-    try {
-      localStorage.setItem(LEGEND_FOLDED_KEY, state.legendFolded ? '1' : '0');
-    } catch (err) {}
+    syncMapLegendChrome();
+  }
+
+  function foldMapLegend() {
+    if (state.legendFolded) return;
+    state.legendFolded = true;
     syncMapLegendChrome();
   }
 
@@ -1236,12 +1382,25 @@
   // initMap() hands over the map and its two base layers.
   function attachMap(map, baseLayers) {
     state.baseLayers = baseLayers || null;
-    map.on('dragstart', () => $('msimCenterPin')?.classList.add('is-lifted'));
+    // Only the visitor drags (a programmatic move never fires dragstart),
+    // pinches, wheels or double-taps: each hands the camera to them.
+    map.on('dragstart', () => {
+      $('msimCenterPin')?.classList.add('is-lifted');
+      pauseAutoFit();
+      foldMapLegend();
+    });
     map.on('dragend', () => $('msimCenterPin')?.classList.remove('is-lifted'));
+    map.on('click', foldMapLegend);
     map.on('dblclick', () => {
       window.clearTimeout(state.mapTapTimer);
       state.mapTapTimer = null;
+      pauseAutoFit();
     });
+    const container = map.getContainer();
+    container.addEventListener('touchstart', event => {
+      if (event.touches.length > 1) pauseAutoFit();
+    }, { passive: true });
+    container.addEventListener('wheel', pauseAutoFit, { passive: true });
     map.on('zoomend', syncZoomButtons);
     map.on('baselayerchange', () => {
       if (state.layersOpen) syncLayersPanel();
@@ -1266,7 +1425,7 @@
       window.clearTimeout(state.settleTimer);
       shell.style.removeProperty('--sheet-h');
       shell.style.removeProperty('--sheet-box-h');
-      shell.classList.remove('msim-controls-hidden', 'msim-map-covered', 'msim-dragging', 'msim-legend-hidden');
+      shell.classList.remove('msim-controls-hidden', 'msim-map-covered', 'msim-dragging', 'msim-legend-hidden', 'msim-route-on');
       $('msimCenterPin').hidden = true;
     }
     syncRoutePinMarkers();
@@ -1297,6 +1456,9 @@
     handleEscape,
     handleMapTap,
     isActive,
+    isAutoFitPaused: () => isActive() && state.autoFitPaused,
+    resumeAutoFit,
+    toast: showToast,
     // The pin being moved is drawn by the center pin, not its marker.
     isCenterPinRole: role => isActive() && getPinRole() === role,
     renderResults,

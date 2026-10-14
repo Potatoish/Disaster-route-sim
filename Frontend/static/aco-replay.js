@@ -67,6 +67,22 @@
   // follows the ant, one goes out every this many pixels of panning.
   const NAV_REFRESH_PX = 160;
 
+  // Phones and tablets (options.mobileLayout): the map is small and the
+  // hazard fills sit right under the lines, so Route 1 and the converged
+  // trails get a white casing with a dark rim (3:1 against any fill, WCAG
+  // 1.4.11), and converged trails never fade into the fill. A trail is
+  // converged at this share of the run's strongest trail.
+  const CASING_WHITE = '#ffffff';
+  const CASING_RIM = '#0f172a';
+  const CONVERGED_SHARE = 0.6;
+  const CONVERGED_MIN_ALPHA = 0.85;
+  const CONVERGED_MIN_FADE = 0.8;
+  // While the camera follows the walker, a focus point that moved further
+  // than this (the sheet snapped to another height) is eased to over about
+  // this long instead of jumped to.
+  const FOLLOW_EASE_PX = 30;
+  const FOLLOW_EASE_MS = 160;
+
   // Flood: the water the ant walks through, in the map's own fill colors.
   const WATER_RIPPLE = { 1: '#ca8a04', 2: '#ea580c', 3: '#be123c' };
   const WATER_POOL = { 1: '250, 204, 21', 2: '249, 115, 22', 3: '225, 29, 72' };
@@ -158,9 +174,14 @@
   //   legendBody: the map legend's body element (rewritten while it plays)
   //   getPadding(): fitBounds padding that keeps clear of the panels
   //   onPanelChange(): the panel's content changed size
+  //   mobileLayout: plays in the phone/tablet sheet (cased lines, compact
+  //     cards, an eased follow, Route 1 left on the map for the results)
+  //   isCameraPaused(): the visitor moved the map, so the camera stays put
   function create(options) {
     const { map, replay, mode, route1: route1Info } = options;
     const isFlood = mode !== 'earthquake';
+    const mobileLayout = !!options.mobileLayout;
+    const isCameraPaused = () => !!options.isCameraPaused?.();
     const edges = decodeEdges(replay);
     const rounds = replay.rounds.map(round => ({
       ...round,
@@ -262,6 +283,7 @@
             <span class="aco-step-text"><span class="aco-step-title">${escapeHtml(title)}</span><span class="aco-step-detail"></span></span>
           </li>`).join('')}
       </ol>
+      <button type="button" class="aco-replay-more" aria-expanded="false" aria-controls="msimSheetScroll">More</button>
       <div class="safety-result-cards aco-cards" data-aco-cards="search">
         ${iconCard('ruler', 'Best route so far', 'best', 'bestSub')}
       </div>
@@ -270,17 +292,24 @@
         ${iconCard(isFlood ? 'droplet' : 'quake', isFlood ? 'Water here' : 'Road risk here', 'here', 'hereSub')}
         ${iconCard('walk', `Route ${route1Info?.number ?? 1}`, 'route', 'routeSub', { safe: 'success', caution: 'warning', unsafe: 'danger' }[route1Info?.tier] || '')}
       </div>
-      <p class="aco-replay-meta"></p>
-      <p class="sr-only" aria-live="polite" data-aco="caption"></p>
-      <button type="button" class="aco-replay-skip">Skip to results</button>`;
+      <div class="aco-replay-foot">
+        <p class="aco-replay-meta"><span class="aco-meta-long"></span><span class="aco-meta-short"></span></p>
+        <button type="button" class="aco-replay-skip">Skip to results</button>
+      </div>
+      <p class="sr-only" aria-live="polite" data-aco="caption"></p>`;
     const field = name => panel.querySelector(`[data-aco="${name}"]`);
     const setText = (name, text) => {
       const el = field(name);
       if (el && el.textContent !== text) el.textContent = text;
     };
-    panel.querySelector('.aco-replay-meta').textContent = options.antsTotal > mainAnts
+    const someAnts = options.antsTotal > mainAnts;
+    panel.querySelector('.aco-meta-long').textContent = someAnts
       ? `A sped-up replay of this run's main search: ${formatCountText(mainAnts)} of the ${formatCountText(options.antsTotal)} ants.`
       : `A sped-up replay of this run's search: all ${formatCountText(mainAnts)} ants.`;
+    // The phone sheet's one-line version (style.css).
+    panel.querySelector('.aco-meta-short').textContent = someAnts
+      ? `Sped-up replay · ${formatCountText(mainAnts)} of ${formatCountText(options.antsTotal)} ants`
+      : `Sped-up replay · all ${formatCountText(mainAnts)} ants`;
     panel.querySelector('.aco-replay-skip').addEventListener('click', () => finish());
 
     const sites = Number(replay.sites_searched) || 0;
@@ -374,10 +403,15 @@
     ensurePane(map, ROUTE_PANE, ROUTE_PANE_Z);
     ensurePane(map, ANT_PANE, ANT_PANE_Z);
     const renderer = L.canvas({ pane: ROUTE_PANE, padding: 0.4 });
-    const routeLayers = hasRoute1 ? [
-      L.polyline([], { renderer, interactive: false, color: route1Info.edgeColor, weight: ROUTE_BEST_WEIGHT + ROUTE_EDGE_EXTRA_WEIGHT, lineCap: 'round', lineJoin: 'round' }),
-      L.polyline([], { renderer, interactive: false, color: route1Info.color, weight: ROUTE_BEST_WEIGHT, lineCap: 'round', lineJoin: 'round' }),
-    ] : [];
+    const routeLine = (color, weight) => L.polyline([], { renderer, interactive: false, color, weight, lineCap: 'round', lineJoin: 'round' });
+    const routeLayers = !hasRoute1 ? [] : mobileLayout ? [
+      routeLine(CASING_RIM, ROUTE_BEST_WEIGHT + ROUTE_HALO_EXTRA_WEIGHT + ROUTE_EDGE_EXTRA_WEIGHT),
+      routeLine(CASING_WHITE, ROUTE_BEST_WEIGHT + ROUTE_HALO_EXTRA_WEIGHT),
+      routeLine(route1Info.color, ROUTE_BEST_WEIGHT),
+    ] : [
+      routeLine(route1Info.edgeColor, ROUTE_BEST_WEIGHT + ROUTE_EDGE_EXTRA_WEIGHT),
+      routeLine(route1Info.color, ROUTE_BEST_WEIGHT),
+    ];
     // leaflet-zoom-animated: the CSS transition Leaflet gives its own layers
     // while a zoom animates (onZoomAnim).
     const viewCanvas = (pane, className) => {
@@ -469,11 +503,17 @@
       map.on(mapHandlers);
     }
 
+    // Route 1 stays on the map after a phone replay, until the results draw
+    // theirs over it (removeRoute), so it never blinks out in between.
     function removeLayers() {
       views.forEach(view => view.canvas.remove());
       if (!state.layersOn) return;
       state.layersOn = false;
       map.off(mapHandlers);
+      if (!mobileLayout) removeRoute();
+    }
+
+    function removeRoute() {
       routeLayers.forEach(layer => layer.remove());
       renderer.remove();
     }
@@ -497,11 +537,7 @@
       });
       t.lineCap = 'round';
       t.lineJoin = 'round';
-      byStep.forEach((refs, step) => {
-        if (!refs) return;
-        const strength = step / TRAIL_STEPS;
-        t.lineWidth = 1.5 + 7 * strength;
-        t.strokeStyle = `rgba(${SCENT}, ${((0.2 + 0.7 * strength) * fade).toFixed(3)})`;
+      const trace = refs => {
         t.beginPath();
         refs.forEach(ref => ref.forEach((point, index) => {
           const x = point.x * f.k - f.ox;
@@ -509,6 +545,31 @@
           if (index) t.lineTo(x, y);
           else t.moveTo(x, y);
         }));
+      };
+      byStep.forEach((refs, step) => {
+        if (!refs) return;
+        const strength = step / TRAIL_STEPS;
+        const width = 1.5 + 7 * strength;
+        let alpha = (0.2 + 0.7 * strength) * fade;
+        trace(refs);
+        // Relative to this run's strongest trail: a search through
+        // high-risk roads keeps every trail thin, but its converged one
+        // still has to show on the fill under it.
+        if (mobileLayout && strength >= CONVERGED_SHARE * strongestTrail) {
+          const casingFade = Math.max(fade, CONVERGED_MIN_FADE);
+          alpha = Math.max(CONVERGED_MIN_ALPHA, 0.2 + 0.7 * strength) * casingFade;
+          t.lineWidth = width + 5;
+          t.strokeStyle = CASING_RIM;
+          t.globalAlpha = 0.75 * casingFade;
+          t.stroke();
+          t.lineWidth = width + 3;
+          t.strokeStyle = CASING_WHITE;
+          t.globalAlpha = 0.95 * casingFade;
+          t.stroke();
+          t.globalAlpha = 1;
+        }
+        t.lineWidth = width;
+        t.strokeStyle = `rgba(${SCENT}, ${alpha.toFixed(3)})`;
         t.stroke();
       });
     }
@@ -790,17 +851,28 @@
       return Math.atan2(b.y - a.y, b.x - a.x);
     }
 
+    // The phone sheet's cards are half as wide, so there each line is short
+    // enough to stay on one line.
     function hereText(distance) {
       const levels = spanAt(distance).levels;
       if (isFlood) {
         const water = levels[0] || 0;
         const name = water ? getFloodRiskLabelFromVar(water) : 'None';
+        if (mobileLayout) return [name, water ? 'Slower pace' : 'Normal pace'];
         return [`${name} · ${water ? 'slower' : 'normal'} pace`, water ? FLOOD_DEPTH_ON_ADULT_BY_VAR[water] : 'Dry road'];
       }
       const [liquefaction = 1, shaking = 1] = levels;
+      const level = getRiskLevelLabelFromScore(Math.max(liquefaction, shaking));
+      const liquefactionLabel = getRiskLevelLabelFromScore(liquefaction);
+      const shakingLabel = getRiskLevelLabelFromScore(shaking);
+      if (mobileLayout) {
+        return [level, liquefactionLabel === shakingLabel
+          ? 'Liquefaction and shaking'
+          : liquefaction > shaking ? 'From liquefaction' : 'From ground shaking'];
+      }
       return [
-        getRiskLevelLabelFromScore(Math.max(liquefaction, shaking)),
-        `Liquefaction ${getRiskLevelLabelFromScore(liquefaction).toLowerCase()} · ground shaking ${getRiskLevelLabelFromScore(shaking).toLowerCase()}`,
+        level,
+        `Liquefaction ${liquefactionLabel.toLowerCase()} · ground shaking ${shakingLabel.toLowerCase()}`,
       ];
     }
 
@@ -874,7 +946,8 @@
         return;
       }
       state.nav = { raf: 0, timer: 0 };
-      setMapLocked(true);
+      const paused = isCameraPaused();
+      setMapLocked(!paused);
       drawTrails(() => 0);
       panel.querySelector('[data-aco-cards="search"]').hidden = true;
       panel.querySelector('[data-aco-cards="walk"]').hidden = false;
@@ -891,6 +964,11 @@
         started = true;
         followRoute();
       };
+      // The visitor has the map where they want it: the walk starts there.
+      if (paused) {
+        follow();
+        return;
+      }
       map.once('moveend', follow);
       state.nav.timer = window.setTimeout(follow, NAV_FLY_SECONDS * 1000 + 500);
       map.flyTo(centerShowing(pointAlong(route1, 0), NAV_ZOOM), NAV_ZOOM, mapMoveOptions({ duration: NAV_FLY_SECONDS }));
@@ -935,8 +1013,14 @@
         // _rawPanBy + 'move' (what panBy does inside) moves the map without
         // a 'moveend' every frame, which would make each renderer and tile
         // layer update 60 times a second; one goes out every
-        // NAV_REFRESH_PX of travel instead.
-        const offset = map.latLngToContainerPoint(here).subtract(focusPoint());
+        // NAV_REFRESH_PX of travel instead. While the visitor has moved the
+        // map (isCameraPaused) it is theirs, and unlocked.
+        const paused = isCameraPaused();
+        setMapLocked(!paused);
+        let offset = paused ? L.point(0, 0) : map.latLngToContainerPoint(here).subtract(focusPoint());
+        if (mobileLayout && Math.abs(offset.x) + Math.abs(offset.y) > FOLLOW_EASE_PX) {
+          offset = offset.multiplyBy(Math.min(1, dt / FOLLOW_EASE_MS));
+        }
         if (Math.abs(offset.x) + Math.abs(offset.y) > 0.2) {
           map._rawPanBy(offset);
           map.fire('move');
@@ -979,6 +1063,10 @@
 
     function zoomOut() {
       drawAnts(null);
+      if (isCameraPaused()) {
+        finish();
+        return;
+      }
       let ended = false;
       const end = () => {
         if (ended) return;
@@ -1078,6 +1166,10 @@
       getSearchBounds,
       resize: () => { if (state.layersOn) mapHandlers.resize(); },
       isDone: () => state.done,
+      // The camera follows the walker (or flies to the end of the walk).
+      isWalking: () => !!state.nav,
+      isRouteShown: () => routeLayers.some(layer => map.hasLayer(layer)),
+      removeRoute,
     };
   }
 

@@ -304,32 +304,40 @@
         <img class="msim-center-pin-img" id="msimCenterPinImg" alt="" width="48" height="60">
       </div>
 
+      {# Zoom shows only with a mouse (style.css); on touch, pinch zooms.
+         Fit and My location are two separate buttons, set apart. #}
       <div class="msim-map-controls" id="msimMapControls">
-        <div class="msim-map-group" role="group" aria-label="Zoom">
-          <button type="button" class="msim-map-btn" id="msimZoomIn" onclick="mobileMapZoom(1)" aria-label="Zoom in">
+        <div class="msim-map-group msim-map-group--zoom" role="group" aria-label="Zoom">
+          <button type="button" class="msim-map-btn" id="msimZoomIn" onclick="mobileMapZoom(1)" aria-label="Zoom in" title="Zoom in">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
           </button>
-          <button type="button" class="msim-map-btn" id="msimZoomOut" onclick="mobileMapZoom(-1)" aria-label="Zoom out">
+          <button type="button" class="msim-map-btn" id="msimZoomOut" onclick="mobileMapZoom(-1)" aria-label="Zoom out" title="Zoom out">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
           </button>
         </div>
         <div class="msim-map-group">
-          <button type="button" class="msim-map-btn" id="msimRecenterBtn" onclick="recenterMap()" aria-label="Recenter map">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>
+          <button type="button" class="msim-map-btn" id="msimRecenterBtn" onclick="recenterMap()" aria-label="Show the whole barangay" title="Show the whole barangay">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5V5a1 1 0 0 1 1-1h3.5M15.5 4H19a1 1 0 0 1 1 1v3.5M20 15.5V19a1 1 0 0 1-1 1h-3.5M8.5 20H5a1 1 0 0 1-1-1v-3.5"/><path d="M8.5 15.5c1.5-3.5 5-3 5.5-5.5"/><circle cx="8.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.6"/></svg>
           </button>
-          <button type="button" class="msim-map-btn" id="msimLocateBtn" onclick="locateMobileUser()" aria-label="Go to my location">
+        </div>
+        <div class="msim-map-group">
+          <button type="button" class="msim-map-btn" id="msimLocateBtn" onclick="locateMobileUser()" aria-label="Show my location" title="Show my location">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
           </button>
         </div>
       </div>
 
-      {# The legend, bottom-left above the sheet; its header folds it. #}
-      <div class="msim-maplegend" id="msimMapLegend" hidden>
-        <button type="button" class="msim-maplegend-toggle" id="msimMapLegendToggle" onclick="toggleMobileMapLegend()" aria-expanded="true" aria-controls="msimMapLegendBody">
+      {# What the map buttons just did, or why they could not. #}
+      <div class="msim-toast" id="msimToast" role="status" aria-live="polite" hidden></div>
+
+      {# The legend, bottom-left above the sheet: folded to its chip until
+         tapped, opening upward from it. #}
+      <div class="msim-maplegend is-folded" id="msimMapLegend" hidden>
+        <button type="button" class="msim-maplegend-toggle" id="msimMapLegendToggle" onclick="toggleMobileMapLegend()" aria-expanded="false" aria-controls="msimMapLegendBody">
           <span>Legend</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>
         </button>
-        <div class="msim-maplegend-body" id="msimMapLegendBody"></div>
+        <div class="msim-maplegend-body" id="msimMapLegendBody" hidden></div>
       </div>
 
       <section class="msheet" id="msimSheet" aria-label="Simulation panel" data-snap="peek">
@@ -430,6 +438,14 @@
             </div>
             <p class="msummary-dest" id="msimSummaryDest" hidden></p>
             <p class="msummary-far" id="msimFarNote" hidden></p>
+            {# Flood with no safe route: the first thing to do. 911 is the
+               first of the Emergency hotlines (_emergency_contacts.html),
+               which stay in the details. #}
+            <a class="mrescue" id="msimRescue" href="tel:911" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
+              <span class="mrescue-text" id="msimRescueText"></span>
+              <span class="mrescue-number">911</span>
+            </a>
             <div class="msheet-actions" id="msimResultActions">
               <button class="mbtn" type="button" onclick="showMobileSetup()">Edit setup</button>
               <button class="mbtn mbtn--primary" id="msimDetailsBtn" type="button" onclick="toggleMobileResultDetails()">See details</button>

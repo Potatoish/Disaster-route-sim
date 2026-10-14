@@ -2,6 +2,14 @@
 const ROUTE_BEST_WEIGHT = 5;
 const ROUTE_OTHER_WEIGHT = 3.5;
 const ROUTE_EDGE_EXTRA_WEIGHT = 2;
+// Phones and tablets: the best (or picked) route is cased -- a white band
+// this much wider than the line, under it a dark rim ROUTE_EDGE_EXTRA_WEIGHT
+// wider again -- so it reads on any hazard fill, the red "High risk" route
+// on the red High-flood fill included (3:1, WCAG 1.4.11). The rim is the
+// route's own casing layer, recolored; the band is its halo layer.
+const ROUTE_HALO_EXTRA_WEIGHT = 4;
+const ROUTE_HALO_COLOR = '#ffffff';
+const ROUTE_RIM_COLOR = '#0f172a';
 
 const ROUTE_TRAIL_WEIGHT = 4;
 const ROUTE_TRAIL_OPACITY = 1;
@@ -110,6 +118,7 @@ function stackRouteGroups(groups) {
     .sort((left, right) => (right.drawPriority ?? 99) - (left.drawPriority ?? 99))
     .forEach(group => {
       group.casingLayer?.bringToFront();
+      group.haloLayer?.bringToFront();
       group.mainLayer?.bringToFront();
       group.hitLayer?.bringToFront();
     });
@@ -121,7 +130,13 @@ function showRouteGroupFullPath(group, full) {
   group.showingFullPath = full;
   const latlngs = full ? group.fullPath : group.ownRuns;
   group.casingLayer?.setLatLngs(latlngs);
+  group.haloLayer?.setLatLngs(latlngs);
   group.mainLayer?.setLatLngs(latlngs);
+}
+
+// Routes drawn now get a halo layer (ROUTE_HALO_*): the phone/tablet layout.
+function isRouteCasingLayout() {
+  return !!window.mobileSim?.isActive();
 }
 
 // A route's line, edge and marching-dash colors on the current base map.
@@ -134,7 +149,7 @@ function getRouteLineColors(color) {
 function syncRouteColorsToBaseMap(mapLayers) {
   (mapLayers.routeGroups || []).forEach(group => {
     const colors = getRouteLineColors(group.color);
-    group.casingLayer?.setStyle({ color: colors.edge });
+    group.casingLayer?.setStyle({ color: group.cased ? ROUTE_RIM_COLOR : colors.edge });
     group.mainLayer?.setStyle({ color: colors.line });
     group.previewDotsLayer?.setStyle({ color: colors.dash });
   });
@@ -211,16 +226,31 @@ function mapMoveOptions(options = {}) {
 
 // The house pin of an evacuation site, with a name badge under the house:
 // earthquake open areas (earthquake.js) and flood evacuation sites (flood.js).
-// A badge wider than the 66-unit pin overhangs it a little.
+// A badge wider than the 66-unit pin overhangs it a little. The icon shows
+// at 0.63 of its units, so a 10-unit label is 6.3px; on phones and tablets
+// the badge is larger (EVAC_BADGE_LARGE, about 11px text) in a wider icon,
+// the pin itself unchanged.
+const EVAC_BADGE_LARGE = { labelSize: 17, height: 26, charWidth: 11.8, padding: 18 };
+
 function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labelSize, halo = false }) {
+  const large = !!window.mobileSim?.isActive();
+  // The pin is drawn 92 units wide; a large badge widens the icon around it.
+  const largeBadgeWidth = Math.round(label.length * EVAC_BADGE_LARGE.charWidth + EVAC_BADGE_LARGE.padding);
+  const width = large ? Math.max(92, largeBadgeWidth + 4) : 92;
+  const shift = (width - 92) / 2;
+  const badge = large
+    ? { width: largeBadgeWidth, height: EVAC_BADGE_LARGE.height, y: 62, size: EVAC_BADGE_LARGE.labelSize, baseline: 81 }
+    : { width: badgeWidth, height: 18, y: 63, size: labelSize, baseline: 75.5 };
+  const height = large ? 114 : 110;
   const haloCircle = halo ? `<circle cx="46" cy="38" r="33" fill="${fill}" fill-opacity="0.18" />` : '';
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="92" height="110" viewBox="0 0 92 110">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
       <defs>
         <filter id="evacShadow" x="-20%" y="-20%" width="140%" height="160%">
           <feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="rgba(15,23,42,0.26)"/>
         </filter>
       </defs>
+      <g transform="translate(${shift} 0)">
       ${haloCircle}
       <g filter="url(#evacShadow)">
         <path d="M46 8c-18.2 0-33 14.8-33 33 0 21.8 25.4 41.6 33 58 7.6-16.4 33-36.2 33-58 0-18.2-14.8-33-33-33z"
@@ -229,16 +259,18 @@ function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labe
         <path d="M34 40l12-10 12 10" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M38 40v11h16V40" fill="none" stroke="${accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M46 45v6" fill="none" stroke="${accent}" stroke-width="3.2" stroke-linecap="round"/>
-        <rect x="${46 - badgeWidth / 2}" y="63" width="${badgeWidth}" height="18" rx="9" fill="#ffffff" opacity="0.98"/>
-        <text x="46" y="75.5" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="${labelSize}" font-weight="800" fill="${accent}">${label}</text>
+        <rect x="${46 - badge.width / 2}" y="${badge.y}" width="${badge.width}" height="${badge.height}" rx="${badge.height / 2}" fill="#ffffff" opacity="0.98"/>
+        <text x="46" y="${badge.baseline}" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="${badge.size}" font-weight="800" fill="${accent}">${label}</text>
+      </g>
       </g>
     </svg>
   `;
 
+  const scale = 58 / 92;
   return L.icon({
     iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    iconSize: [58, 70],
-    iconAnchor: [29, 63],
+    iconSize: [Math.round(width * scale), Math.round(height * (70 / 110))],
+    iconAnchor: [Math.round((46 + shift) * scale), 63],
   });
 }
 
@@ -342,7 +374,9 @@ function createRouteGroup(route, isBest = false, color = '') {
     color,
     route,
     casingLayer: null,
+    haloLayer: null,
     mainLayer: null,
+    cased: false,
   };
 }
 
@@ -355,6 +389,8 @@ function trackRouteLayer(layer, routeGroup, mapLayers, kind) {
 
   if (kind === 'casing') {
     routeGroup.casingLayer = layer;
+  } else if (kind === 'halo') {
+    routeGroup.haloLayer = layer;
   } else if (kind === 'main') {
     routeGroup.mainLayer = layer;
   } else if (kind === 'hit') {
@@ -381,6 +417,21 @@ function addRouteCasing(pathCoords, cfg, gMap, mapLayers, routeGroup) {
     interactive: false,
     className: 'route-line',
   }).addTo(gMap), routeGroup, mapLayers, 'casing');
+}
+
+// Hidden (opacity 0) until applyRouteGroupVisual (script.js) cases the group.
+function addRouteHalo(pathCoords, cfg, gMap, mapLayers, routeGroup) {
+  return trackRouteLayer(L.polyline(pathCoords, {
+    color: ROUTE_HALO_COLOR,
+    opacity: 0,
+    weight: cfg.weight + ROUTE_HALO_EXTRA_WEIGHT,
+    dashArray: cfg.trail ? getRouteTrailDashArray() : null,
+    noClip: true,
+    lineCap: 'round',
+    lineJoin: 'round',
+    interactive: false,
+    className: 'route-line',
+  }).addTo(gMap), routeGroup, mapLayers, 'halo');
 }
 
 function addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup) {
@@ -417,6 +468,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, routeGroup) {
   route.render_path = pathCoords;
   routeGroup.fullPath = pathCoords;
   addRouteCasing(pathCoords, cfg, gMap, mapLayers, routeGroup);
+  if (isRouteCasingLayout()) addRouteHalo(pathCoords, cfg, gMap, mapLayers, routeGroup);
   addRoutePolyline(pathCoords, cfg, gMap, mapLayers, routeGroup);
   return addRouteHitArea(pathCoords, gMap, mapLayers, routeGroup);
 }
@@ -424,6 +476,7 @@ function drawFallbackPolyline(route, cfg, gMap, mapLayers, routeGroup) {
 function getRouteGroupLayers(group) {
   return [
     group.casingLayer,
+    group.haloLayer,
     group.mainLayer,
     group.hitLayer,
   ].filter(Boolean);
@@ -487,6 +540,9 @@ async function renderRoutesOnRoads({
   fit = true,
   buildEtaLabel = null,
   afterDrawPins = null,
+  // false: Route 1 is already on the map (a phone replay's), so the lines
+  // take its place without fading in from nothing.
+  fadeIn = true,
 }) {
   if (typeof window.clearRouteAnimation === 'function') {
     window.clearRouteAnimation();
@@ -496,7 +552,7 @@ async function renderRoutesOnRoads({
   mapLayers.routes = [];
   mapLayers.routeGroups = [];
   // The new lines (and their labels) fade in together; they stay still.
-  replayClassAnimation(gMap.getContainer(), 'routes-entering');
+  if (fadeIn) replayClassAnimation(gMap.getContainer(), 'routes-entering');
 
   const CFG = {
     best: { color: ROUTE_BEST_COLOR, weight: ROUTE_BEST_WEIGHT, opacity: 1 },

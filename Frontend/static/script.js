@@ -542,6 +542,15 @@ const LOCATION_OUTSIDE_HINT_MS = 7000;
 // the map glides out to the whole barangay so its outline shows where
 // location does work.
 function showLocationOutsideNotice() {
+  // On a phone the map stays where it is (a route or the ants' search may
+  // be on it); the notice alone says why nothing moved.
+  if (window.mobileSim?.isActive()) {
+    window.mobileSim.toast(
+      `You're outside ${selectedBarangay || 'this barangay'}. Routes only cover this barangay.`,
+      { error: true, durationMs: LOCATION_OUTSIDE_HINT_MS },
+    );
+    return;
+  }
   fitMapToBoundaryPaths(barangayBoundaryRings, 42, { fly: true, duration: RECENTER_FLY_SECONDS });
   showPinHintError(
     `You're outside Brgy. ${selectedBarangay || 'this barangay'}. My location only works inside the outlined area.`,
@@ -1210,7 +1219,8 @@ function initMap() {
     clearTimeout(mapResizeDebounceTimer);
     mapResizeDebounceTimer = window.setTimeout(() => {
       keepMapContentInPlace();
-      refitMapToCurrentRoute({ onlyIfOutOfView: true });
+      // A phone visitor who moved the map keeps their view (mobile-sim.js).
+      if (!window.mobileSim?.isAutoFitPaused()) refitMapToCurrentRoute({ onlyIfOutOfView: true });
     }, 150);
   });
   mapResizeObserver.observe(resizedMapEl);
@@ -1266,9 +1276,24 @@ const RECENTER_FLY_SECONDS = 0.8;
 
 // The recenter button: brings back the view the current step started from
 // -- the picked route, else the best route and its pins after a run, and
-// the whole barangay before one.
+// the whole barangay before one. On a phone or tablet it also frames the
+// ants' search while a replay plays (or picks the walker up again), gives
+// the camera back to the app after the visitor moved the map
+// (mobile-sim.js), and says what it shows.
 function recenterMap() {
   if (!gMap) return;
+
+  if (window.mobileSim?.isActive()) {
+    window.mobileSim.resumeAutoFit();
+    if (activeReplayController && !activeReplayController.isDone()) {
+      const walking = activeReplayController.isWalking();
+      // Walking: the follow eases the walker back to its focus point.
+      if (!walking) fitReplaySearch({ flySeconds: RECENTER_FLY_SECONDS });
+      window.mobileSim.toast(walking ? 'Following the walk on Route 1' : 'Showing the ants\' search');
+      return;
+    }
+    window.mobileSim.toast(simData ? 'Showing full route' : 'Showing the whole barangay');
+  }
 
   const focusedGroup = selectedRouteFocus
     ? (mapLayers.routeGroups || []).find(group => Number(group.routeNo) === Number(selectedRouteFocus.routeNo))
@@ -1344,14 +1369,35 @@ function flyToVisitor(latlng) {
   }));
 }
 
-function locateVisitor({ button = null, moveTo = flyToVisitor } = {}) {
+// What "My location" says: a short notice on the phone map (mobile-sim.js),
+// the pin hint elsewhere.
+function showLocateNotice(message, { durationMs } = {}) {
+  if (window.mobileSim?.isActive()) window.mobileSim.toast(message, { error: true, durationMs });
+  else showPinHintError(message, durationMs ? { durationMs } : undefined);
+}
+
+// Each way the browser can fail to give a position (GeolocationPositionError
+// codes 1-3); the desktop keeps one message for the last two.
+const LOCATE_ERROR_MESSAGES = {
+  1: 'Location is blocked for this site. Allow it in your browser, then try again.',
+  2: 'Your location isn\'t available right now. Check that location is on, then try again.',
+  3: 'Finding your location took too long. Try again in a moment.',
+};
+const LOCATE_ERROR_FALLBACK = 'Could not get your location. Try again in a moment.';
+
+function getLocateErrorMessage(error) {
+  if (error?.code === 1) return LOCATE_ERROR_MESSAGES[1];
+  return (window.mobileSim?.isActive() && LOCATE_ERROR_MESSAGES[error?.code]) || LOCATE_ERROR_FALLBACK;
+}
+
+function locateVisitor({ button = null, moveTo = flyToVisitor, onFound = null } = {}) {
   if (!gMap) return;
   if (!navigator.geolocation) {
-    showPinHintError('This browser cannot share your location.');
+    showLocateNotice('This browser cannot share your location.');
     return;
   }
   if (!barangayBoundaryRings.length) {
-    showPinHintError('The barangay map is still loading. Try again in a moment.');
+    showLocateNotice('The barangay map is still loading. Try again in a moment.');
     return;
   }
 
@@ -1370,10 +1416,8 @@ function locateVisitor({ button = null, moveTo = flyToVisitor } = {}) {
     if (moved) return;
     if (outside) {
       showLocationOutsideNotice();
-    } else if (error && error.code === 1) {
-      showPinHintError('Location is blocked for this site. Allow it in your browser, then try again.');
     } else {
-      showPinHintError('Could not get your location. Try again in a moment.');
+      showLocateNotice(getLocateErrorMessage(error));
     }
   };
 
@@ -1394,6 +1438,7 @@ function locateVisitor({ button = null, moveTo = flyToVisitor } = {}) {
         moved = true;
         setLocateBusy(button, false);
         moveTo(latlng);
+        onFound?.();
       }
     } else {
       outside = true;
@@ -3192,7 +3237,7 @@ function fitMapToBoundaryPaths(paths, padding = 42, { fly = false, duration = BA
   const fitOptions = covered
     ? {
       paddingTopLeft: [(covered.left || 0) + padding, covered.top + padding],
-      paddingBottomRight: [padding, covered.bottom + padding],
+      paddingBottomRight: [Math.max(padding, (covered.right || 0) + 12), covered.bottom + padding],
     }
     : { padding: [padding, padding] };
   if (fly) {
@@ -3236,6 +3281,7 @@ function getMapFitPadding(base = 36) {
   let top = base;
   let bottom = base;
   let left = base;
+  let right = base;
 
   ['floodFilterControl', 'earthquakeViewSelector', 'sidebarReopenBtn'].forEach(id => {
     const el = document.getElementById(id);
@@ -3243,14 +3289,16 @@ function getMapFitPadding(base = 36) {
     top = Math.max(top, el.getBoundingClientRect().bottom - mapRect.top + 12);
   });
 
-  // Phone/tablet layout: its top bar and bottom sheet, or the tablet's
-  // docked panel (those overlays are hidden there). Read from the sheet's
-  // target height, not its box, which may still be animating.
+  // Phone/tablet layout: its top bar, bottom sheet and legend chip, the map
+  // buttons on the right, or the tablet's docked panel (those overlays are
+  // hidden there). Read from the sheet's target height, not its box, which
+  // may still be animating.
   const covered = window.mobileSim?.getCoveredInsets();
   if (covered) {
     top = Math.max(top, covered.top + 12);
     bottom = Math.max(bottom, covered.bottom + 12);
     left = Math.max(left, (covered.left || 0) + 24);
+    right = Math.max(right, (covered.right || 0) + 12);
   }
   top += MAP_FIT_MARKER_HEADROOM;
 
@@ -3270,7 +3318,7 @@ function getMapFitPadding(base = 36) {
     bottom *= scale;
   }
 
-  return { paddingTopLeft: [left, top], paddingBottomRight: [base, bottom] };
+  return { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom] };
 }
 
 function getDisplayedEarthquakeRoute() {
@@ -3980,7 +4028,7 @@ async function setFloodHazardOverlayMode(modeKey) {
   }
 }
 
-async function renderActiveSimulationRoutes() {
+async function renderActiveSimulationRoutes({ fadeIn = true } = {}) {
   if (!simData || !Array.isArray(simData.routes)) return;
 
   const isEarthquakeResult = isEarthquakeSimulationResult(simData);
@@ -3998,6 +4046,7 @@ async function renderActiveSimulationRoutes() {
     fitPoints: [getReadyPin('start'), isEarthquakeResult ? null : getReadyPin('end')].filter(Boolean),
     // Earthquake results fit once below, around the hazard extent too.
     fit: !isEarthquakeResult,
+    fadeIn,
     buildEtaLabel: buildRouteEtaLabel,
     afterDrawPins: isEarthquakeResult
       ? () => {
@@ -4330,6 +4379,7 @@ async function followSimulationJob(startJob, context) {
     }
   } finally {
     setSimulationInProgress(false);
+    clearReplayRoute();
     if (!loaderHidden) {
       hideLoader(loaderHideDelay);
     }
@@ -4378,6 +4428,56 @@ function mountReplayPanel(panel) {
     }
   }
   return host;
+}
+
+// The replay playing now, for the recenter button and the phone sheet's
+// refit; and the one whose Route 1 is still on the map until the results
+// draw theirs (a phone replay's; aco-replay.js removeLayers).
+let activeReplayController = null;
+let replayRouteOnMap = null;
+
+function clearReplayRoute() {
+  replayRouteOnMap?.removeRoute();
+  replayRouteOnMap = null;
+}
+
+// The ants' search, framed in the part of the map left in view.
+function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
+  const controller = activeReplayController;
+  if (!gMap || !controller || controller.isDone()) return;
+  const bounds = controller.getSearchBounds();
+  const padding = getReplayFitPadding();
+  if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return;
+  const fitOptions = { ...padding, maxZoom: PIN_PLACEMENT_ZOOM };
+  if (flySeconds) gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration: flySeconds }));
+  else gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
+}
+
+// The phone sheet snapped to another height (mobile-sim.js): the picked or
+// best route, or the ants' search, back into the part of the map left in
+// view -- unless it is still in view, or the visitor moved the map.
+const SHEET_REFIT_FLY_SECONDS = 0.5;
+
+function refitMapAfterSheetSnap() {
+  if (!gMap || window.mobileSim?.isAutoFitPaused()) return;
+  if (activeReplayController && !activeReplayController.isDone()) {
+    // While walking, the camera eases the walker to its new focus point.
+    if (!activeReplayController.isWalking()) fitReplaySearch({ flySeconds: SHEET_REFIT_FLY_SECONDS, onlyIfOutOfView: true });
+    return;
+  }
+  const focusedGroup = selectedRouteFocus
+    ? (mapLayers.routeGroups || []).find(group => Number(group.routeNo) === Number(selectedRouteFocus.routeNo))
+    : null;
+  const focusedPath = getRoutePreviewPath(focusedGroup);
+  if (focusedPath.length > 1) {
+    const bounds = L.latLngBounds(focusedPath);
+    const padding = getMapFitPadding();
+    if (!boundsFitInView(bounds, padding)) {
+      gMap.flyToBounds(bounds, mapMoveOptions({ ...padding, duration: SHEET_REFIT_FLY_SECONDS }));
+    }
+    return;
+  }
+  refitMapToCurrentRoute({ onlyIfOutOfView: true, flySeconds: SHEET_REFIT_FLY_SECONDS });
 }
 
 // The map's fit padding (getMapFitPadding) plus the replay's card, which on
@@ -4497,7 +4597,10 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       getPadding: getReplayFitPadding,
       onPanelChange: () => window.mobileSim?.scheduleSync(),
       onWalkChange: walking => document.getElementById('appShell')?.classList.toggle('aco-replay-walking', walking),
+      mobileLayout: !!window.mobileSim?.isActive(),
+      isCameraPaused: () => !!window.mobileSim?.isAutoFitPaused(),
     });
+    activeReplayController = controller;
 
     const shell = document.getElementById('appShell');
     const layoutBefore = shell?.className;
@@ -4535,15 +4638,20 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
         controller.skip();
       } finally {
         window.removeEventListener('resize', onResize);
-        endSimulationReplay(controller);
+        endSimulationReplay(controller, { keepRoute: true });
       }
     },
   };
 }
 
-function endSimulationReplay(controller) {
+// keepRoute: the results are next, and draw their routes over Route 1.
+function endSimulationReplay(controller, { keepRoute = false } = {}) {
   controller?.skip();
   controller?.panel.remove();
+  if (activeReplayController === controller) activeReplayController = null;
+  clearReplayRoute();
+  if (keepRoute && controller?.isRouteShown()) replayRouteOnMap = controller;
+  else controller?.removeRoute();
   window.mobileSim?.endReplay();
   document.getElementById('appShell')?.classList.remove('aco-replaying', 'aco-replay-card', 'aco-replay-walking');
 }
@@ -4589,8 +4697,9 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
   if (shell && shell.className !== layoutBefore && !prefersReducedMotion()) {
     await waitMs(PANEL_SLIDE_MS + 40);
   }
-  await renderActiveSimulationRoutes();
+  await renderActiveSimulationRoutes({ fadeIn: !replayRouteOnMap });
   applyRouteFocusState(null);
+  clearReplayRoute();
   setResultsSidebarActionsVisible(true);
 
   setLoaderStep('complete', 100);
@@ -5036,10 +5145,12 @@ document.addEventListener('keydown', event => {
   focusRouteFromModal(Number(card.dataset.focusRoute), card.dataset.focusCategory || '');
 });
 
+// cased: the white band and dark rim (ROUTE_HALO_* in osm.js), on the best
+// or picked route, where the phone layout drew the route a halo layer.
 function getDefaultRouteVisual(group) {
   // isBest also covers the red best route when no route is safe.
   if (group?.category === 'best' || group?.isBest) {
-    return { mainWeight: ROUTE_BEST_WEIGHT, mainOpacity: 1, casingOpacity: 1 };
+    return { mainWeight: ROUTE_BEST_WEIGHT, mainOpacity: 1, casingOpacity: 1, cased: true };
   }
 
   // Available routes: the gray dotted "fading trail" (ROUTE_TRAIL_* in osm.js).
@@ -5058,8 +5169,8 @@ function getDefaultRouteVisual(group) {
 function getFocusedRouteVisual(group) {
   const base = getDefaultRouteVisual(group);
   return base.trail
-    ? { mainWeight: ROUTE_OTHER_WEIGHT, mainOpacity: 1, casingOpacity: 1, trail: false }
-    : { ...base, mainOpacity: 1, casingOpacity: 1 };
+    ? { mainWeight: ROUTE_OTHER_WEIGHT, mainOpacity: 1, casingOpacity: 1, trail: false, cased: true }
+    : { ...base, mainOpacity: 1, casingOpacity: 1, cased: true };
 }
 
 function getDimmedRouteVisual(group) {
@@ -5069,6 +5180,7 @@ function getDimmedRouteVisual(group) {
     mainWeight: Math.max(2, base.mainWeight - 1),
     mainOpacity: group?.category === 'eliminated' ? 0.08 : 0.12,
     casingOpacity: 0,
+    cased: false,
   };
 }
 
@@ -5131,11 +5243,23 @@ function applyRouteGroupVisual(group, visual) {
 
   const zoomScale = getRouteZoomScale(gMap);
   const dashArray = visual.trail ? getRouteTrailDashArray(zoomScale) : null;
+  const cased = !!(group.haloLayer && visual.cased);
+  group.cased = cased;
+  const haloWeight = visual.mainWeight + (cased ? ROUTE_HALO_EXTRA_WEIGHT : 0);
+
+  if (group.haloLayer) {
+    group.haloLayer.setStyle({
+      opacity: cased ? visual.mainOpacity : 0,
+      weight: haloWeight * zoomScale,
+      dashArray,
+    });
+  }
 
   if (group.casingLayer) {
     group.casingLayer.setStyle({
+      color: cased ? ROUTE_RIM_COLOR : getRouteLineColors(group.color).edge,
       opacity: visual.casingOpacity,
-      weight: (visual.mainWeight + ROUTE_EDGE_EXTRA_WEIGHT) * zoomScale,
+      weight: (haloWeight + ROUTE_EDGE_EXTRA_WEIGHT) * zoomScale,
       dashArray,
     });
   }
@@ -5152,6 +5276,7 @@ function applyRouteGroupVisual(group, visual) {
 function bringRouteGroupToFront(group) {
   if (!group) return;
   if (group.casingLayer) group.casingLayer.bringToFront();
+  if (group.haloLayer) group.haloLayer.bringToFront();
   if (group.mainLayer) group.mainLayer.bringToFront();
   if (group.hitLayer) group.hitLayer.bringToFront();
 }

@@ -3270,9 +3270,28 @@ body.dark .leaflet-popup-close-button {
   bottom: 24px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   transform: translateY(calc(-1 * var(--sheet-h, 0px)));
   transition: transform .28s var(--msim-ease), opacity .18s ease, visibility 0s linear 0s;
+}
+
+/* Phones: the buttons stay put top-right under the top bar, whatever the
+   sheet's height, so they never move as its text changes; the sheet only
+   slides over them when it opens to full height. */
+@media (max-width: 639px) {
+  .msim-map-controls {
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    transform: none;
+  }
+}
+
+/* Touch screens pinch and double-tap to zoom, so only Fit and My location
+   stay, with nothing above them. */
+@media (pointer: coarse) {
+  .msim-map-controls .msim-map-group--zoom {
+    display: none;
+  }
 }
 
 #appShell.msim-controls-hidden .msim-map-controls {
@@ -3301,6 +3320,8 @@ body.dark .leaflet-popup-close-button {
   background: transparent;
   color: var(--map-ui-text);
   cursor: pointer;
+  /* One tap, at once: no double-tap zoom wait on the button. */
+  touch-action: manipulation;
 }
 
 .msim-map-btn + .msim-map-btn {
@@ -3330,21 +3351,58 @@ body.dark .leaflet-popup-close-button {
   to { transform: rotate(360deg); }
 }
 
-/* The legend on the map: bottom-left, riding above the sheet like the
-   buttons opposite it. Small and see-through so it covers little of the
-   map; its header folds it down to just "Legend" (mobile-sim.js remembers
-   that per browser). */
+/* What the map buttons just did ("Showing full route"), or why they could
+   not: under the top bar, clear of the buttons on the right, like the pin
+   hint (mobile-sim.js showToast). */
+.msim-toast {
+  position: fixed;
+  z-index: 224;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  right: calc(68px + env(safe-area-inset-right, 0px));
+  width: fit-content;
+  margin-inline: auto;
+  padding: 9px 14px;
+  border: 1px solid var(--map-ui-border);
+  border-radius: 10px;
+  background: var(--map-ui-bg);
+  box-shadow: var(--map-ui-shadow);
+  color: var(--map-ui-text);
+  font: 600 .84rem/1.35 var(--font-body);
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.msim-toast.is-shown {
+  opacity: 1;
+  transform: none;
+}
+
+.msim-toast.is-error {
+  border-color: color-mix(in srgb, var(--red) 60%, transparent);
+}
+
+/* The legend on the map: bottom-left, riding just above the sheet (the map
+   attribution sits bottom-right). Folded to its "Legend" chip in every step
+   until tapped; it then opens upward from the chip, scrolling inside the
+   map left in view (--msim-legend-max-h, mobile-sim.js), without moving
+   anything else. */
 .msim-maplegend {
   position: fixed;
   z-index: 212;
   left: calc(12px + env(safe-area-inset-left, 0px));
-  bottom: 24px;
+  bottom: 8px;
   transform: translateY(calc(-1 * var(--sheet-h, 0px)));
-  max-width: min(210px, calc(100vw - 92px));
-  padding: 0 9px 7px;
+  display: flex;
+  flex-direction: column-reverse;
+  max-width: min(70vw, 260px);
+  padding: 7px 9px 0;
   border: 1px solid var(--map-ui-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--map-ui-bg) 74%, transparent);
+  background: color-mix(in srgb, var(--map-ui-bg) 86%, transparent);
   box-shadow: 0 6px 16px rgba(15, 23, 42, .14);
   backdrop-filter: blur(6px);
   color: var(--map-ui-text);
@@ -3352,7 +3410,7 @@ body.dark .leaflet-popup-close-button {
 }
 
 .msim-maplegend.is-folded {
-  padding-bottom: 0;
+  padding-top: 0;
 }
 
 #appShell.msim-legend-hidden .msim-maplegend {
@@ -3392,7 +3450,8 @@ body.dark .leaflet-popup-close-button {
   transition: transform .18s ease;
 }
 
-.msim-maplegend.is-folded .msim-maplegend-toggle svg {
+/* Up to open, down to close. */
+.msim-maplegend:not(.is-folded) .msim-maplegend-toggle svg {
   transform: rotate(180deg);
 }
 
@@ -3401,6 +3460,14 @@ body.dark .leaflet-popup-close-button {
   display: grid;
   gap: 3px;
   margin: 0 !important;
+}
+
+.msim-maplegend-body {
+  max-height: var(--msim-legend-max-h, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--map-ui-border);
 }
 
 .msim-maplegend .legend-row {
@@ -3926,17 +3993,19 @@ body.dark .leaflet-popup-close-button {
   margin-top: 8px;
 }
 
+/* The sheet's own font; tabular digits keep "16 min · 882 m" steady. */
 .msummary-main {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   color: var(--ink-strong);
-  font: 500 1rem var(--font-meta);
+  font: 600 1rem var(--font-body);
+  font-variant-numeric: tabular-nums;
 }
 
 .msummary-main strong {
-  font-weight: 500;
+  font-weight: 800;
 }
 
 .msummary-main svg {
@@ -3946,28 +4015,51 @@ body.dark .leaflet-popup-close-button {
   color: var(--accent);
 }
 
-/* Flood with no safe route: the call for rescue replaces the walking time. */
-.msummary-rescue {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--red) 60%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--red) 10%, transparent);
+.msummary-main.is-danger svg {
   color: var(--red);
-  font: 800 .9rem var(--font-body);
-  cursor: pointer;
+}
+
+/* Flood with no safe route: the call for rescue, the sheet's first action
+   (a tel: link). A fixed dark red keeps white text at 4.5:1 in both
+   themes. */
+.mrescue {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 0 12px 0 14px;
+  border: 1px solid #991b1b;
+  border-radius: 10px;
+  background: #b91c1c;
+  color: #ffffff;
+  font: 800 .94rem/1.25 var(--font-body);
+  text-decoration: none;
   transition: background-color .16s ease, scale .12s ease;
 }
 
-.msummary-rescue:hover {
-  background: color-mix(in srgb, var(--red) 16%, transparent);
+.mrescue:hover {
+  background: #991b1b;
 }
 
-.msummary-main .msummary-rescue svg {
-  color: currentColor;
+.mrescue svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.mrescue-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mrescue-number {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .18);
+  font-variant-numeric: tabular-nums;
 }
 
 .msummary-route {
@@ -4133,7 +4225,8 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 .mroute-time {
   flex: none;
   color: var(--muted);
-  font: 500 .78rem var(--font-meta);
+  font: 600 .8rem var(--font-body);
+  font-variant-numeric: tabular-nums;
 }
 
 .mroute-steps {
@@ -4382,6 +4475,10 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   .msim-bgy-menu {
     animation: none;
   }
+
+  .msim-toast {
+    transition: none;
+  }
 }
 
 /* Tablets (640-1023px): the panel is docked on the left, full height under a
@@ -4434,7 +4531,12 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 
   .msim-maplegend {
     left: calc(var(--msim-side-edge) + 12px);
-    max-width: min(210px, calc(100vw - var(--msim-side-edge) - 92px));
+    max-width: min(260px, calc(100vw - var(--msim-side-edge) - 92px));
+  }
+
+  .msim-toast {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: calc(var(--msim-side-edge) + 12px);
   }
 
   .msim-layers {
@@ -4495,6 +4597,23 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
 
   #appShell.msim-map-covered .leaflet-bottom {
     visibility: hidden;
+  }
+
+  /* While routes or the ants' trails are on the map, the hazard fills step
+     back (still telling Low, Medium and High apart), so the lines on them
+     stand out; setup shows them in full. */
+  .leaflet-hazard-pane {
+    transition: opacity .3s ease;
+  }
+
+  #appShell.msim-route-on .leaflet-hazard-pane {
+    opacity: .6;
+  }
+
+  /* The loader's text goes first, so it never shows over the sheet the
+     loader fades to. */
+  #loader.show.leaving .loader-card {
+    animation: loaderFadeOut .1s ease forwards;
   }
 
   /* A smaller time label on the route, so it hides less of the map. */
@@ -4844,32 +4963,168 @@ body.dark .aco-legend-stuck {
   }
 }
 
-@media (max-width: 639px) {
-  .msheet .aco-cards--walk {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
+/* More / Less and the one-line note are the phone sheet's (below). */
+.aco-replay-more,
+.aco-meta-short {
+  display: none;
+}
 
-  .msheet .aco-cards--walk .safety-result-card {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding: 8px;
-  }
-
-  .msheet .aco-cards--walk .safety-icon-box,
-  .msheet .aco-cards--walk .safety-card-sub {
-    display: none;
-  }
-
-  /* While the ant walks, the legend would sit on the route it follows. */
-  #appShell.aco-replay-walking .msim-maplegend {
-    display: none;
-  }
+/* Elsewhere the note and Skip stack as before. */
+.aco-replay-foot {
+  display: contents;
 }
 
 @media (max-width: 1023px) {
   .aco-replay-skip {
     min-height: 44px;
+  }
+}
+
+/* Phones: the replay sheet is compact, and one height for the whole replay
+   (mobile-sim.js keeps it), so the map keeps most of the screen and never
+   jumps: the current step's text clamped to three lines, cards of three
+   one-line rows, and the note and a small Skip on one line. More (or the
+   handle) opens it to every step in full. */
+@media (max-width: 639px) {
+  .msheet .aco-replay {
+    position: relative;
+  }
+
+  .msheet .aco-replay-more {
+    position: absolute;
+    z-index: 1;
+    top: 7px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--accent);
+    font: 700 .8rem var(--font-body);
+    cursor: pointer;
+  }
+
+  /* 30px tall, tapped as 44. */
+  .msheet .aco-replay-more::after {
+    content: "";
+    position: absolute;
+    inset: -7px -4px;
+  }
+
+  .msheet .aco-step:first-child .aco-step-title,
+  .msheet[data-snap="peek"] .aco-step.is-current .aco-step-title {
+    padding-right: 52px;
+  }
+
+  .msheet[data-snap="peek"] .aco-step.is-current .aco-step-detail {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+    min-height: calc(3 * 1.45em);
+  }
+
+  .msheet:not([data-snap="peek"]) .aco-step:not(.is-current) {
+    display: flex;
+  }
+
+  .msheet:not([data-snap="peek"]) .aco-step + .aco-step {
+    border-top: 1px dashed var(--border);
+  }
+
+  .msheet:not([data-snap="peek"]) .aco-step-detail {
+    display: block;
+  }
+
+  .msheet .aco-cards .safety-result-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    align-items: start;
+    padding: 7px 10px;
+  }
+
+  .msheet .aco-cards .safety-icon-box {
+    display: none;
+  }
+
+  .msheet .aco-card-text > * {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .msheet .aco-card-text .safety-card-sub:empty {
+    display: block;
+    min-height: 1.3em;
+  }
+
+  /* Distance left and the hazard here; Route 1's total is in the results. */
+  .msheet .aco-cards--walk {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 6px;
+  }
+
+  .msheet .aco-cards--walk .safety-result-card:nth-child(3) {
+    display: none;
+  }
+
+  .msheet .aco-replay-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .msheet .aco-replay-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .msheet[data-snap="peek"] .aco-meta-long {
+    display: none;
+  }
+
+  .msheet[data-snap="peek"] .aco-meta-short {
+    display: inline;
+  }
+
+  .msheet:not([data-snap="peek"]) .aco-replay-meta {
+    white-space: normal;
+  }
+
+  .msheet .aco-replay-skip {
+    position: relative;
+    flex: none;
+    width: auto;
+    min-height: 34px;
+    margin: 0 0 0 auto;
+    padding: 0 14px;
+    border-radius: 999px;
+    font-size: .78rem;
+  }
+
+  /* 34px tall, tapped as 44. */
+  .msheet .aco-replay-skip::after {
+    content: "";
+    position: absolute;
+    inset: -5px 0;
+  }
+}
+
+/* Short phones (a 320x568 SE): two lines, for more of the map. */
+@media (max-width: 639px) and (max-height: 700px) {
+  .msheet[data-snap="peek"] .aco-step.is-current .aco-step-detail {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    min-height: calc(2 * 1.45em);
   }
 }
 
@@ -4894,7 +5149,7 @@ body.dark .aco-legend-stuck {
   :is(.run-btn, .evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
       .reset-btn, .safety-download-btn, .safety-all-routes-btn, .route-modal-btn,
       .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
-      .safety-card-action, .msummary-rescue, .aco-replay-skip):active:not(:disabled) {
+      .safety-card-action, .mrescue, .aco-replay-skip):active:not(:disabled) {
     scale: .97;
   }
 }
@@ -4925,4 +5180,10 @@ body.dark .aco-legend-stuck {
   text-align: justify;
   /* Balances the last lines, so a paragraph never ends on one stray word. */
   text-wrap: pretty;
+}
+
+/* Except in the phone/tablet sheet: its lines are too short to justify
+   without wide gaps between the words. */
+.msheet :is(.msheet-help, .mverdict-sub, .msummary-far, .msheet-source, .maccordion p, .aco-step-detail, .aco-replay-meta) {
+  text-align: left;
 }
