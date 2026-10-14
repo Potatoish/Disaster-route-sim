@@ -3300,6 +3300,13 @@ body.dark .leaflet-popup-close-button {
   transition: transform .28s var(--msim-ease), opacity .18s ease, visibility 0s linear .18s;
 }
 
+/* A run holds the map still (script.js setMapGestureLock). Leaflet drops its
+   own touch-action with its handlers, so a drag or pinch on the map would
+   scroll or zoom the page instead. */
+#map.map-gestures-locked {
+  touch-action: none;
+}
+
 .msim-map-group {
   display: flex;
   flex-direction: column;

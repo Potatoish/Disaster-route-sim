@@ -812,8 +812,43 @@ function syncSimulationConfigLock() {
 function setSimulationInProgress(running) {
   simulationInProgress = !!running;
   if (simulationInProgress) cancelPinPlacement();
+  // Phones and tablets: the map holds still from Run until the results are
+  // on it. The replay's camera frames the ants itself, and a stray drag or
+  // pinch there would leave the search off screen.
+  setMapGestureLock('simulation', simulationInProgress && !!window.mobileSim?.isActive());
   advanceStep(getMaxReachableStep());
   syncSimulationConfigLock();
+}
+
+// The visitor's map gestures (drag, pinch, wheel, double-tap, keys) are off
+// while any reason holds: a run on a phone or tablet ('simulation'), or the
+// replay's camera following the walk (aco-replay.js). Only the gestures
+// that were on before the first lock come back.
+const MAP_GESTURE_HANDLERS = ['dragging', 'touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard'];
+const mapGestureLocks = new Set();
+let mapGesturesBeforeLock = null;
+
+function isMapGestureLocked() {
+  return mapGestureLocks.size > 0;
+}
+
+function setMapGestureLock(reason, locked) {
+  const wasLocked = isMapGestureLocked();
+  if (locked) mapGestureLocks.add(reason);
+  else mapGestureLocks.delete(reason);
+  const isLocked = isMapGestureLocked();
+  if (!gMap || isLocked === wasLocked) return;
+  if (isLocked) {
+    mapGesturesBeforeLock = MAP_GESTURE_HANDLERS.filter(name => gMap[name]?.enabled());
+    mapGesturesBeforeLock.forEach(name => gMap[name].disable());
+  } else {
+    (mapGesturesBeforeLock || []).forEach(name => gMap[name]?.enable());
+    mapGesturesBeforeLock = null;
+  }
+  // With Leaflet's handlers off, the browser would take a pinch or drag on
+  // the map for the page itself (style.css .map-gestures-locked).
+  gMap.getContainer().classList.toggle('map-gestures-locked', isLocked);
+  window.mobileSim?.scheduleSync();
 }
 
 function setLoaderProgress(percent) {
@@ -4597,6 +4632,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       getPadding: getReplayFitPadding,
       onPanelChange: () => window.mobileSim?.scheduleSync(),
       onWalkChange: walking => document.getElementById('appShell')?.classList.toggle('aco-replay-walking', walking),
+      lockMap: locked => setMapGestureLock('replay-walk', locked),
       mobileLayout: !!window.mobileSim?.isActive(),
       isCameraPaused: () => !!window.mobileSim?.isAutoFitPaused(),
     });

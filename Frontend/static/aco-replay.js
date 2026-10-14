@@ -28,8 +28,11 @@
   const REF_ZOOM = 18;
   // The canvases reach this far past each edge of the map: a frame is drawn
   // before a drag moves the map on, so the edge it moves towards is
-  // already drawn.
+  // already drawn. Phones and tablets hold the map still for the whole run
+  // (script.js setMapGestureLock), and the camera's own moves redraw every
+  // frame, so there a thin margin does (and saves a third of the pixels).
   const VIEW_PAD = 120;
+  const VIEW_PAD_HELD = 40;
   const ANT_INK = '#111827';
   const STUCK_RING = '#475569';
   const ARRIVED_RING = '#16a34a';
@@ -82,6 +85,11 @@
   // this long instead of jumped to.
   const FOLLOW_EASE_PX = 30;
   const FOLLOW_EASE_MS = 160;
+  // The focus point comes from the panels' boxes, which costs a layout to
+  // read, and the walk cards' text a layout to change: the walk refreshes
+  // them a few times a second, not every frame.
+  const FOCUS_REFRESH_MS = 250;
+  const CARDS_REFRESH_MS = 100;
 
   // Flood: the water the ant walks through, in the map's own fill colors.
   const WATER_RIPPLE = { 1: '#ca8a04', 2: '#ea580c', 3: '#be123c' };
@@ -177,14 +185,18 @@
   //   mobileLayout: plays in the phone/tablet sheet (cased lines, compact
   //     cards, an eased follow, Route 1 left on the map for the results)
   //   isCameraPaused(): the visitor moved the map, so the camera stays put
+  //   lockMap(locked): turn the visitor's map gestures off (true) while the
+  //     camera follows the walker, and back on (false)
   function create(options) {
     const { map, replay, mode, route1: route1Info } = options;
     const isFlood = mode !== 'earthquake';
     const mobileLayout = !!options.mobileLayout;
+    const viewPad = mobileLayout ? VIEW_PAD_HELD : VIEW_PAD;
     const isCameraPaused = () => !!options.isCameraPaused?.();
     const edges = decodeEdges(replay);
-    const rounds = replay.rounds.map(round => ({
+    const rounds = replay.rounds.map((round, index) => ({
       ...round,
+      number: index + 1,
       levels: new Map(round.trail.map(([road, level]) => [road, trailStrength(level, round.untouched)])),
       walks: Array.isArray(round.walks) ? planWalks(round.walks.map(decodeWalk).filter(Boolean)) : null,
     }));
@@ -423,6 +435,9 @@
     const views = [trailView, antView];
     const g = antView.g;
     let pixelRatio = 1;
+    // Where the round's ants have walked so far (drawWalked), off screen.
+    const walked = { canvas: document.createElement('canvas'), key: null };
+    walked.g = walked.canvas.getContext('2d');
 
     const startRef = map.project(startLatLng, REF_ZOOM);
     const trailRef = new Map(trailRoads.map(number => [number, edgePoints(number).map(point => map.project(point, REF_ZOOM))]));
@@ -432,22 +447,45 @@
     };
 
     function sizeCanvases() {
-      const size = map.getSize().add([VIEW_PAD * 2, VIEW_PAD * 2]);
+      const size = map.getSize().add([viewPad * 2, viewPad * 2]);
       pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      views.forEach(({ canvas }) => {
-        canvas.width = Math.round(size.x * pixelRatio);
-        canvas.height = Math.round(size.y * pixelRatio);
-        canvas.style.width = `${size.x}px`;
-        canvas.style.height = `${size.y}px`;
+      views.forEach(view => {
+        view.canvas.width = Math.round(size.x * pixelRatio);
+        view.canvas.height = Math.round(size.y * pixelRatio);
+        view.canvas.style.width = `${size.x}px`;
+        view.canvas.style.height = `${size.y}px`;
+        view.drawn = null;
+        view.blank = true;
       });
+      walked.canvas.width = trailView.canvas.width;
+      walked.canvas.height = trailView.canvas.height;
+      walked.key = null;
+    }
+
+    // Canvases are released now rather than at the next garbage
+    // collection: Safari caps the memory all canvases on a page may hold,
+    // and a few runs in a row could reach it, after which a new replay's
+    // canvases stay blank.
+    function releaseCanvas(canvas) {
+      if (!canvas) return;
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    // What a canvas's picture depends on besides its content: the map's
+    // zoom, origin and pan, and whether a zoom is animating.
+    function viewKey() {
+      const origin = map.getPixelOrigin();
+      const pane = map.containerPointToLayerPoint([0, 0]);
+      return `${map.getZoom()}|${origin.x}|${origin.y}|${pane.x}|${pane.y}|${state.zoomAnim}`;
     }
 
     // Clears a canvas and lines it up with the map (VIEW_PAD past it). While
     // a zoom animates it keeps the place and scale onZoomAnim gave it.
     function beginView(view) {
-      const size = map.getSize().add([VIEW_PAD * 2, VIEW_PAD * 2]);
+      const size = map.getSize().add([viewPad * 2, viewPad * 2]);
       if (!state.zoomAnim) {
-        view.at = map.containerPointToLayerPoint([-VIEW_PAD, -VIEW_PAD]);
+        view.at = map.containerPointToLayerPoint([-viewPad, -viewPad]);
         L.DomUtil.setPosition(view.canvas, view.at);
       }
       view.g.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
@@ -506,7 +544,11 @@
     // Route 1 stays on the map after a phone replay, until the results draw
     // theirs over it (removeRoute), so it never blinks out in between.
     function removeLayers() {
-      views.forEach(view => view.canvas.remove());
+      views.forEach(view => {
+        releaseCanvas(view.canvas);
+        view.canvas.remove();
+      });
+      releaseCanvas(walked.canvas);
       if (!state.layersOn) return;
       state.layersOn = false;
       map.off(mapHandlers);
@@ -515,14 +557,21 @@
 
     function removeRoute() {
       routeLayers.forEach(layer => layer.remove());
+      const box = renderer._container;
       renderer.remove();
+      if (box?.tagName === 'CANVAS') releaseCanvas(box);
     }
 
     // strengthOf(road): 0-1 (trailStrength). Stronger trails are wider and
-    // darker, and drawn last, over the weaker ones.
-    function drawTrails(strengthOf, fade = 1) {
+    // darker, and drawn last, over the weaker ones. key names the trails'
+    // state (null: always draw): the trails hold still while each round's
+    // ants walk, and a canvas left alone costs the frame nothing.
+    function drawTrails(strengthOf, fade = 1, key = null) {
       state.trailOf = strengthOf;
       state.trailFade = fade;
+      const drawn = key === null ? null : `${key}|${viewKey()}`;
+      if (drawn !== null && drawn === trailView.drawn) return;
+      trailView.drawn = drawn;
       beginView(trailView);
       if (!strengthOf) return;
       const t = trailView.g;
@@ -600,52 +649,103 @@
       };
     }
 
-    function strokeSpan(walk, f, from, to) {
+    function strokeSpan(ctx, walk, f, from, to) {
       const ref = refPoints(walk);
       const p0 = pointOn(walk, f, from);
       const p1 = pointOn(walk, f, to);
-      g.beginPath();
-      g.moveTo(p0.x, p0.y);
-      for (let k = p0.index; k < p1.index; k += 1) g.lineTo(ref[k].x * f.k - f.ox, ref[k].y * f.k - f.oy);
-      g.lineTo(p1.x, p1.y);
-      g.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      for (let k = p0.index; k < p1.index; k += 1) ctx.lineTo(ref[k].x * f.k - f.ox, ref[k].y * f.k - f.oy);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
     }
 
-    function blob(x, y, rx, ry, rotation) {
-      g.beginPath();
+    // Where each ant has walked, faint, so streets many ants take turn
+    // darker. Re-stroking a round's 40 walks from the start every frame
+    // would be most of the replay's GPU time, so they are kept on a canvas
+    // of their own: each frame strokes only what the ants walked since the
+    // last one (butt caps, so the pieces meet without darker beads), and the
+    // whole round is redrawn only when the view has moved.
+    function drawWalked(scene, f) {
+      const w = walked.g;
+      const walks = scene.round.walks || [];
+      const key = `${scene.round.number}|${f.k}|${f.ox}|${f.oy}|${walked.canvas.width}`;
+      w.setTransform(1, 0, 0, 1, 0, 0);
+      if (key !== walked.key) {
+        walked.key = key;
+        w.clearRect(0, 0, walked.canvas.width, walked.canvas.height);
+        walks.forEach(walk => { walk.drawnTo = 0; });
+      }
+      w.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      w.strokeStyle = `rgba(${SCENT}, 0.2)`;
+      w.lineWidth = 2.6;
+      w.lineCap = 'butt';
+      w.lineJoin = 'round';
+      walks.forEach(walk => {
+        const to = Math.min(1, (scene.u - walk.depart) / walk.dur) * walk.len;
+        if (!(to > walk.drawnTo)) return;
+        strokeSpan(w, walk, f, walk.drawnTo, to);
+        walk.drawnTo = to;
+      });
+      g.globalAlpha = scene.fade;
+      g.drawImage(walked.canvas, 0, 0, walked.canvas.width / pixelRatio, walked.canvas.height / pixelRatio);
+      g.globalAlpha = 1;
+    }
+
+    // An ellipse as a subpath of its own: without the moveTo, ellipse()
+    // joins it to the one before with a line, and the fill spans the gap.
+    function traceBlob(x, y, rx, ry, rotation) {
+      g.moveTo(x + rx * Math.cos(rotation), y + rx * Math.sin(rotation));
       g.ellipse(x, y, rx, ry, rotation, 0, Math.PI * 2);
-      g.fill();
     }
 
-    // A small ant facing where it walks: six moving legs, then abdomen,
-    // thorax and head over a white outline, so it reads on any map color.
-    function drawAnt(x, y, heading, alpha, gait, size = 1.12) {
-      const c = Math.cos(heading) * size;
-      const s = Math.sin(heading) * size;
+    // Small ants facing where they walk: six moving legs, then abdomen,
+    // thorax and head over a white outline, so they read on any map color.
+    // A group is one stroke and two fills however many ants are in it (a
+    // round sends 40), not seven draw calls per ant.
+    // ants: [{ x, y, heading, gait }], all at one alpha and size.
+    function drawAntGroup(ants, alpha = 1, size = 1.12) {
+      if (!ants.length) return;
       g.globalAlpha = alpha;
       g.strokeStyle = ANT_INK;
       g.lineWidth = 0.9 * size;
       g.beginPath();
-      for (let j = -1; j <= 1; j += 1) {
-        const bx = x + c * j * 1.3;
-        const by = y + s * j * 1.3;
-        const swing = Math.sin(gait + j * 2.1) * 0.38;
-        [-1, 1].forEach(side => {
-          const angle = heading + side * (Math.PI / 2 - j * 0.5) + swing * side;
-          g.moveTo(bx, by);
-          g.lineTo(bx + Math.cos(angle) * 3.6 * size, by + Math.sin(angle) * 3.6 * size);
-        });
-      }
+      ants.forEach(({ x, y, heading, gait }) => {
+        const c = Math.cos(heading) * size;
+        const s = Math.sin(heading) * size;
+        for (let j = -1; j <= 1; j += 1) {
+          const bx = x + c * j * 1.3;
+          const by = y + s * j * 1.3;
+          const swing = Math.sin(gait + j * 2.1) * 0.38;
+          for (let side = -1; side <= 1; side += 2) {
+            const angle = heading + side * (Math.PI / 2 - j * 0.5) + swing * side;
+            g.moveTo(bx, by);
+            g.lineTo(bx + Math.cos(angle) * 3.6 * size, by + Math.sin(angle) * 3.6 * size);
+          }
+        }
+      });
       g.stroke();
+      // Abdomen, thorax and head, each [rx, ry] at size 1.
+      const bodies = (abdomen, thorax, head) => {
+        g.beginPath();
+        ants.forEach(({ x, y, heading }) => {
+          const c = Math.cos(heading) * size;
+          const s = Math.sin(heading) * size;
+          traceBlob(x - c * 3.2, y - s * 3.2, abdomen[0] * size, abdomen[1] * size, heading);
+          traceBlob(x, y, thorax[0] * size, thorax[1] * size, heading);
+          traceBlob(x + c * 2.9, y + s * 2.9, head[0] * size, head[1] * size, heading);
+        });
+        g.fill();
+      };
       g.fillStyle = '#ffffff';
-      blob(x - c * 3.2, y - s * 3.2, 3.5 * size, 2.7 * size, heading);
-      blob(x, y, 2.2 * size, 2 * size, heading);
-      blob(x + c * 2.9, y + s * 2.9, 2.4 * size, 2.3 * size, heading);
+      bodies([3.5, 2.7], [2.2, 2], [2.4, 2.3]);
       g.fillStyle = ANT_INK;
-      blob(x - c * 3.2, y - s * 3.2, 2.7 * size, 1.9 * size, heading);
-      blob(x, y, 1.45 * size, 1.25 * size, heading);
-      blob(x + c * 2.9, y + s * 2.9, 1.65 * size, 1.55 * size, heading);
+      bodies([2.7, 1.9], [1.45, 1.25], [1.65, 1.55]);
       g.globalAlpha = 1;
+    }
+
+    function drawAnt(x, y, heading, alpha, gait, size = 1.12) {
+      drawAntGroup([{ x, y, heading, gait }], alpha, size);
     }
 
     function ring(x, y, radius, color, alpha, width) {
@@ -669,7 +769,10 @@
     // (share of the walk done), walkMs, fade, live }.
     function drawAnts(scene) {
       state.scene = scene;
+      // Nothing to show, and nothing shown since the canvas was cleared.
+      if (!scene && antView.blank) return;
       beginView(antView);
+      antView.blank = !scene;
       if (!scene || scene.kind === 'none') return;
       const f = frameOf(antView);
       const sx = startRef.x * f.k - f.ox;
@@ -679,22 +782,17 @@
       g.lineJoin = 'round';
 
       if (scene.kind === 'nest') {
+        const nest = [];
         for (let index = replay.ants - 1; index >= 0; index -= 1) {
-          const spot = nestSpot(index, sx, sy, now);
-          drawAnt(spot.x, spot.y, spot.heading, scene.alpha, now / 90 + index, 0.9);
+          nest.push({ ...nestSpot(index, sx, sy, now), gait: now / 90 + index });
         }
+        drawAntGroup(nest, scene.alpha, 0.9);
         return;
       }
 
       const walks = scene.round.walks || [];
       const u = scene.u;
-      // Where each ant has walked, faint, so streets many ants take turn darker.
-      g.strokeStyle = `rgba(${SCENT}, ${(0.2 * scene.fade).toFixed(3)})`;
-      g.lineWidth = 2.6;
-      walks.forEach(walk => {
-        const progress = (u - walk.depart) / walk.dur;
-        if (progress > 0) strokeSpan(walk, f, 0, Math.min(1, progress) * walk.len);
-      });
+      drawWalked(scene, f);
       if (!scene.live) return;
 
       // Fresh scent right behind each walking ant.
@@ -709,19 +807,20 @@
         gradient.addColorStop(0, `rgba(${SCENT}, 0)`);
         gradient.addColorStop(1, `rgba(${SCENT}, 0.9)`);
         g.strokeStyle = gradient;
-        strokeSpan(walk, f, d - SCENT_TAIL_METERS, d);
+        strokeSpan(g, walk, f, d - SCENT_TAIL_METERS, d);
       });
 
       const waiting = [];
+      const walking = [];
+      const stuck = [];
       walks.forEach((walk, index) => {
         const progress = (u - walk.depart) / walk.dur;
         if (progress <= 0) {
-          waiting.push(index);
+          waiting.push({ ...nestSpot(index, sx, sy, now), gait: now / 90 + index });
           return;
         }
         if (progress < 1) {
-          const point = pointOn(walk, f, progress * walk.len);
-          drawAnt(point.x, point.y, point.heading, 1, now / 45 + walk.gait);
+          walking.push({ ...pointOn(walk, f, progress * walk.len), gait: now / 45 + walk.gait });
           return;
         }
         const since = (u - walk.depart - walk.dur) * scene.walkMs;
@@ -731,14 +830,24 @@
           if (since < 320) drawAnt(end.x, end.y, end.heading, 1 - since / 320, 0);
         } else {
           // An ant that got stuck: a gray ring stays where it stopped.
-          ring(end.x, end.y, 4.6, STUCK_RING, 0.8, 1.8);
+          stuck.push(end);
           if (since < 500) drawAnt(end.x, end.y, end.heading, 1 - since / 500, 0);
         }
       });
-      waiting.reverse().forEach(index => {
-        const spot = nestSpot(index, sx, sy, now);
-        drawAnt(spot.x, spot.y, spot.heading, 1, now / 90 + index, 0.9);
-      });
+      if (stuck.length) {
+        g.globalAlpha = 0.8;
+        g.strokeStyle = STUCK_RING;
+        g.lineWidth = 1.8;
+        g.beginPath();
+        stuck.forEach(end => {
+          g.moveTo(end.x + 4.6, end.y);
+          g.arc(end.x, end.y, 4.6, 0, Math.PI * 2);
+        });
+        g.stroke();
+        g.globalAlpha = 1;
+      }
+      drawAntGroup(walking);
+      drawAntGroup(waiting.reverse(), 1, 0.9);
     }
 
     // ---- the timeline ----
@@ -774,7 +883,7 @@
       const step = segment.step;
 
       if (step === 0) {
-        drawTrails(() => 0);
+        drawTrails(() => 0, 1, 'none');
         drawAnts({ kind: 'nest', alpha: ease(t * 2.5) });
         syncPanel(0, 0, false);
         return;
@@ -782,7 +891,7 @@
       if (step === DRAW_STEP) {
         const last = rounds[roundCount - 1].levels;
         const k = ease(t);
-        drawTrails(number => last.get(number) || 0, 1 - 0.7 * k);
+        drawTrails(number => last.get(number) || 0, 1 - 0.7 * k, `route|${k}`);
         drawAnts(null);
         showRoute(cutLine(route1, k * route1.len));
         syncPanel(DRAW_STEP, 3, true);
@@ -807,7 +916,7 @@
         const from = previous ? previous.levels.get(number) || 0 : 0;
         const to = round.levels.get(number) || 0;
         return from + (to - from) * trailPhase;
-      });
+      }, 1, `${step}|${trailPhase}`);
     }
 
     // ---- the walk along Route 1 ----
@@ -933,11 +1042,7 @@
     function setMapLocked(locked) {
       if (state.mapLocked === locked) return;
       state.mapLocked = locked;
-      ['dragging', 'scrollWheelZoom', 'doubleClickZoom', 'touchZoom', 'boxZoom', 'keyboard'].forEach(handler => {
-        if (!map[handler]) return;
-        if (locked) map[handler].disable();
-        else map[handler].enable();
-      });
+      options.lockMap?.(locked);
     }
 
     function startWalk() {
@@ -977,6 +1082,9 @@
     function followRoute() {
       const startedAt = performance.now();
       let last = startedAt;
+      let focus = null;
+      let focusAt = -Infinity;
+      let cardsAt = -Infinity;
       let moved = 0;
       let distance = 0;
       let speed = 0;
@@ -1017,7 +1125,11 @@
         // map (isCameraPaused) it is theirs, and unlocked.
         const paused = isCameraPaused();
         setMapLocked(!paused);
-        let offset = paused ? L.point(0, 0) : map.latLngToContainerPoint(here).subtract(focusPoint());
+        if (now - focusAt >= FOCUS_REFRESH_MS) {
+          focus = focusPoint();
+          focusAt = now;
+        }
+        let offset = paused ? L.point(0, 0) : map.latLngToContainerPoint(here).subtract(focus);
         if (mobileLayout && Math.abs(offset.x) + Math.abs(offset.y) > FOLLOW_EASE_PX) {
           offset = offset.multiplyBy(Math.min(1, dt / FOLLOW_EASE_MS));
         }
@@ -1031,7 +1143,10 @@
           }
         }
         drawWalker(here, headingAt(distance), { gait, ripples, wet, level: isFlood ? lastLevel : level });
-        syncWalkCards(distance);
+        if (now - cardsAt >= CARDS_REFRESH_MS || distance >= route1.len) {
+          syncWalkCards(distance);
+          cardsAt = now;
+        }
         if (distance < route1.len) {
           state.nav.raf = requestAnimationFrame(step);
           return;

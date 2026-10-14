@@ -515,19 +515,23 @@
     measureSnaps();
   }
 
-  // Fit says what it frames in each step; My location waits out the
-  // replay, whose camera it would fight.
+  // Fit says what it frames in each step. While a run holds the map still
+  // (script.js setMapGestureLock), every button that moves it is off too;
+  // My location also waits out a replay, whose camera it would fight.
   function syncMapButtons() {
+    const held = isMapGestureLocked();
     const fit = $('msimRecenterBtn');
     const fitLabel = state.mode === 'setup' ? 'Show the whole barangay' : 'Show the whole route';
+    fit.disabled = held;
     fit.setAttribute('aria-label', fitLabel);
     fit.title = fitLabel;
     const locate = $('msimLocateBtn');
-    const replaying = state.mode === 'replay';
-    locate.disabled = replaying;
-    const locateLabel = replaying ? 'My location is off while the simulation plays' : 'Show my location';
+    const running = held || state.mode === 'replay';
+    locate.disabled = running;
+    const locateLabel = running ? 'My location is off while the simulation runs' : 'Show my location';
     locate.setAttribute('aria-label', locateLabel);
     locate.title = locateLabel;
+    syncZoomButtons();
   }
 
   function syncTopBar() {
@@ -1132,14 +1136,15 @@
   function syncZoomButtons() {
     if (!gMap) return;
     const zoom = gMap.getZoom();
-    $('msimZoomIn').disabled = zoom >= gMap.getMaxZoom();
-    $('msimZoomOut').disabled = zoom <= gMap.getMinZoom();
+    const held = isMapGestureLocked();
+    $('msimZoomIn').disabled = held || zoom >= gMap.getMaxZoom();
+    $('msimZoomOut').disabled = held || zoom <= gMap.getMinZoom();
   }
 
   // Zooms around the visible center (where the pin is), not the middle of
   // the whole map, which is under the sheet.
   function zoomBy(direction) {
-    if (!gMap) return;
+    if (!gMap || isMapGestureLocked()) return;
     pauseAutoFit();
     const step = (gMap.options.zoomDelta || 1) * direction;
     const zoom = Math.max(gMap.getMinZoom(), Math.min(gMap.getMaxZoom(), gMap.getZoom() + step));
@@ -1148,9 +1153,9 @@
 
   // locateVisitor (script.js) finds the visitor and keeps them inside the
   // barangay; here the spot lands under the center pin, ready for "Set
-  // start here". Off while the replay plays (syncMapButtons).
+  // start here". Off during a run and its replay (syncMapButtons).
   function locate() {
-    if (state.mode === 'replay') return;
+    if (state.mode === 'replay' || isMapGestureLocked()) return;
     locateVisitor({
       button: $('msimLocateBtn'),
       moveTo: latlng => {
@@ -1164,8 +1169,11 @@
 
   // ---- camera: the app's or the visitor's ----
 
+  // A two-finger touch, wheel or double-tap still reaches the map while its
+  // gestures are locked for a run (script.js setMapGestureLock), but moves
+  // nothing, so the camera stays the app's.
   function pauseAutoFit() {
-    if (isActive()) state.autoFitPaused = true;
+    if (isActive() && !isMapGestureLocked()) state.autoFitPaused = true;
   }
 
   function resumeAutoFit() {
