@@ -2222,14 +2222,8 @@ body.dark .emergency-modal {
   font-weight: 800;
 }
 
-.emergency-contact-number a {
+.emergency-contact-digits {
   color: var(--red);
-  text-decoration: none;
-}
-
-.emergency-contact-number a:hover,
-.emergency-contact-number a:focus-visible {
-  text-decoration: underline;
 }
 
 /* An author-set `display` beats the user-agent [hidden] rule, so every component

@@ -363,8 +363,8 @@ body.dark .about-logo .logo-dark{ display:block; }
 }
 .emergency-contact-name{ font-size:12.5px; font-weight:600; color:var(--muted); }
 .emergency-contact-number{ font-family:var(--font-meta); font-size:15px; color:var(--text); }
-.emergency-contact-number a{ color:var(--accent); text-decoration:none; }
-.emergency-contact-number a:hover{ text-decoration:underline; }
+/* Not links (_emergency_contacts.html), so not in the link color. */
+.emergency-contact-digits{ font-weight:700; }
 
 /* ---------- TUTORIAL SHOT (used inside the "How to use" modal) ---------- */
 .tutorial-tile-shot{
@@ -979,7 +979,6 @@ body.dark .hz-section{
    missing. The phone nav (< 640px) is sized in its own block. */
 @media (max-width:1023px){
   .hero-action, .hz-sim-btn, .fab-send, .tutorial-btn, .cta, .gtk-link{ min-height:44px; }
-  .emergency-contact-number a{ display:inline-flex; align-items:center; min-height:44px; }
   /* The depth slider's thumb is small; a 44px-tall input is its tap area. */
   .hz-depth input[type="range"]{ height:44px; }
   .form-row input, .fab-field select, .rate-row button{ min-height:44px; }
