@@ -12,7 +12,7 @@ AGNAS is a planning tool for use *before* a disaster. It works from stored hazar
 The visitor picks a barangay and a hazard, pins a start point (and, for floods, a destination) anywhere inside the barangay on the map, and runs a simulation. AGNAS then shows the safest walking routes it found, with the hazard each one crosses.
 
 - **Flood** — point to point. Uses Project NOAH flood hazard classes (`Var 1`/`2`/`3` → Low up to 0.5 m / Medium 0.5–1.5 m / High over 1.5 m).
-- **Earthquake** — from the start point to the safest reachable evacuation site. Uses liquefaction and ground-shaking levels (PHIVOLCS, through HazardHunterPH), with three result views: Overall, Liquefaction and Ground Shaking.
+- **Earthquake** — from the start point to an automatically selected evacuation site or a destination pinned by the visitor. Uses liquefaction and ground-shaking levels (PHIVOLCS, through HazardHunterPH), with three result views: Overall, Liquefaction and Ground Shaking.
 
 ## Key Features
 

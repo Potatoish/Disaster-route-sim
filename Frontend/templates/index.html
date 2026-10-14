@@ -158,7 +158,7 @@
                     <svg class="pin-input-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
                   </button>
                   <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
-                    <button type="button" class="evac-btn pin-input-menu-evac" id="endMenuEvacBtn" role="menuitemradio" aria-checked="true" onclick="showFloodEvacuationSites()">
+                    <button type="button" class="evac-btn pin-input-menu-evac" id="endMenuEvacBtn" role="menuitemradio" aria-checked="true" onclick="showEvacuationSites()">
                       Show the evacuation sites
                     </button>
                     <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('end')">
@@ -366,26 +366,31 @@
                   </div>
                   <button class="mslot-edit" id="msimSlotEdit-start" type="button" onclick="editMobilePin('start')" hidden>Edit</button>
                 </div>
+                <div class="mslot-destination" id="msimDestination">
                 <div class="mslot mslot--end" id="msimSlot-end">
                   <span class="mslot-badge" aria-hidden="true">E</span>
                   <div class="mslot-text">
                     <span class="mslot-label">End</span>
                     <span class="mslot-value" id="msimSlotValue-end"></span>
                   </div>
-                  <button class="mslot-edit" id="msimSlotEdit-end" type="button" onclick="editMobilePin('end')" hidden>Edit</button>
+                  <button class="mslot-edit" id="msimSlotEdit-end" type="button" onclick="toggleMobileDestinationMenu()" aria-haspopup="menu" aria-expanded="false" aria-controls="msimDestinationMenu" hidden>Change</button>
                 </div>
-                <div class="mslot mslot--evac" id="msimSlot-evac">
-                  <span class="mslot-badge" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/></svg>
-                  </span>
-                  <div class="mslot-text">
-                    <span class="mslot-label">Evacuation sites</span>
-                    <span class="mslot-value" id="msimSlotValue-evac"></span>
+                  <div class="pin-input-menu msim-destination-menu" id="msimDestinationMenu" role="menu" hidden>
+                    <button type="button" class="evac-btn pin-input-menu-evac" id="msimDestinationEvacBtn" role="menuitemradio" aria-checked="true" onclick="showEvacuationSites()">Show the evacuation sites</button>
+                    <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseMobileDestination()">
+                      <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
+                      Choose my own destination instead
+                    </button>
                   </div>
-                  <button class="mslot-edit" id="msimEvacBtn" type="button" onclick="showEvacuationSites()" hidden>Show</button>
                 </div>
               </div>
 
+              <div class="msheet-evac-action" id="msimEvacAction" hidden>
+                <button class="mbtn mbtn--primary mbtn--block" id="msimShowEvacBtn" type="button" onclick="showEvacuationSites()">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9M10.5 19v-4.5h3V19"/></svg>
+                  <span id="msimShowEvacLabel">Show evacuation sites</span>
+                </button>
+              </div>
               <div class="msheet-actions" id="msimSetupActions">
                 <button class="mbtn mbtn--primary" id="msimSetPinBtn" type="button" onclick="setMobilePinHere()" hidden>Set start here</button>
                 <button class="mbtn" id="msimSeeResultsBtn" type="button" onclick="showMobileResults()" hidden>See results</button>

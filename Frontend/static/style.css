@@ -3810,6 +3810,30 @@ body.dark .leaflet-popup-close-button {
 }
 
 /* Buttons. */
+.msim-destination-menu {
+  position: static;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.msheet-evac-action {
+  margin-top: 10px;
+}
+
+.msheet-evac-action .mbtn {
+  min-height: 48px;
+}
+
+.msheet-evac-action svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .msheet-actions {
   display: flex;
   gap: 8px;
@@ -4708,6 +4732,26 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
    .safety-result-card. */
 .aco-replay [hidden] {
   display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aco-replay.is-leaving {
+    animation: replayPanelOut .18s ease-in both;
+  }
+
+  #routeSafetyContent.results-entering,
+  #msimResults.results-entering {
+    animation: routeResultsIn .36s cubic-bezier(.22, 1, .36, 1) both;
+  }
+}
+
+@keyframes replayPanelOut {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes routeResultsIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .aco-replay-label {

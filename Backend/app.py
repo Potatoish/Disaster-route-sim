@@ -625,16 +625,18 @@ def run_earthquake():
     try:
         data = request.get_json() or {}
         start = data.get("start")
+        end = data.get("end")
         barangay = data.get("barangay")
         request_summary = {
             "mode": "earthquake",
             "hazard": "Earthquake",
             "barangay": barangay,
             "start": start,
+            "end": end,
         }
 
         def work():
-            return simulate_earthquake(start, barangay)
+            return simulate_earthquake(start, barangay, end=end)
 
         return _run_simulation_request("earthquake", request_summary, work, data)
     except Exception as e:

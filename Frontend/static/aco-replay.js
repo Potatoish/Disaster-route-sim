@@ -65,8 +65,9 @@
   const NAV_ZOOM = 17.25;
   const NAV_FLY_SECONDS = 1.1;
   const NAV_MS = 6500;
-  const ARRIVE_MS = 700;
-  const ZOOM_OUT_SECONDS = 1.2;
+  const ARRIVE_MS = 950;
+  const WALKER_FADE_MS = 650;
+  const ZOOM_OUT_SECONDS = 1.45;
   // Leaflet's renderers and tiles catch up on 'moveend'; while the camera
   // follows the ant, one goes out every this many pixels of panning.
   const NAV_REFRESH_PX = 160;
@@ -178,7 +179,8 @@
   // options:
   //   map, replay (the result's replay), mode ('flood' | 'earthquake')
   //   route1: { points: [{lat, lng}], name, distance, durationText, tier,
-  //     color, edgeColor, walk (false: Route 1 is not walked), wading }
+  //     color, edgeColor, walk (false: no route preview), previewOnly
+  //     (true: unsafe flood route, not a walking demonstration), wading }
   //   startName, endName, antsTotal
   //   legendBody: the map legend's body element (rewritten while it plays)
   //   hazardLegendHtml: the legend's hazard rows (earthquake.js), in place
@@ -212,6 +214,15 @@
     const route1 = measure((route1Info?.points || []).map(point => [Number(point.lat), Number(point.lng)]));
     const hasRoute1 = route1.points.length > 1 && route1.len > 0;
     const walksRoute1 = hasRoute1 && route1Info.walk !== false;
+    const previewOnly = !!route1Info?.previewOnly;
+    const routeRankingLabel = route1Info?.tier === 'unsafe' ? 'best route' : 'safest route';
+    const antsReachedEnd = rounds.some(round => Number(round.arrived) > 0);
+    const stepTitles = [...STEP_TITLES];
+    if (!antsReachedEnd) {
+      stepTitles[1] = 'Ants explore the streets';
+      stepTitles[2] = 'Map search supplies a route';
+    }
+    if (previewOnly) stepTitles[3] = 'High-risk route preview';
     // Route 1 is walked by an ant only when the ants found it; one a
     // regular map search found (Dijkstra: the safety-first baseline or the
     // backup search) is walked by a navigation arrow instead.
@@ -221,6 +232,7 @@
     const state = {
       running: false,
       done: false,
+      completed: false,
       nav: null,
       scene: null,
       trailOf: null,
@@ -296,7 +308,7 @@
       <div class="safety-section-label aco-replay-label">Ant colony simulation</div>
       <div class="safety-route-chip aco-replay-chip">${safetyIcon('pin')}<span>${escapeHtml(chipText)}</span></div>
       <ol class="aco-steps">
-        ${STEP_TITLES.map(title => `
+        ${stepTitles.map(title => `
           <li class="aco-step">
             <span class="aco-step-icon" aria-hidden="true"><i></i><svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></span>
             <span class="aco-step-text"><span class="aco-step-title">${escapeHtml(title)}</span><span class="aco-step-detail"></span></span>
@@ -335,10 +347,14 @@
     const endName = options.endName || 'the destination';
     const stepText = [
       `${replay.ants} virtual ants leave ${options.startName || 'the start'} one after another. They don't know the way yet, so they try many streets.`
-        + (sites > 1 ? ` Ants went to all ${sites} evacuation sites; this is the search to ${endName}, the one with the safest route.` : ''),
-      `Ants that reach ${sites ? 'the site' : 'the end point'} by a safer or shorter way leave a stronger trail. The next ants follow strong trails, so the route gets better each round.`
-        + (strongestTrail < WEAK_TRAIL ? ' Here every way crosses high-risk roads, so the trails stay faint.' : ''),
-      roundCount < replay.max_rounds
+        + (sites > 1 ? ` Ants went to all ${sites} evacuation sites; this is the search to ${endName}, the one with the ${routeRankingLabel}.` : ''),
+      !antsReachedEnd
+        ? `No ant reached ${endName} within the search limits, so no route trails were reinforced.`
+        : `Ants that reach ${sites ? 'the site' : 'the end point'} by a safer or shorter way leave a stronger trail. The next ants follow strong trails, so the route gets better each round.`
+          + (strongestTrail < WEAK_TRAIL ? ' Here every way crosses high-risk roads, so the trails stay faint.' : ''),
+      !antsReachedEnd
+        ? `The ants did not complete a route in ${roundCount} rounds. A regular map search supplied Route 1 instead.`
+        : roundCount < replay.max_rounds
         ? `Most ants now take the same streets. No better route for ${replay.stagnation} rounds, so the search stops at round ${roundCount} of ${replay.max_rounds}.`
         : `Most ants now take the same streets. The search stops at its last round, ${roundCount}.`,
       buildRouteReadyText(),
@@ -349,9 +365,15 @@
       const found = {
         main: 'Route 1 follows the strongest trail.',
         alternative: 'Route 1 comes from ants sent around the strongest trail: it is safer.',
-        shortest_path: 'A regular map search found a safer route than the ants, so Route 1 is that one.',
-        backup_search: 'A backup search found Route 1, safer than the ants\' routes.',
-      }[replay.route1?.source] || 'Route 1 is the safest route found.';
+        shortest_path: antsReachedEnd
+          ? 'A regular map search found a safer route than the ants, so Route 1 is that one.'
+          : 'A regular map search found Route 1 after the ants did not complete a route.',
+        backup_search: 'A backup search supplied Route 1.',
+      }[replay.route1?.source] || `Route 1 is the ${routeRankingLabel} found.`;
+      if (previewOnly) {
+        // Not `found`: its "it is safer" reads wrong beside "unsafe".
+        return 'Virtual preview only: this route is unsafe to walk. Of all the routes found, it crosses the least High water.';
+      }
       if (!walksRoute1) {
         return hasRoute1 && isFlood
           ? `${found} It still crosses water over 1.5 m deep, so it is not one to walk.`
@@ -379,7 +401,7 @@
           item.classList.toggle('is-done', index < chapter);
           item.classList.toggle('is-current', index === chapter);
         });
-        setText('caption', `${STEP_TITLES[chapter]}. ${stepText[chapter]}`);
+        setText('caption', `${stepTitles[chapter]}. ${stepText[chapter]}`);
         options.onPanelChange?.();
       }
       const round = step >= 1 && step <= roundCount ? rounds[step - 1] : null;
@@ -402,7 +424,7 @@
       if (!options.legendBody) return;
       const rows = walking
         ? legendRow(`<span class="aco-legend-route" style="background:${route1Info?.color};box-shadow:0 0 0 1px ${route1Info?.edgeColor};"></span>`, route1Info?.name || 'Route 1')
-          + legendRow(walkerSvg, `Walking Route ${route1Info?.number ?? 1}`)
+          + legendRow(walkerSvg, previewOnly ? 'Unsafe route preview' : `Walking Route ${route1Info?.number ?? 1}`)
         : legendRow(antSvg, 'Virtual ant')
           + legendRow('<span class="aco-legend-trail"></span>', 'Ant trail')
           + legendRow('<span class="aco-legend-stuck"></span>', 'Ant that got stuck');
@@ -550,8 +572,8 @@
       map.on(mapHandlers);
     }
 
-    // Route 1 stays on the map after a phone replay, until the results draw
-    // theirs over it (removeRoute), so it never blinks out in between.
+    // Keep Route 1 in every layout until the results draw their lines over
+    // it (removeRoute), so the handoff never leaves a blank map.
     function removeLayers() {
       views.forEach(view => {
         releaseCanvas(view.canvas);
@@ -561,7 +583,6 @@
       if (!state.layersOn) return;
       state.layersOn = false;
       map.off(mapHandlers);
-      if (!mobileLayout) removeRoute();
     }
 
     function removeRoute() {
@@ -930,7 +951,9 @@
 
     // ---- the walk along Route 1 ----
     const PER_MINUTE = WALKING_SPEED_METERS_PER_MINUTE;
-    const paceShare = levels => (isFlood && levels[0] ? FLOOD_WALKING_PACE_SHARE_BY_VAR[levels[0]] || 1 : 1);
+    // An unsafe flood preview uses a virtual pace, not an estimate of how
+    // fast a person could walk through High water.
+    const paceShare = levels => (!previewOnly && isFlood && levels[0] ? FLOOD_WALKING_PACE_SHARE_BY_VAR[levels[0]] || 1 : 1);
     const dryEquivalent = spans.reduce((sum, span, index) => sum + (span.to - (index ? spans[index - 1].to : 0)) / paceShare(span.levels), 0) || route1.len;
     const drySpeed = dryEquivalent / NAV_MS;
 
@@ -976,6 +999,9 @@
       if (isFlood) {
         const water = levels[0] || 0;
         const name = water ? getFloodRiskLabelFromVar(water) : 'None';
+        if (previewOnly) {
+          return [name, water === 3 ? 'Not walkable' : water ? FLOOD_DEPTH_ON_ADULT_BY_VAR[water] : 'Dry road'];
+        }
         if (mobileLayout) return [name, water ? 'Slower pace' : 'Normal pace'];
         return [`${name} · ${water ? 'slower' : 'normal'} pace`, water ? FLOOD_DEPTH_ON_ADULT_BY_VAR[water] : 'Dry road'];
       }
@@ -996,9 +1022,14 @@
 
     function syncWalkCards(distance) {
       const left = Math.max(0, route1.len - distance);
-      setText('left', left < 5 ? 'Arrived' : formatKm(left));
-      const minutes = minutesLeft(distance);
-      setText('leftSub', left < 5 ? endName : minutes < 1 ? 'Under a minute to go' : `About ${formatWalkingMinutes(minutes)} walk`);
+      const endText = previewOnly ? 'Preview complete' : 'Arrived';
+      setText('left', left < 5 ? endText : formatKm(left));
+      if (previewOnly) {
+        setText('leftSub', 'Unsafe route preview');
+      } else {
+        const minutes = minutesLeft(distance);
+        setText('leftSub', left < 5 ? endName : minutes < 1 ? 'Under a minute to go' : `About ${formatWalkingMinutes(minutes)} walk`);
+      }
       const [value, sub] = hereText(distance);
       setText('here', value);
       setText('hereSub', sub);
@@ -1071,7 +1102,7 @@
 
     function startWalk() {
       if (!walksRoute1) {
-        finish();
+        finish({ completed: true });
         return;
       }
       state.nav = { raf: 0, timer: 0 };
@@ -1081,8 +1112,8 @@
       panel.querySelector('[data-aco-cards="search"]').hidden = true;
       panel.querySelector('[data-aco-cards="walk"]').hidden = false;
       panel.classList.add('is-walking');
-      setText('route', `${formatKm(route1Info.distance)} · ${route1Info.durationText} walk`);
-      setText('routeSub', route1Info.name);
+      setText('route', previewOnly ? formatKm(route1Info.distance) : `${formatKm(route1Info.distance)} · ${route1Info.durationText} walk`);
+      setText('routeSub', previewOnly ? 'Preview only — unsafe to walk' : route1Info.name);
       renderLegend(true);
       options.onWalkChange?.(true);
       syncWalkCards(0);
@@ -1191,7 +1222,7 @@
           state.nav.raf = requestAnimationFrame(step);
           return;
         }
-        zoomOut();
+        zoomOut(here, heading, gait, level);
       }
       state.nav.raf = requestAnimationFrame(step);
     }
@@ -1200,27 +1231,43 @@
       return L.latLngBounds([...route1.points, startLatLng, L.latLng(replay.end)]);
     }
 
-    function zoomOut() {
-      drawAnts(null);
-      if (isCameraPaused()) {
-        finish();
-        return;
-      }
-      let ended = false;
+    function zoomOut(here, heading, gait, level) {
+      const startedAt = performance.now();
+      let cameraEnded = isCameraPaused();
+      let markerFaded = false;
       const end = () => {
-        if (ended) return;
-        ended = true;
-        finish();
+        if (cameraEnded && markerFaded) finish({ completed: true });
       };
-      map.once('moveend', end);
-      state.nav.timer = window.setTimeout(end, ZOOM_OUT_SECONDS * 1000 + 600);
-      map.flyToBounds(routeBounds(), mapMoveOptions({ ...(options.getPadding?.() || {}), duration: ZOOM_OUT_SECONDS }));
+      // Continue drawing at the destination while the camera pulls back;
+      // a frozen canvas would slide away from its road during the flight.
+      const fade = now => {
+        if (!state.nav) return;
+        const k = ease((now - startedAt) / WALKER_FADE_MS);
+        antView.canvas.style.opacity = String(1 - k);
+        drawWalker(here, heading, { gait, level });
+        if (k < 1) {
+          state.nav.raf = requestAnimationFrame(fade);
+          return;
+        }
+        markerFaded = true;
+        drawAnts(null);
+        end();
+      };
+      state.nav.raf = requestAnimationFrame(fade);
+      if (!cameraEnded) {
+        const onMoveEnd = () => { cameraEnded = true; end(); };
+        state.nav.onMoveEnd = onMoveEnd;
+        map.once('moveend', onMoveEnd);
+        state.nav.timer = window.setTimeout(onMoveEnd, ZOOM_OUT_SECONDS * 1000 + 600);
+        map.flyToBounds(routeBounds(), mapMoveOptions({ ...(options.getPadding?.() || {}), duration: ZOOM_OUT_SECONDS }));
+      }
     }
 
     function stopWalk() {
       if (!state.nav) return;
       cancelAnimationFrame(state.nav.raf);
       window.clearTimeout(state.nav.timer);
+      if (state.nav.onMoveEnd) map.off('moveend', state.nav.onMoveEnd);
       state.nav = null;
       map.stop();
       options.onWalkChange?.(false);
@@ -1254,9 +1301,10 @@
       finish();
     }
 
-    function finish() {
+    function finish({ completed = false } = {}) {
       if (state.done) return;
       state.done = true;
+      state.completed = completed;
       state.running = false;
       state.zoomAnim = false;
       cancelAnimationFrame(state.raf);
@@ -1305,6 +1353,7 @@
       getSearchBounds,
       resize: () => { if (state.layersOn) mapHandlers.resize(); },
       isDone: () => state.done,
+      didComplete: () => state.completed,
       // The camera follows the walker (or flies to the end of the walk).
       isWalking: () => !!state.nav,
       isRouteShown: () => routeLayers.some(layer => map.hasLayer(layer)),

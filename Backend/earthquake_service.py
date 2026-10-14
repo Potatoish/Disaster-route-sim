@@ -368,6 +368,7 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
         "destination_name": evacuation_site["name"],
         "destination_lat": float(evacuation_site["lat"]),
         "destination_lng": float(evacuation_site["lng"]),
+        "destination_is_evacuation_site": evacuation_site.get("is_evacuation_site", True),
         "lens_key": view_key,
         "lens_label": EARTHQUAKE_VIEW_CONFIG[view_key]["label"],
         "simulation_mode": "earthquake",
@@ -383,12 +384,12 @@ def _evaluate_earthquake_route(base_graph, route, evacuation_site, view_key):
             4,
         ),
         "evidence_chips": [
-            {"label": "Evac", "value": evacuation_site["name"]},
+            {"label": "Evac" if evacuation_site.get("is_evacuation_site", True) else "Destination", "value": evacuation_site["name"]},
             {"label": "Lens", "value": EARTHQUAKE_VIEW_CONFIG[view_key]["label"]},
             {"label": "Hazards", "value": hazard_signature},
         ],
         "info_rows": [
-            ["Evacuation Site", evacuation_site["name"]],
+            ["Evacuation Site" if evacuation_site.get("is_evacuation_site", True) else "Destination", evacuation_site["name"]],
             ["Lens", EARTHQUAKE_VIEW_CONFIG[view_key]["label"]],
         ],
         "reason": (
@@ -408,23 +409,23 @@ def _build_view_summary(view_key, routes, evacuation_sites):
     if selected_route is None and routes:
         selected_route = routes[0]
 
+    destination = {
+        "id": selected_route["destination_id"],
+        "name": selected_route["destination_name"],
+        "lat": selected_route["destination_lat"],
+        "lng": selected_route["destination_lng"],
+    } if selected_route else None
+    to_evacuation_site = bool(selected_route and selected_route.get("destination_is_evacuation_site", True))
+
     return {
         "view_key": view_key,
         "view_label": EARTHQUAKE_VIEW_CONFIG[view_key]["label"],
         "description": EARTHQUAKE_VIEW_CONFIG[view_key]["description"],
-        "candidate_sites_considered": len(evacuation_sites),
+        "candidate_sites_considered": sum(site.get("is_evacuation_site", True) for site in evacuation_sites),
         "safe_route_count": sum(1 for route in routes if route["category"] != "eliminated"),
         "eliminated_route_count": sum(1 for route in routes if route["category"] == "eliminated"),
-        "selected_evacuation_site": (
-            {
-                "id": selected_route["destination_id"],
-                "name": selected_route["destination_name"],
-                "lat": selected_route["destination_lat"],
-                "lng": selected_route["destination_lng"],
-            }
-            if selected_route
-            else None
-        ),
+        "selected_evacuation_site": destination if to_evacuation_site else None,
+        "destination": destination,
         "best_distance": selected_route["distance"] if selected_route else None,
     }
 
@@ -591,7 +592,7 @@ def check_earthquake_pin(barangay_name, lat, lng):
     )
 
 
-def simulate_earthquake(start, barangay_name):
+def simulate_earthquake(start, barangay_name, end=None):
     if not start:
         return {
             "error": True,
@@ -611,6 +612,12 @@ def simulate_earthquake(start, barangay_name):
             "message": start_error,
         }
 
+    end_location = None
+    if end is not None:
+        end_location, end_error = parse_route_pin(end, "Destination")
+        if end_error:
+            return {"error": True, "message": end_error}
+
     try:
         dataset = get_earthquake_dataset(barangay_name)
         base_graph = _get_earthquake_graph(dataset)
@@ -626,6 +633,13 @@ def simulate_earthquake(start, barangay_name):
                 "error": True,
                 "message": pin_check["message"],
             }
+        if end_location:
+            end_check = check_route_pin(
+                base_graph, end_location["lat"], end_location["lng"],
+                _earthquake_coverage_label(dataset), "The destination",
+            )
+            if not end_check["valid"]:
+                return {"error": True, "message": end_check["message"]}
 
         debug_print("\n" + "=" * 60)
         debug_print("[EQ] SIMULATION START")
@@ -640,7 +654,13 @@ def simulate_earthquake(start, barangay_name):
             base_graph,
             dataset,
         )
-        covered_sites = [
+        covered_sites = [{
+            "id": "custom-destination",
+            "name": end_location["name"],
+            "lat": end_location["lat"],
+            "lng": end_location["lng"],
+            "is_evacuation_site": False,
+        }] if end_location else [
             site for site in dataset["evacuation_sites"]
             if is_point_in_hazard_coverage(base_graph, site["lat"], site["lng"])
         ]
@@ -655,6 +675,11 @@ def simulate_earthquake(start, barangay_name):
             site["id"]: node
             for site, node in zip(covered_sites, access_nodes[1:])
         }
+        if end_location and start_node is not None and start_node == site_nodes.get("custom-destination"):
+            return {
+                "error": True,
+                "message": "The start and destination meet the road at the same spot. Move one of the pins farther away.",
+            }
         evaluated_sites = (
             _collect_road_reachable_evacuation_sites(routing_graph, start_node, covered_sites, site_nodes)
             if start_node is not None
@@ -664,6 +689,8 @@ def simulate_earthquake(start, barangay_name):
             return {
                 "error": True,
                 "message": (
+                    "No route can reach your destination without leaving the area covered by earthquake hazard data."
+                ) if end_location else (
                     "No evacuation site can be reached from this start point without "
                     "leaving the area covered by earthquake hazard data."
                 ),
@@ -694,6 +721,8 @@ def simulate_earthquake(start, barangay_name):
             float(start_location["lat"]),
             float(start_location["lng"]),
         )
+        if end_location:
+            seed_parts += ("custom_destination", float(end_location["lat"]), float(end_location["lng"]))
         replay = None
         for view_key in EARTHQUAKE_VIEW_CONFIG:
             view_started = time.perf_counter()
@@ -715,6 +744,8 @@ def simulate_earthquake(start, barangay_name):
                 view_key,
                 aco_stats,
             )
+            if end_location and aco_stats:
+                aco_stats["sites_searched"] = 0
             area_wide = _area_wide_high_risk(base_graph, view_key)
             for route in views[view_key]["routes"]:
                 route["area_wide_high_risk"] = area_wide
@@ -724,7 +755,7 @@ def simulate_earthquake(start, barangay_name):
                     colony,
                     routes[0] if routes else None,
                     _replay_span_levels,
-                    {"sites_searched": len(evaluated_sites)},
+                    {"sites_searched": 0 if end_location else len(evaluated_sites)},
                 )
             debug_print(
                 f"[EQ]   View complete: {view_label} in {time.perf_counter() - view_started:.2f}s "
@@ -743,9 +774,12 @@ def simulate_earthquake(start, barangay_name):
             "hazard_type": "Earthquake",
             "barangay": dataset["display_barangay"],
             "start": start_location["name"],
+            "end": views[REPLAY_VIEW]["summary"]["destination"]["name"] if views[REPLAY_VIEW]["summary"]["destination"] else None,
+            "to_evacuation_site": end_location is None,
+            "destination": views[REPLAY_VIEW]["summary"]["destination"],
             "safe_threshold": HAZARD_THRESHOLD,
             "evacuation_sites": dataset["evacuation_sites"],
-            "reachable_evacuation_sites": evaluated_sites,
+            "reachable_evacuation_sites": [] if end_location else evaluated_sites,
             # shaking_intensity is display only (the map and the intro);
             # routing used ground_shaking.
             "hazard_layers": {

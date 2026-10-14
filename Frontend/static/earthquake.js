@@ -500,8 +500,9 @@
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
         ${window.buildPinLegendRow('start')}
-        ${showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen evacuation site') : ''}
-        ${pinRow('#f59e0b', '#9a3412', 'house', 'Open area')}
+        ${!window.isToEvacuationSite?.() ? window.buildPinLegendRow('end')
+          : showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen evacuation site') : ''}
+        ${state.evacuationMarkers.length ? pinRow('#f59e0b', '#9a3412', 'house', 'Open area') : ''}
         ${typeof window.buildBoundaryLegendRow === 'function' ? window.buildBoundaryLegendRow() : ''}
         ${hazardLegend}
       </div>`;

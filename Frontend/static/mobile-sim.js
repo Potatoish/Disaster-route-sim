@@ -625,7 +625,6 @@
   function syncSetup() {
     const hazard = selectedHazard;
     const locked = isSimulationInteractionLocked();
-    const earthquake = isEarthquakeMode();
 
     // Until a disaster is picked, the Disaster cards lead the sheet (and are
     // its peek); after that they drop below the Start/End slots.
@@ -649,16 +648,19 @@
     });
 
     syncPinSlot('start');
-    $('msimSlot-end').hidden = earthquake;
-    if (!earthquake) syncPinSlot('end');
-    // Flood: the end point is the evacuation sites until the visitor picks a
-    // spot of their own (the End slot's Change); then this slot offers the
-    // sites again.
-    $('msimSlot-evac').hidden = !earthquake && isFloodToEvacSite() && !routePins.end;
-    syncEvacSlot();
+    $('msimSlot-end').hidden = false;
+    syncPinSlot('end');
 
     const role = getPinRole();
     const checking = isAnyRoutePinChecking();
+    const needsEvacSites = isEarthquakeMode() && earthquakeToEvacSite
+      && !!getReadyPin('start') && !earthquakeEvacSitesVisible && !role;
+    // The open destination menu already offers the sites; one button is enough.
+    $('msimEvacAction').hidden = !needsEvacSites || !$('msimDestinationMenu').hidden;
+    $('msimShowEvacBtn').disabled = locked || earthquakeEvacSitesLoading;
+    $('msimShowEvacLabel').textContent = earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show evacuation sites';
+    $('msimDestinationEvacBtn').disabled = locked || earthquakeEvacSitesLoading || (isEarthquakeMode() && !getReadyPin('start'));
+    $('msimDestinationEvacBtn').setAttribute('aria-checked', String(isToEvacuationSite() && !routePins.end));
     const setPinBtn = $('msimSetPinBtn');
     setPinBtn.hidden = !role;
     if (role) {
@@ -668,6 +670,7 @@
     $('msimSeeResultsBtn').hidden = !!role || !simData;
 
     const runBtn = $('msimRunBtn');
+    runBtn.hidden = needsEvacSites;
     runBtn.disabled = locked || checking || !canRunCurrentSimulation();
     runBtn.classList.toggle('mbtn--primary', !role);
 
@@ -683,7 +686,7 @@
     const pin = routePins[role];
     const placing = getPinRole() === role;
     // An end point that is the evacuation sites (or the one a run picked).
-    const toEvacSite = role === 'end' && !pin && isFloodToEvacSite();
+    const toEvacSite = role === 'end' && !pin && isToEvacuationSite();
     const set = !!pin || toEvacSite;
     const waiting = role === 'end' && !set && !getReadyPin('start');
     const pointName = role === 'start' ? 'start point' : 'end point';
@@ -692,6 +695,7 @@
     slot.classList.toggle('is-empty', !set);
     slot.classList.toggle('is-disabled', waiting && !placing);
     if (role === 'end') {
+      slot.querySelector('.mslot-label').textContent = 'Destination';
       // A house while the end point is the evacuation sites, like their pins.
       slot.classList.toggle('mslot--to-evac', toEvacSite && !placing);
       slot.querySelector('.mslot-badge').innerHTML = toEvacSite && !placing ? EVAC_BADGE_SVG : 'E';
@@ -703,15 +707,15 @@
       : placing
       ? `Move the map, then tap “Set ${role} here”`
       : toEvacSite
-      ? getFloodResultEvacSite()?.name || 'Evacuation site'
+      ? getResultEvacSite()?.name || 'Evacuation site'
       : waiting
       ? 'Set the start point first'
       : 'Not set yet';
 
     // Edit moves a set pin, Cancel stops moving it, Set arms an empty one;
     // Change trades the evacuation sites for a spot of one's own.
-    const label = set
-      ? (placing ? 'Cancel' : toEvacSite ? 'Change' : 'Edit')
+    const label = role === 'end' && placing ? 'Cancel' : set
+      ? (placing ? 'Cancel' : role === 'end' ? 'Change' : 'Edit')
       : (placing || waiting ? '' : 'Set');
     edit.hidden = !label
       || pin?.status === 'checking'
@@ -725,44 +729,6 @@
       : `${label} ${pointName}`);
   }
 
-  // The sites the run chooses from: earthquake's destination, and flood's
-  // when Show makes them the end point (the desktop's destination menu).
-  function syncEvacSlot() {
-    const slot = $('msimSlot-evac');
-    const value = $('msimSlotValue-evac');
-    const button = $('msimEvacBtn');
-    const hasStart = !!getReadyPin('start');
-    slot.classList.toggle('mslot--flood', !isEarthquakeMode());
-
-    if (!isEarthquakeMode()) {
-      slot.classList.add('is-empty');
-      slot.classList.remove('is-disabled');
-      value.textContent = 'Tap Use to go to the one with the safest route instead';
-      button.textContent = 'Use';
-      button.setAttribute('aria-label', 'Use the evacuation site with the safest route');
-      button.hidden = !canPlaceRoutePins();
-      button.disabled = isSimulationInteractionLocked();
-      return;
-    }
-    button.textContent = 'Show';
-    button.removeAttribute('aria-label');
-
-    const supported = isEarthquakeBarangaySupported();
-    const loaded = earthquakeEvacSitesVisible;
-
-    slot.classList.toggle('is-empty', !loaded);
-    slot.classList.toggle('is-disabled', !supported || (!hasStart && !loaded));
-    value.textContent = !supported
-      ? `Earthquake routing covers only ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`
-      : loaded
-      ? `${earthquakeEvacSites.length} on the map`
-      : hasStart
-      ? 'Tap Show to put them on the map'
-      : 'Set the start point first';
-    button.hidden = loaded || !supported || !hasStart;
-    button.disabled = isSimulationInteractionLocked();
-  }
-
   function buildSetupHelp(role, checking) {
     if (!selectedHazard) return '';
     if (isEarthquakeMode() && !isEarthquakeBarangaySupported()) {
@@ -772,13 +738,13 @@
     // An empty slot being set already says what to do ("Move the map, then
     // tap ..."; syncPinSlot), so the sheet says it once.
     if (role) return routePins[role] ? `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.` : '';
-    if (isEarthquakeMode() && getReadyPin('start') && !earthquakeEvacSitesVisible) {
-      return 'Tap Show to put the evacuation sites on the map, then run the simulation.';
+    if (isEarthquakeMode() && earthquakeToEvacSite && getReadyPin('start') && !earthquakeEvacSitesVisible) {
+      return 'Show the evacuation sites, or tap Change to choose your own destination.';
     }
     if (canRunCurrentSimulation()) {
       if (simData) return 'Change the hazard or move a pin to compare routes.';
-      return isFloodToEvacSite() && !routePins.end
-        ? 'Ready. Routes go to the evacuation site with the safest route. Tap Run simulation.'
+      return isToEvacuationSite() && !routePins.end
+        ? `Ready. Routes go to the evacuation site with the ${getRouteRankingLabel()}. Tap Run simulation.`
         : 'Ready. Tap Run simulation.';
     }
     return '';
@@ -1091,13 +1057,35 @@
 
     if (getPinRole() === role) {
       // Cancel: keep the pin where it was (or the evacuation sites).
-      if (pin || (role === 'end' && isFloodToEvacSite())) setPinPlacementRole(getNextUnpinnedRole());
+      if (pin || role === 'end') setPinPlacementRole(null);
       return;
     }
 
     setPinPlacementRole(role);
     snapTo('peek');
     if (pin) centerUnderPin(L.latLng(pin.lat, pin.lng), Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM));
+  }
+
+  function closeDestinationMenu() {
+    $('msimDestinationMenu').hidden = true;
+    $('msimSlotEdit-end').setAttribute('aria-expanded', 'false');
+    scheduleSync();
+  }
+
+  function toggleDestinationMenu() {
+    if (getPinRole() === 'end') { editPin('end'); return; }
+    if (!canPlaceRoutePins() || isSimulationInteractionLocked()) return;
+    const opening = $('msimDestinationMenu').hidden;
+    closePinMenus();
+    $('msimDestinationMenu').hidden = !opening;
+    $('msimSlotEdit-end').setAttribute('aria-expanded', String(opening));
+    scheduleSync();
+    if (opening) $('msimDestinationMenu').querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
+  }
+
+  function chooseOwnDestination() {
+    closeDestinationMenu();
+    editPin('end');
   }
 
   // A map tap never drops a pin here (the pin is set with the button); while
@@ -1349,7 +1337,10 @@
 
   function handleEscape() {
     if (!isActive()) return false;
-    if (state.barangayMenuOpen) closeBarangayMenu();
+    if (!$('msimDestinationMenu').hidden) {
+      closeDestinationMenu();
+      $('msimSlotEdit-end').focus({ preventScroll: true });
+    } else if (state.barangayMenuOpen) closeBarangayMenu();
     else if (state.layersOpen) closeLayers();
     else return false;
     return true;
@@ -1459,6 +1450,7 @@
   window.mobileSim = {
     attachMap,
     clearResults,
+    closeDestinationMenu,
     endReplay,
     getCoveredInsets,
     handleEscape,
@@ -1484,6 +1476,8 @@
     closeMobileLayers: () => closeLayers(),
     downloadMobileReport: downloadReport,
     editMobilePin: editPin,
+    chooseMobileDestination: chooseOwnDestination,
+    toggleMobileDestinationMenu: toggleDestinationMenu,
     locateMobileUser: locate,
     mobileMapZoom: zoomBy,
     openMobileLayers: openLayers,

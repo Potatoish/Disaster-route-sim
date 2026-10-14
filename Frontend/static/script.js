@@ -11,6 +11,9 @@ let isBackendLive = false;
 let activeEarthquakeView = 'overall';
 let earthquakeEvacSites = [];
 let earthquakeEvacSitesVisible = false;
+let earthquakeToEvacSite = true;
+let earthquakeEvacSitesLoading = false;
+let earthquakeDestinationChoice = 0;
 // The destination field's "Show Evacuation Sites" (flood) makes the
 // destination the barangay's evacuation sites instead of a pin: the run
 // picks the site, as in earthquake mode.
@@ -1277,10 +1280,9 @@ function refitMapToCurrentRoute({ onlyIfOutOfView = false, flySeconds = 0 } = {}
   const routeCoords = getRoutePoints(bestRoute);
   if (!routeCoords.length) return false;
 
-  const isEarthquakeResult = isEarthquakeSimulationResult(simData);
   const pinCoords = normalizePathCoordinates([
     getReadyPin('start'),
-    isEarthquakeResult ? null : getReadyPin('end'),
+    getReadyPin('end'),
     { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
   ].filter(Boolean));
 
@@ -1919,7 +1921,8 @@ const FAR_FROM_OPEN_AREA_METERS = 1000;
 const FAR_FROM_OPEN_AREA_NOTE = 'If you are far from the suggested open area, move immediately to the nearest open area once the shaking stops.';
 
 function isFarFromOpenArea(route) {
-  return isEarthquakeRouteRecord(route) && Number(route?.distance) > FAR_FROM_OPEN_AREA_METERS;
+  return isEarthquakeRouteRecord(route) && route?.destination_is_evacuation_site !== false
+    && Number(route?.distance) > FAR_FROM_OPEN_AREA_METERS;
 }
 
 // How many routes are green, in words that don't call them "safe" either:
@@ -2124,8 +2127,12 @@ function buildRouteReason(route) {
   return route?.reason || 'Route explanation unavailable.';
 }
 
+function getRouteRankingLabel(route = getBestRoute(Array.isArray(simData?.routes) ? simData.routes : [])) {
+  return route && getRouteSafetyTier(route) === 'unsafe' ? 'best route' : 'safest route';
+}
+
 function getUserFriendlyRankingExplanation() {
-  return 'The safest routes are shown first. If two routes have similar risk, the system checks which one it prefers, then looks at distance.';
+  return `The ${getRouteRankingLabel()}s are shown first. If two routes have similar risk, the system checks which one it prefers, then looks at distance.`;
 }
 
 // The ant colony's numbers for a result (flood: result.aco; earthquake: the
@@ -2147,9 +2154,10 @@ function buildAntSearchNote(result = simData) {
   const ants = formatCount(aco.ants_sent_all_sites ?? aco.ants_sent);
   const best = getBestRoute(Array.isArray(result?.routes) ? result.routes : []);
   if (best?.found_by === 'shortest_path') {
-    return `${ants} virtual ants searched the streets, but a regular map search found a safer route, so that one is shown first.`;
+    const found = getRouteSafetyTier(best) === 'unsafe' ? 'the best route' : 'a safer route';
+    return `${ants} virtual ants searched the streets, but a regular map search found ${found}, so that one is shown first.`;
   }
-  return `${ants} virtual ants searched the streets. The safest route is shown first.`;
+  return `${ants} virtual ants searched the streets. The ${getRouteRankingLabel(best)} is shown first.`;
 }
 
 const ACO_BASELINE_COMPARISON_TEXT = {
@@ -2416,6 +2424,9 @@ function setRunButtonLabel() {
 function resetEarthquakeState() {
   earthquakeEvacSites = [];
   earthquakeEvacSitesVisible = false;
+  earthquakeToEvacSite = true;
+  earthquakeEvacSitesLoading = false;
+  earthquakeDestinationChoice += 1;
   activeEarthquakeView = 'overall';
   window.earthquakeUI?.reset();
 }
@@ -2430,12 +2441,26 @@ function isFloodToEvacSite() {
   return floodToEvacSite && selectedHazard === 'Flood';
 }
 
+function isToEvacuationSite() {
+  return isEarthquakeMode() ? earthquakeToEvacSite : isFloodToEvacSite();
+}
+
+function isCustomEarthquakeResult(result = simData) {
+  return isEarthquakeSimulationResult(result) && result.to_evacuation_site === false;
+}
+
+function getEarthquakeDestination(result = simData) {
+  const summary = getActiveEarthquakeViewData(result)?.summary || result?.active_summary;
+  return summary?.destination || summary?.selected_evacuation_site || result?.destination || null;
+}
+
 // The evacuation site a flood result's routes lead to, while that result
 // still matches the setup.
-function getFloodResultEvacSite() {
-  return hasFloodSimulationResult() && simData.pins_key === getRoutePinsKey()
-    ? simData.selected_evacuation_site || null
-    : null;
+function getResultEvacSite() {
+  if (!simData || simData.pins_key !== getRoutePinsKey() || !isToEvacuationSite()) return null;
+  return isEarthquakeSimulationResult(simData)
+    ? simData.active_summary?.selected_evacuation_site || null
+    : simData.selected_evacuation_site || null;
 }
 
 function getReadyPin(role) {
@@ -2444,7 +2469,7 @@ function getReadyPin(role) {
 }
 
 function getActivePinRoles() {
-  return isEarthquakeMode() ? ['start'] : PIN_ROLES;
+  return PIN_ROLES;
 }
 
 function canRunFloodSimulation() {
@@ -2456,7 +2481,8 @@ function canRunEarthquakeSimulation() {
     isEarthquakeMode()
     && isEarthquakeBarangaySupported()
     && getReadyPin('start')
-    && earthquakeEvacSitesVisible
+    && !earthquakeEvacSitesLoading
+    && (earthquakeToEvacSite ? earthquakeEvacSitesVisible : !!getReadyPin('end'))
   );
 }
 
@@ -2506,7 +2532,7 @@ function canPlaceRoutePins() {
 // armed for one.
 function getNextUnpinnedRole() {
   return getActivePinRoles().find(role => (
-    !routePins[role] && !(role === 'end' && isFloodToEvacSite())
+    !routePins[role] && !(role === 'end' && isToEvacuationSite())
   )) || null;
 }
 
@@ -2566,6 +2592,11 @@ function clearPinHintError() {
 
 function setPinPlacementRole(role) {
   const nextRole = role && canPlaceRoutePins() && getActivePinRoles().includes(role) ? role : null;
+  if (nextRole === 'end' && isEarthquakeMode()) {
+    earthquakeToEvacSite = false;
+    earthquakeEvacSitesLoading = false;
+    earthquakeDestinationChoice += 1;
+  }
   const changed = nextRole !== pinPlacementRole;
   pinPlacementRole = nextRole;
   // Done or cancelled: drop a "Change" focus so the workflow moves on to
@@ -2582,6 +2613,7 @@ function setPinPlacementRole(role) {
 }
 
 function closePinMenus() {
+  window.mobileSim?.closeDestinationMenu();
   PIN_ROLES.forEach(role => {
     const menu = document.getElementById(`${role}PinMenu`);
     if (menu) menu.hidden = true;
@@ -2667,8 +2699,8 @@ function syncRoutePinFields() {
     // No pin: the destination is the evacuation sites, or after a run, the
     // one it picked -- unless the visitor is picking a spot of their own.
     const placingOwn = role === 'end' && !pin && pinPlacementRole === 'end';
-    const toEvacSite = role === 'end' && !pin && !placingOwn && isFloodToEvacSite();
-    const resultSite = toEvacSite ? getFloodResultEvacSite() : null;
+    const toEvacSite = role === 'end' && !pin && !placingOwn && isToEvacuationSite();
+    const resultSite = toEvacSite ? getResultEvacSite() : null;
     input.disabled = locked || !canPlaceRoutePins();
     if (input.disabled) {
       document.getElementById(`${role}PinMenu`)?.setAttribute('hidden', '');
@@ -2696,7 +2728,7 @@ function syncRoutePinFields() {
     input.title = pin ? `${pin.label || PIN_ROLE_COPY[role].fallbackLabel} (${formatPinCoordinates(pin)})` : '';
   });
 
-  document.getElementById('pinInputs')?.classList.toggle('is-single', isEarthquakeMode());
+  document.getElementById('pinInputs')?.classList.remove('is-single');
   syncEndPinMenu();
 
   // Shown while the route card is collapsed: how to change pins already set.
@@ -2706,10 +2738,8 @@ function syncRoutePinFields() {
     const end = getReadyPin('end');
     summary.textContent = !selectedHazard
       ? ''
-      : isEarthquakeMode()
-      ? (start ? 'Your location is pinned. Drag its pin on the map to change it.' : 'Pin your location on the map.')
-      : start && isFloodToEvacSite() && !routePins.end
-      ? 'Your location is pinned. Routes lead to the evacuation site with the safest route.'
+      : start && isToEvacuationSite() && !routePins.end
+      ? `Your location is pinned. Routes lead to the evacuation site with the ${getRouteRankingLabel()}.`
       : start && end
       ? 'Both points are pinned. Drag a pin on the map to change it.'
       : 'Pin your location and destination on the map.';
@@ -2726,9 +2756,10 @@ function syncEndPinMenu() {
   const ownItem = document.getElementById('endMenuOwnLabel');
   if (!evacItem || !ownItem) return;
   const ownPin = !!routePins.end;
-  const toEvacSite = !ownPin && isFloodToEvacSite() && pinPlacementRole !== 'end';
+  const toEvacSite = !ownPin && isToEvacuationSite() && pinPlacementRole !== 'end';
   evacItem.textContent = toEvacSite ? 'Show the evacuation sites' : 'Use an evacuation site instead';
   evacItem.setAttribute('aria-checked', String(toEvacSite));
+  evacItem.disabled = isSimulationInteractionLocked() || (isEarthquakeMode() && !getReadyPin('start'));
   ownItem.textContent = ownPin ? 'Move my destination on the map' : 'Choose my own destination instead';
 }
 
@@ -2893,7 +2924,7 @@ function syncFloodEvacMarkers() {
   window.floodHazardUI?.drawEvacuationSites({
     map: gMap,
     sites: isFloodToEvacSite() ? floodEvacSites : null,
-    highlightedSiteId: getFloodResultEvacSite()?.id ?? null,
+    highlightedSiteId: getResultEvacSite()?.id ?? null,
   });
 }
 
@@ -3007,29 +3038,30 @@ function syncEarthquakeRouteUi() {
   const earthquakeSelectedBarangay = selectedBarangay || 'the selected barangay';
 
   if (routeCardLabel) {
-    routeCardLabel.textContent = isEarthquakeMode() ? 'Start / Evacuation' : 'Start / End';
+    routeCardLabel.textContent = 'Start / End';
   }
 
   if (endField) {
-    endField.hidden = isEarthquakeMode();
+    endField.hidden = false;
   }
 
   const pinFieldHelp = document.getElementById('pinFieldHelp');
   if (pinFieldHelp) {
-    pinFieldHelp.textContent = isEarthquakeMode()
-      ? 'Choose on Map, then tap the spot. Drag a pin to adjust it.'
-      : 'To go somewhere else, click the destination, then Choose my own destination. Drag a pin to adjust it.';
+    pinFieldHelp.textContent = 'To go somewhere else, click the destination, then Choose my own destination. Drag a pin to adjust it.';
   }
 
   if (earthquakeRoutePanel) {
-    earthquakeRoutePanel.hidden = !isEarthquakeMode();
+    earthquakeRoutePanel.hidden = !isEarthquakeMode() || !earthquakeToEvacSite || !hasStart;
   }
 
   if (showEvacBtn) {
+    showEvacBtn.hidden = earthquakeEvacSitesVisible;
+    showEvacBtn.textContent = earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show Evacuation Sites';
     showEvacBtn.disabled = !(
       isEarthquakeMode()
       && isEarthquakeBarangaySupported()
       && hasStart
+      && !earthquakeEvacSitesLoading
     );
   }
 
@@ -3157,7 +3189,7 @@ function buildFloodEvacLegendRows() {
   const styles = window.floodHazardUI?.evacMarkerStyles;
   if (!styles) return '';
   const row = (style, label) => `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span style="font-size:.78rem;">${label}</span></div>`;
-  return (getFloodResultEvacSite() ? row(styles.chosen, 'Chosen evacuation site') : '')
+  return (getResultEvacSite() ? row(styles.chosen, 'Chosen evacuation site') : '')
     + row(styles.site, 'Evacuation site');
 }
 
@@ -3375,7 +3407,7 @@ function getDisplayedEarthquakeRoute() {
 }
 
 function fitEarthquakeMapScope(options = {}) {
-  const { includeHazards = false } = options;
+  const { includeHazards = false, flySeconds = 0 } = options;
 
   if (!gMap || !selectedBarangay || !isEarthquakeMode()) {
     return false;
@@ -3401,7 +3433,7 @@ function fitEarthquakeMapScope(options = {}) {
       hasPoints = extendBoundsWithLngLat(bounds, point?.lng, point?.lat) || hasPoints;
     });
 
-    const activeDestination = simData?.active_summary?.selected_evacuation_site;
+    const activeDestination = getEarthquakeDestination();
     if (activeDestination) {
       hasPoints = extendBoundsWithLngLat(bounds, activeDestination.lng, activeDestination.lat) || hasPoints;
     }
@@ -3418,7 +3450,12 @@ function fitEarthquakeMapScope(options = {}) {
   // One move, with the minimum zoom folded in.
   const padding = getMapFitPadding(52);
   const target = gMap._getBoundsCenterZoom(bounds, padding);
-  gMap.setView(target.center, Math.max(target.zoom, EARTHQUAKE_MIN_FOCUS_ZOOM), mapMoveOptions({ animate: true }));
+  const zoom = Math.max(target.zoom, EARTHQUAKE_MIN_FOCUS_ZOOM);
+  if (flySeconds) {
+    gMap.flyTo(target.center, zoom, mapMoveOptions({ duration: flySeconds }));
+  } else {
+    gMap.setView(target.center, zoom, mapMoveOptions({ animate: true }));
+  }
   return true;
 }
 
@@ -3643,7 +3680,7 @@ function getRoutePinsKey() {
     .map(role => {
       const pin = getReadyPin(role);
       if (pin) return `${pin.lat},${pin.lng}`;
-      return role === 'end' && isFloodToEvacSite() ? 'evacuation-sites' : '-';
+      return role === 'end' && isToEvacuationSite() ? 'evacuation-sites' : '-';
     })
     .join('|');
 }
@@ -3729,7 +3766,7 @@ function buildRouteInfoHtml() {
     return 'Simulation complete. Drag a <strong>pin</strong> or change the <strong>hazard</strong> to try another route, or click <strong>Back to Home</strong> to pick a different barangay.';
   }
 
-  if (isEarthquakeMode()) {
+  if (isEarthquakeMode() && earthquakeToEvacSite) {
     if (!startPin) {
       return `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
     }
@@ -3751,7 +3788,7 @@ function buildRouteInfoHtml() {
   }
   if (isFloodToEvacSite() && !routePins.end) {
     return startPin
-      ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the safest route.<br>Click <strong>Run Simulation</strong>.`
+      ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the ${getRouteRankingLabel()}.<br>Click <strong>Run Simulation</strong>.`
       : `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
@@ -3765,15 +3802,13 @@ async function selectHazard(name, el) {
   if (isSimulationInteractionLocked()) return;
 
   // Where the visitor is doesn't depend on the hazard, so ready pins carry
-  // over to the new mode (re-checked below against its coverage) -- except a
-  // flood destination, which earthquake routing replaces with shelters.
+  // over to the new mode, re-checked below against its hazard coverage.
   const carriedPins = PIN_ROLES
-    .filter(role => role === 'start' || name === 'Flood')
     .map(role => [role, getReadyPin(role)])
     .filter(([, pin]) => pin);
   // Flood routes go to the evacuation sites unless a destination of the
   // visitor's own carries over.
-  const toEvacSites = name === 'Flood' && !carriedPins.some(([role]) => role === 'end');
+  const toEvacSites = !carriedPins.some(([role]) => role === 'end');
 
   selectedHazard = name;
   // The panel's colours change with the hazard: cross-fade them rather
@@ -3801,7 +3836,8 @@ async function selectHazard(name, el) {
   floodHazardOverlayMode = name === 'Flood' ? 'all' : 'none';
   // Before any pin is placed, so a start pin never arms the map for an end
   // pin: a stray tap would pin a destination nobody chose.
-  if (toEvacSites) floodToEvacSite = true;
+  if (name === 'Flood') floodToEvacSite = toEvacSites;
+  else earthquakeToEvacSite = toEvacSites;
   if (!keepBoundary) await loadBarangayMapOnly(selectedBarangay);
   revealMapWhenBaseReady();
   // Flood areas and the severity filter only show with a result, so for
@@ -3816,7 +3852,7 @@ async function selectHazard(name, el) {
   } else {
     setPinPlacementRole(getNextUnpinnedRole());
   }
-  if (toEvacSites) await useFloodEvacSitesByDefault();
+  if (name === 'Flood' && toEvacSites) await useFloodEvacSitesByDefault();
 }
 
 // Flood's default destination: the barangay's evacuation sites, on the map
@@ -3841,7 +3877,7 @@ function getCompletedSteps() {
     2: !!selectedHazard,
     3: !!getReadyPin('start'),
     4: isEarthquakeMode()
-      ? earthquakeEvacSitesVisible
+      ? (earthquakeToEvacSite ? earthquakeEvacSitesVisible : !!getReadyPin('end'))
       : !!getReadyPin('end') || isFloodToEvacSite(),
     5: canRunCurrentSimulation(),
   };
@@ -3854,7 +3890,7 @@ function getMaxReachableStep() {
   if (isEarthquakeMode()) {
     if (!isEarthquakeBarangaySupported()) return 2;
     if (!getReadyPin('start')) return 3;
-    if (!earthquakeEvacSitesVisible) return 4;
+    if (earthquakeToEvacSite ? !earthquakeEvacSitesVisible : !getReadyPin('end')) return 4;
     return 5;
   }
 
@@ -4073,7 +4109,7 @@ async function setFloodHazardOverlayMode(modeKey) {
   }
 }
 
-async function renderActiveSimulationRoutes({ fadeIn = true } = {}) {
+async function renderActiveSimulationRoutes({ fadeIn = true, flySeconds = 0 } = {}) {
   if (!simData || !Array.isArray(simData.routes)) return;
 
   const isEarthquakeResult = isEarthquakeSimulationResult(simData);
@@ -4088,9 +4124,10 @@ async function renderActiveSimulationRoutes({ fadeIn = true } = {}) {
     mapLayers,
     drawPins: syncRoutePinMarkers,
     fitOptions: getMapFitPadding(),
-    fitPoints: [getReadyPin('start'), isEarthquakeResult ? null : getReadyPin('end')].filter(Boolean),
+    fitPoints: [getReadyPin('start'), getReadyPin('end')].filter(Boolean),
     // Earthquake results fit once below, around the hazard extent too.
     fit: !isEarthquakeResult,
+    flySeconds,
     fadeIn,
     buildEtaLabel: buildRouteEtaLabel,
     afterDrawPins: isEarthquakeResult
@@ -4111,7 +4148,7 @@ async function renderActiveSimulationRoutes({ fadeIn = true } = {}) {
       activeView: activeEarthquakeView,
     });
     window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: true, hazardLayers: simData.hazard_layers });
-    fitEarthquakeMapScope({ includeHazards: true });
+    fitEarthquakeMapScope({ includeHazards: true, flySeconds });
   } else {
     await syncFloodHazardOverlay(selectedBarangay);
   }
@@ -4178,9 +4215,10 @@ async function showFloodEvacuationSites({ fit = true } = {}) {
   if (fit) fitMapToFloodEvacSites();
 }
 
-async function showEvacuationSites() {
+async function showEvacuationSites({ fit = true } = {}) {
+  closePinMenus();
   if (!isEarthquakeMode()) {
-    await showFloodEvacuationSites();
+    await showFloodEvacuationSites({ fit });
     return;
   }
   if (isSimulationInteractionLocked()) return;
@@ -4193,19 +4231,32 @@ async function showEvacuationSites() {
     alert('Pin your location on the map first.');
     return;
   }
+  if (earthquakeEvacSitesLoading) return;
+  const barangay = selectedBarangay;
+  const choice = ++earthquakeDestinationChoice;
+  earthquakeEvacSitesLoading = true;
+  syncEarthquakeRouteUi();
 
   const statusTxt = document.getElementById('statusTxt');
   const previousStatus = statusTxt?.textContent || 'Ready';
   const hasActiveEarthquakeResult = isEarthquakeSimulationResult(simData)
-    && simData.pins_key === getRoutePinsKey();
+    && simData.pins_key === getRoutePinsKey()
+    && earthquakeToEvacSite && !routePins.end;
 
   try {
     if (statusTxt) {
       statusTxt.textContent = 'Loading evacuation sites...';
     }
 
-    earthquakeEvacSites = await window.earthquakeUI.loadEvacuationSites(selectedBarangay);
+    const sites = await window.earthquakeUI.loadEvacuationSites(barangay);
+    if (choice !== earthquakeDestinationChoice || barangay !== selectedBarangay || !isEarthquakeMode()) return;
+    if (!sites.length) throw new Error('No evacuation sites are listed for this barangay. Choose your own destination instead.');
+    earthquakeEvacSites = sites;
+    earthquakeToEvacSite = true;
     earthquakeEvacSitesVisible = true;
+    routePins.end = null;
+    pinCheckSeq.end += 1;
+    if (pinPlacementRole === 'end') setPinPlacementRole(getNextUnpinnedRole());
 
     window.earthquakeUI?.drawEvacuationSites({
       map: gMap,
@@ -4221,17 +4272,22 @@ async function showEvacuationSites() {
         : { showRouteKeys: false, showHazardLayers: false }
     );
     setMapLegendVisible(true);
-    fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
+    if (fit) fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
   } catch (err) {
+    if (choice !== earthquakeDestinationChoice) return;
     console.error(err);
     alert('Failed to load evacuation sites: ' + err.message);
   } finally {
-    if (statusTxt) {
+    if (choice === earthquakeDestinationChoice) {
+      earthquakeEvacSitesLoading = false;
+      syncEarthquakeRouteUi();
+    }
+    if (statusTxt && choice === earthquakeDestinationChoice) {
       statusTxt.textContent = previousStatus;
     }
   }
 
-  onRoutePinsChange();
+  if (choice === earthquakeDestinationChoice) onRoutePinsChange();
 }
 
 async function switchEarthquakeView(viewKey) {
@@ -4280,7 +4336,7 @@ function buildSimulationSessionBase(isEarthquakeRun) {
     hazard: selectedHazard,
     isEarthquake: isEarthquakeRun,
     pins: Object.fromEntries(PIN_ROLES.map(role => [role, getReadyPin(role)])),
-    toEvacuationSite: !isEarthquakeRun && isFloodToEvacSite() && !routePins.end,
+    toEvacuationSite: isToEvacuationSite() && !routePins.end,
   };
 }
 
@@ -4306,7 +4362,11 @@ async function runSimulation() {
     }).catch(() => {});
   }
   const [endpoint, payload, label] = isEarthquakeRun
-    ? ['/earthquake/simulate', { start: buildPinRequestPoint('start'), barangay: selectedBarangay }, 'Earthquake simulation']
+    ? ['/earthquake/simulate', {
+        start: buildPinRequestPoint('start'),
+        end: earthquakeToEvacSite ? null : buildPinRequestPoint('end'),
+        barangay: selectedBarangay,
+      }, 'Earthquake simulation']
     : isFloodToEvacSite() && !routePins.end
     ? ['/simulate', { start: buildPinRequestPoint('start'), to_evacuation_site: true, hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation']
     : ['/simulate', { start: buildPinRequestPoint('start'), end: buildPinRequestPoint('end'), hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation'];
@@ -4441,6 +4501,8 @@ async function followSimulationJob(startJob, context) {
 // The loader's bar eases up to 100 before it fades to the replay.
 const LOADER_REPLAY_HANDOFF_MS = 450;
 const REPLAY_RESIZE_SETTLE_MS = 220;
+const REPLAY_PANEL_OUT_MS = 180;
+const RESULTS_HANDOFF_FLY_SECONDS = 0.7;
 // The camera's flight from the earthquake intro's barangay view to the
 // ants' search.
 const QUAKE_HANDOFF_FLY_SECONDS = 0.9;
@@ -4480,7 +4542,7 @@ function mountReplayPanel(panel) {
 
 // The replay playing now, for the recenter button and the phone sheet's
 // refit; and the one whose Route 1 is still on the map until the results
-// draw theirs (a phone replay's; aco-replay.js removeLayers).
+// draw theirs (aco-replay.js removeLayers).
 let activeReplayController = null;
 let replayRouteOnMap = null;
 // An earthquake run's intro (quake-intro.js), while it plays before the ants.
@@ -4583,7 +4645,7 @@ async function drawReplayMapContext(result, isEarthquakeRun, chosenSiteId) {
 function buildReplayLegendPins(result, isEarthquakeRun) {
   const pinRow = (style, label) => `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span>${label}</span></div>`;
   let destination = buildPinLegendRow('end');
-  if (isEarthquakeRun) {
+  if (isEarthquakeRun && !isCustomEarthquakeResult(result)) {
     destination = pinRow({ fill: '#22c55e', stroke: '#14532d' }, 'Chosen evacuation site')
       + pinRow({ fill: '#f59e0b', stroke: '#9a3412' }, 'Open area');
   } else if (result.to_evacuation_site && window.floodHazardUI?.evacMarkerStyles) {
@@ -4651,10 +4713,9 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
         tier,
         color,
         edgeColor: getRouteEdgeColor(color),
-        // A flood route 1 that is not safe crosses water over 1.5 m deep,
-        // which the results say not to walk (getNoSafeRouteAction); after
-        // an earthquake the route is still walked, with care.
-        walk: isEarthquakeRun || tier !== 'unsafe',
+        // High-risk flood routes still get a virtual route preview. Its
+        // warning and cards must not present it as a walkable route.
+        previewOnly: !isEarthquakeRun && tier === 'unsafe',
         wading: routeHasWadingTime(route1),
       },
       startName,
@@ -4741,6 +4802,10 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
           }
         }
         await controller.start();
+        if (controller.didComplete() && !prefersReducedMotion()) {
+          panel.classList.add('is-leaving');
+          await waitMs(REPLAY_PANEL_OUT_MS);
+        }
       } catch (err) {
         console.error('The replay stopped:', err);
         controller.skip();
@@ -4787,8 +4852,10 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
   selectedRouteFocus = null;
   if (isEarthquakeRun) {
     hydrateActiveEarthquakeView(result.active_view || 'overall');
+    earthquakeToEvacSite = !isCustomEarthquakeResult(result);
     earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
     earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
+    syncRoutePinFields();
   } else {
     setFloodLegendContent();
     // The destination field names the evacuation site the run picked.
@@ -4802,6 +4869,10 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
   renderRouteSafetyPanel(simData);
   syncMobilePanelBarLabel();
   window.mobileSim?.showResults();
+  if (replayRouteOnMap) {
+    replayClassAnimation(document.getElementById('routeSafetyContent'), 'results-entering');
+    replayClassAnimation(document.getElementById('msimResults'), 'results-entering');
+  }
   // The setup panel folds away to give the results room -- before drawing,
   // so the route is fitted around the map overlays as they will end up.
   applySetupSidebarState(true);
@@ -4810,7 +4881,10 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
   if (shell && shell.className !== layoutBefore && !prefersReducedMotion()) {
     await waitMs(PANEL_SLIDE_MS + 40);
   }
-  await renderActiveSimulationRoutes({ fadeIn: !replayRouteOnMap });
+  await renderActiveSimulationRoutes({
+    fadeIn: !replayRouteOnMap,
+    flySeconds: replayRouteOnMap ? RESULTS_HANDOFF_FLY_SECONDS : 0,
+  });
   applyRouteFocusState(null);
   clearReplayRoute();
   setResultsSidebarActionsVisible(true);
@@ -4838,11 +4912,12 @@ async function restoreSimulationSession(session) {
   // destination of the visitor's own goes back to it.
   if (routePins.end) {
     floodToEvacSite = false;
+    earthquakeToEvacSite = false;
     setFloodLegendContent();
   }
   setPinPlacementRole(getNextUnpinnedRole());
   onRoutePinsChange();
-  if (session.toEvacuationSite) await showFloodEvacuationSites({ fit: false });
+  if (session.toEvacuationSite) await showEvacuationSites({ fit: false });
 
   const context = {
     label: session.isEarthquake ? 'Earthquake simulation' : 'Simulation',
@@ -5063,7 +5138,7 @@ function renderRouteSafetyPanel(result) {
   if (tier === 'safe') {
     notes.push(
       `${checkedLabel} ${describeGreenRouteCount(fullySafeCount, isEarthquake, { total: routes.length, dryCount })}`,
-      antSearchNote || 'The safest route is shown first.',
+      antSearchNote || `The ${getRouteRankingLabel(best)} is shown first.`,
     );
   } else if (tier === 'caution') {
     // Routes with less Medium water rank first, so when the best one has
@@ -5834,12 +5909,11 @@ async function downloadSimulationReport() {
     const cautionCount = countTier('caution');
     const { barangay, hazard, start, end } = getCurrentSelections();
 
-    // Earthquake mode has no destination pin -- the destination is whichever
-    // evacuation site the ACO run picked, so label it with that instead.
+    // Auto-selected sites and custom pins both keep their destination name
+    // in the report, with the matching marker style below.
     const isEq = isEarthquakeSimulationResult(simData);
-    const eqSummary = isEq ? (simData.active_summary || getActiveEarthquakeViewData(simData)?.summary || null) : null;
     const endLabel = isEq
-      ? (eqSummary?.selected_evacuation_site?.name || 'Evacuation site')
+      ? (getEarthquakeDestination()?.name || end || 'Evacuation site')
       : (simData.selected_evacuation_site?.name || end);
     const withPinCoordinates = (label, role) => {
       const pin = getReadyPin(role);
@@ -5850,7 +5924,7 @@ async function downloadSimulationReport() {
 
     // An evacuation site the run chose (earthquake, or flood's default) is the
     // green CHOSEN pin, as on the live map; a destination of one's own is E.
-    const endIsChosenSite = isEq || !!simData.to_evacuation_site;
+    const endIsChosenSite = isEq ? !isCustomEarthquakeResult() : !!simData.to_evacuation_site;
     const endPin = endIsChosenSite ? REPORT_PIN_COLORS.chosenSite : REPORT_PIN_COLORS.end;
     const mapLabels = { start, end: endLabel, endPin };
     const hazardLayer = await getReportHazardLayer(isEq);
@@ -6112,7 +6186,7 @@ window.toggleRouteFocus = function toggleRouteFocus(routeNo, category) {
 
 // A click anywhere outside a pin input closes its menu.
 document.addEventListener('click', event => {
-  if (!event.target.closest?.('.pin-input-combo')) closePinMenus();
+  if (!event.target.closest?.('.pin-input-combo, #msimDestination')) closePinMenus();
 });
 
 // Up/Down move between a pin menu's items, as in any menu.

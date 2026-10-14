@@ -538,9 +538,12 @@ async function renderRoutesOnRoads({
   // false: the caller fits the map itself (earthquake mode fits once, to
   // the route, the pin and the hazard extent together).
   fit = true,
+  // A replay already showed the route; glide to the results' new padding
+  // instead of snapping when its panels change size.
+  flySeconds = 0,
   buildEtaLabel = null,
   afterDrawPins = null,
-  // false: Route 1 is already on the map (a phone replay's), so the lines
+  // false: Route 1 is already on the map (after a replay), so the lines
   // take its place without fading in from nothing.
   fadeIn = true,
 }) {
@@ -601,7 +604,12 @@ async function renderRoutesOnRoads({
       ...fitPoints,
       { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
     ]);
-    gMap.fitBounds(L.latLngBounds([...defaultCoords, ...pinCoords]), mapMoveOptions(fitOptions));
+    const bounds = L.latLngBounds([...defaultCoords, ...pinCoords]);
+    if (flySeconds) {
+      gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration: flySeconds }));
+    } else {
+      gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
+    }
   }
 
   // Only the first MAP_ROUTES_SHOWN routes stay on the map; script.js shows

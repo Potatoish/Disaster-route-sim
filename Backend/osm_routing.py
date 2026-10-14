@@ -2463,7 +2463,9 @@ def flood_replay_span_levels(edge):
 
 def build_colony_replay(colony, route, span_levels, extra=None):
     """The main colony's search, for the replay the results open with
-    (aco-replay.js), or None when it was not recorded or no ant arrived.
+    (aco-replay.js), or None when it was not recorded or no route was found.
+    Unsuccessful ant walks are still replayed when a map search supplies
+    Route 1, which is then previewed by an arrow rather than an ant.
 
     Roads are listed once each, as integer offsets in 1e-5 degrees (about
     1 m) from `origin`, in the direction an ant first walked them; a walk or
@@ -2477,7 +2479,7 @@ def build_colony_replay(colony, route, span_levels, extra=None):
     liquefaction and ground shaking), merged into [metres, *levels] spans.
     extra joins the payload as is."""
     record = colony.get("replay_record")
-    if not record or not record["rounds"] or colony.get("best") is None or not route:
+    if not record or not record["rounds"] or not route:
         return None
 
     G = colony["G"]
@@ -2537,8 +2539,14 @@ def build_colony_replay(colony, route, span_levels, extra=None):
 
     lats = [point["lat"] for coords in edge_coords for point in coords]
     lngs = [point["lng"] for coords in edge_coords for point in coords]
-    origin = [math.floor(min(lats) * 1e5), math.floor(min(lngs) * 1e5)]
     node_point = lambda node: [round(float(G.nodes[node]["y"]), 6), round(float(G.nodes[node]["x"]), 6)]
+    start, end = node_point(colony["start"]), node_point(colony["end"])
+    # If no ant left the start there are no recorded roads to anchor the
+    # replay to, but the map-search route still has valid endpoints.
+    origin = [
+        math.floor(min(lats or [start[0], end[0]]) * 1e5),
+        math.floor(min(lngs or [start[1], end[1]]) * 1e5),
+    ]
     return {
         "origin": origin,
         "edges": [
@@ -2553,8 +2561,8 @@ def build_colony_replay(colony, route, span_levels, extra=None):
         "ants": NUM_ANTS,
         "max_rounds": NUM_ITERATIONS,
         "stagnation": ACO_STAGNATION_LIMIT,
-        "start": node_point(colony["start"]),
-        "end": node_point(colony["end"]),
+        "start": start,
+        "end": end,
         "route1": {
             "source": source,
             "spans": [[round(span[0], 1), *span[1:]] for span in spans],
