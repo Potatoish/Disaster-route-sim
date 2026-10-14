@@ -1,11 +1,18 @@
 import json
+import math
 from pathlib import Path
 
+from shapely.affinity import affine_transform
 from shapely.geometry import shape
-from shapely.ops import unary_union
+from shapely.ops import nearest_points, substring, unary_union
 from shapely.prepared import prep
 
-from osm_routing import HAZARD_COVERAGE_TOLERANCE_METERS, debug_print, normalize_barangay_name
+from osm_routing import (
+    HAZARD_COVERAGE_TOLERANCE_METERS,
+    debug_print,
+    get_barangay_boundary,
+    normalize_barangay_name,
+)
 
 EARTHQUAKE_DATA_ROOT = Path(__file__).parent / "data" / "earthquake"
 SUPPORTED_BARANGAYS = ("pinagbuhatan", "sta lucia")
@@ -20,6 +27,16 @@ _LAYER_FILES = {
     "ground_shaking": EARTHQUAKE_DATA_ROOT / "ground_shaking.geojson",
 }
 _EVACUATION_SITES_FILE = EARTHQUAKE_DATA_ROOT / "evacuation_sites.json"
+# Display only: the intensity zones a barangay's map and the earthquake intro
+# show (Sta. Lucia: Project SHAKE). Routing reads _LAYER_FILES alone.
+_INTENSITY_FILE = EARTHQUAKE_DATA_ROOT / "ground_shaking_intensity.geojson"
+_FAULT_FILE = EARTHQUAKE_DATA_ROOT / "west_valley_fault.geojson"
+# The scenario the hazard maps are drawn for.
+SCENARIO_MAGNITUDE = 7.2
+SCENARIO_FAULT_NAME = "West Valley Fault"
+# The intro draws the fault this far (metres along it) each way from the
+# epicenter; the rest is off screen.
+SCENARIO_FAULT_REACH_METERS = 12_000
 _DATASET_CACHE = {}
 _LEVEL_TO_SEVERITY = {
     "very low": 1,
@@ -209,6 +226,64 @@ def _normalize_evacuation_sites(raw_sites, canonical_barangay):
     return sites
 
 
+def _load_intensity_zones(canonical_barangay):
+    """The barangay's ground shaking intensity zones, strongest first; none
+    for a barangay without an intensity map (its map shows the routing
+    layer's level instead)."""
+    if not _INTENSITY_FILE.exists():
+        return []
+    features = []
+    for feature in _load_feature_collection(_INTENSITY_FILE).get("features", []):
+        properties = dict(feature.get("properties") or {})
+        if normalize_barangay_name(properties.get("barangay")) != canonical_barangay:
+            continue
+        if not feature.get("geometry"):
+            continue
+        properties["barangay"] = DISPLAY_BARANGAY_NAMES[canonical_barangay]
+        features.append({"type": "Feature", "properties": properties, "geometry": feature["geometry"]})
+    features.sort(key=lambda feature: -float(feature["properties"].get("mmi_max") or 0))
+    return features
+
+
+def _build_scenario(canonical_barangay):
+    """The earthquake the hazard maps are drawn for, as the intro shows it:
+    the fault near the barangay and an epicenter on it, set where the fault
+    passes closest to the barangay's center."""
+    boundary = get_barangay_boundary(canonical_barangay)
+    if boundary is None or not _FAULT_FILE.exists():
+        return None
+    fault_feature = next(
+        (
+            feature for feature in _load_feature_collection(_FAULT_FILE).get("features", [])
+            if (feature.get("properties") or {}).get("name") == SCENARIO_FAULT_NAME
+        ),
+        None,
+    )
+    if fault_feature is None:
+        return None
+
+    area = boundary["geometry"]
+    # Flat-earth metres around the barangay (a few km: well within a metre).
+    kx = METERS_PER_DEGREE * math.cos(math.radians(area.centroid.y))
+    ky = 110_574.0
+    fault_m = affine_transform(shape(fault_feature["geometry"]), [kx, 0, 0, ky, 0, 0])
+    area_m = affine_transform(area, [kx, 0, 0, ky, 0, 0])
+    epicenter_m = nearest_points(fault_m, area_m.centroid)[0]
+    along = fault_m.project(epicenter_m)
+    shown = substring(
+        fault_m,
+        max(0.0, along - SCENARIO_FAULT_REACH_METERS),
+        min(fault_m.length, along + SCENARIO_FAULT_REACH_METERS),
+    )
+    return {
+        "magnitude": SCENARIO_MAGNITUDE,
+        "fault_name": SCENARIO_FAULT_NAME,
+        "fault": [[round(y / ky, 6), round(x / kx, 6)] for x, y in shown.coords],
+        "epicenter": [round(epicenter_m.y / ky, 6), round(epicenter_m.x / kx, 6)],
+        "fault_to_barangay_m": round(area_m.distance(fault_m)),
+    }
+
+
 def get_earthquake_dataset(barangay_name):
     canonical_name = normalize_barangay_name(barangay_name)
     if canonical_name not in SUPPORTED_BARANGAYS:
@@ -262,6 +337,11 @@ def get_earthquake_dataset(barangay_name):
         "layer_payloads": layer_payloads,
         "layer_zones": layer_zones,
         "layer_extents": layer_extents,
+        "shaking_intensity": {
+            "type": "FeatureCollection",
+            "features": _load_intensity_zones(canonical_name),
+        },
+        "scenario": _build_scenario(canonical_name),
     }
     _DATASET_CACHE[canonical_name] = dataset
     return dataset

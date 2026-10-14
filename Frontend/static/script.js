@@ -1322,9 +1322,10 @@ function recenterMap() {
     window.mobileSim.resumeAutoFit();
     if (activeReplayController && !activeReplayController.isDone()) {
       const walking = activeReplayController.isWalking();
+      const quake = isQuakeIntroPlaying();
       // Walking: the follow eases the walker back to its focus point.
       if (!walking) fitReplaySearch({ flySeconds: RECENTER_FLY_SECONDS });
-      window.mobileSim.toast(walking ? 'Following the walk on Route 1' : 'Showing the ants\' search');
+      window.mobileSim.toast(walking ? 'Following the walk on Route 1' : quake ? 'Showing the earthquake' : 'Showing the ants\' search');
       return;
     }
     window.mobileSim.toast(simData ? 'Showing full route' : 'Showing the whole barangay');
@@ -2190,11 +2191,20 @@ function buildHazardSourceNoteHtml(isEarthquake) {
     : `Flood levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood map. They are estimates, not live conditions.`;
 }
 
-// The PDF report's sources: what this simulation used, each with its link.
-function getReportDataSources(isEarthquake) {
+// The PDF report's sources: what this simulation used, each with its link
+// (a source with none online has no link line).
+function getReportDataSources(isEarthquake, result = simData) {
   const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
+  const intensitySource = result?.hazard_layers?.shaking_intensity?.features?.[0]?.properties?.source;
   const hazardRows = isEarthquake
-    ? [{ label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url }]
+    ? [
+      { label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url },
+      ...(intensitySource ? [{
+        label: 'Ground shaking intensity',
+        text: `${intensitySource} ground shaking map of Barangay ${result.barangay || selectedBarangay} (M7.2 West Valley Fault scenario), traced by the team; shown on the map only`,
+        url: '',
+      }] : []),
+    ]
     : [
       { label: 'Flood hazard levels', text: 'Project NOAH 25-year flood hazard map (a modeled scenario, not live conditions)', url: noah.url },
       { label: 'Walking limits in flood water', text: aidr.name, url: aidr.url },    ];
@@ -4100,7 +4110,7 @@ async function renderActiveSimulationRoutes({ fadeIn = true } = {}) {
       hazardLayers: simData.hazard_layers,
       activeView: activeEarthquakeView,
     });
-    window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: true });
+    window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: true, hazardLayers: simData.hazard_layers });
     fitEarthquakeMapScope({ includeHazards: true });
   } else {
     await syncFloodHazardOverlay(selectedBarangay);
@@ -4207,7 +4217,7 @@ async function showEvacuationSites() {
     window.earthquakeUI?.syncLegend(
       activeEarthquakeView,
       hasActiveEarthquakeResult
-        ? { showRouteKeys: true }
+        ? { showRouteKeys: true, hazardLayers: simData?.hazard_layers }
         : { showRouteKeys: false, showHazardLayers: false }
     );
     setMapLegendVisible(true);
@@ -4431,6 +4441,9 @@ async function followSimulationJob(startJob, context) {
 // The loader's bar eases up to 100 before it fades to the replay.
 const LOADER_REPLAY_HANDOFF_MS = 450;
 const REPLAY_RESIZE_SETTLE_MS = 220;
+// The camera's flight from the earthquake intro's barangay view to the
+// ants' search.
+const QUAKE_HANDOFF_FLY_SECONDS = 0.9;
 
 // Where the replay's panel goes: the phone/tablet sheet, a card over the map
 // on a short screen (its panels cover the whole screen there), or the
@@ -4470,17 +4483,24 @@ function mountReplayPanel(panel) {
 // draw theirs (a phone replay's; aco-replay.js removeLayers).
 let activeReplayController = null;
 let replayRouteOnMap = null;
+// An earthquake run's intro (quake-intro.js), while it plays before the ants.
+let activeQuakeIntro = null;
+
+function isQuakeIntroPlaying() {
+  return !!activeQuakeIntro && !activeQuakeIntro.isDone();
+}
 
 function clearReplayRoute() {
   replayRouteOnMap?.removeRoute();
   replayRouteOnMap = null;
 }
 
-// The ants' search, framed in the part of the map left in view.
+// The ants' search (or, while it plays, the earthquake intro's view),
+// framed in the part of the map left in view.
 function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
   const controller = activeReplayController;
   if (!gMap || !controller || controller.isDone()) return;
-  const bounds = controller.getSearchBounds();
+  const bounds = isQuakeIntroPlaying() ? activeQuakeIntro.getViewBounds() : controller.getSearchBounds();
   const padding = getReplayFitPadding();
   if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return;
   const fitOptions = { ...padding, maxZoom: PIN_PLACEMENT_ZOOM };
@@ -4585,6 +4605,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
   if (!route1) return null;
 
   let controller;
+  let chosenSiteId = null;
   try {
     // The previous run's routes and result panels make way.
     clearRenderedRoutesOnly();
@@ -4597,14 +4618,26 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     const tier = getRouteSafetyTier(route1);
     const color = getBestRouteColor(route1);
     const aco = view?.aco || result.aco || null;
-    const chosenSiteId = isEarthquakeRun
+    chosenSiteId = isEarthquakeRun
       ? view?.summary?.selected_evacuation_site?.id ?? null
       : result.selected_evacuation_site?.id ?? null;
     const endName = isEarthquakeRun || result.to_evacuation_site
       ? route1.destination_name || result.end
       : result.end || getReadyPin('end')?.label || PIN_ROLE_COPY.end.fallbackLabel;
+    const startName = result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel;
+    const startPoint = getReadyPin('start') || { lat: replayData.start?.[0], lng: replayData.start?.[1] };
 
-    await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+    // An earthquake run opens with its scenario (quake-intro.js): the fault,
+    // the waves and the shaking map. The hazards and sites the ants route
+    // on come in when they take over.
+    const withIntro = isEarthquakeRun && !!window.quakeIntro?.canPlay(result) && barangayBoundaryRings.length > 0
+      && Number.isFinite(Number(startPoint.lat)) && Number.isFinite(Number(startPoint.lng));
+    if (withIntro) {
+      window.earthquakeUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
+      window.earthquakeUI?.drawEvacuationSites({ map: gMap, sites: [] });
+    } else {
+      await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+    }
     controller = window.acoReplay.create({
       map: gMap,
       replay: replayData,
@@ -4624,11 +4657,14 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
         walk: isEarthquakeRun || tier !== 'unsafe',
         wading: routeHasWadingTime(route1),
       },
-      startName: result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel,
+      startName,
       endName,
       antsTotal: Number(aco?.ants_sent_all_sites ?? aco?.ants_sent) || 0,
       legendBody: document.getElementById('mapLegendBody'),
       legendExtra: buildReplayLegendPins(result, isEarthquakeRun),
+      hazardLegendHtml: isEarthquakeRun
+        ? window.earthquakeUI?.buildHazardLegendHtml(result.hazard_layers, result.active_view || 'overall')
+        : '',
       getPadding: getReplayFitPadding,
       onPanelChange: () => window.mobileSim?.scheduleSync(),
       onWalkChange: walking => document.getElementById('appShell')?.classList.toggle('aco-replay-walking', walking),
@@ -4637,11 +4673,26 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       isCameraPaused: () => !!window.mobileSim?.isAutoFitPaused(),
     });
     activeReplayController = controller;
+    if (withIntro) {
+      activeQuakeIntro = window.quakeIntro.create({
+        map: gMap,
+        scenario: result.earthquake_scenario,
+        hazardLayers: result.hazard_layers,
+        boundaryRings: barangayBoundaryRings,
+        barangay: result.barangay || selectedBarangay,
+        start: { lat: Number(startPoint.lat), lng: Number(startPoint.lng), label: startName },
+        legendBody: document.getElementById('mapLegendBody'),
+        legendPins: buildPinLegendRow('start') + buildBoundaryLegendRow(),
+        getPadding: getReplayFitPadding,
+        onPanelChange: () => window.mobileSim?.scheduleSync(),
+        showCredit: !window.mobileSim?.isActive(),
+      });
+    }
 
     const shell = document.getElementById('appShell');
     const layoutBefore = shell?.className;
     shell?.classList.add('aco-replaying');
-    mountReplayPanel(controller.panel);
+    mountReplayPanel(activeQuakeIntro ? activeQuakeIntro.panel : controller.panel);
     applySetupSidebarState(true);
     setMapLegendVisible(true);
     // The panels finish sliding first, and initMap's resize handling (which
@@ -4649,25 +4700,46 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     // view is fitted once, to the map's final size.
     if (shell && shell.className !== layoutBefore) await waitMs(PANEL_SLIDE_MS + REPLAY_RESIZE_SETTLE_MS);
     gMap.invalidateSize({ pan: false });
-    gMap.fitBounds(controller.getSearchBounds(), mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, animate: false }));
+    const firstView = activeQuakeIntro ? activeQuakeIntro.getBounds() : controller.getSearchBounds();
+    gMap.fitBounds(firstView, mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, animate: false }));
   } catch (err) {
     console.error('Could not set up the replay:', err);
     endSimulationReplay(controller);
     return null;
   }
 
+  const intro = activeQuakeIntro;
   return {
     async play() {
+      let panel = intro ? intro.panel : controller.panel;
       let host = getReplayHost();
       // Turning a phone or resizing the window mid-replay moves the panel
       // to the new layout's place for it.
       const onResize = () => {
         if (getReplayHost() === host) return;
-        host = mountReplayPanel(controller.panel);
+        host = mountReplayPanel(panel);
         controller.resize();
       };
       window.addEventListener('resize', onResize);
       try {
+        if (intro) {
+          await intro.start();
+          // The ants take over: the hazards and sites they route on come in
+          // as the intro's layers fade, the intro folds to one line over
+          // the ants' panel, and the camera flies to their search.
+          await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+          intro.destroy({ fade: true });
+          activeQuakeIntro = null;
+          intro.panel.remove();
+          controller.panel.prepend(intro.buildSummary());
+          panel = controller.panel;
+          host = mountReplayPanel(panel);
+          window.mobileSim?.scheduleSync();
+          if (!controller.isDone()) {
+            gMap.flyToBounds(controller.getSearchBounds(), mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, duration: QUAKE_HANDOFF_FLY_SECONDS }));
+            await waitMs(QUAKE_HANDOFF_FLY_SECONDS * 1000 + 100);
+          }
+        }
         await controller.start();
       } catch (err) {
         console.error('The replay stopped:', err);
@@ -4682,6 +4754,11 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
 
 // keepRoute: the results are next, and draw their routes over Route 1.
 function endSimulationReplay(controller, { keepRoute = false } = {}) {
+  if (activeQuakeIntro) {
+    activeQuakeIntro.destroy();
+    activeQuakeIntro.panel.remove();
+    activeQuakeIntro = null;
+  }
   controller?.skip();
   controller?.panel.remove();
   if (activeReplayController === controller) activeReplayController = null;
@@ -5622,7 +5699,7 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
   doc.setFont('helvetica', 'normal');
 
   const sized = items.map(item => {
-    const swatch = item.kind === 'line' ? 22 : item.kind === 'area' ? 12 : 10;
+    const swatch = item.kind === 'line' ? 22 : ['area', 'hatch', 'dashed'].includes(item.kind) ? 12 : 10;
     return { ...item, swatch, itemWidth: swatch + swatchGap + doc.getTextWidth(item.label) };
   });
   let row = 0;
@@ -5671,6 +5748,26 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
       doc.setDrawColor(item.edge);
       doc.setLineWidth(0.8);
       doc.roundedRect(item.left, cy - 4.5, item.swatch, 9, 1.5, 1.5, 'FD');
+    } else if (item.kind === 'hatch') {
+      // High liquefaction, as on the map: stripes inside a solid edge.
+      const [left, top, right, bottom] = [item.left, cy - 4.5, item.left + item.swatch, cy + 4.5];
+      doc.setDrawColor(item.color);
+      doc.setLineWidth(1.1);
+      for (let offset = -9; offset < item.swatch; offset += 3.2) {
+        const x0 = Math.max(left, left + offset);
+        const x1 = Math.min(right, left + offset + 9);
+        if (x1 > x0) doc.line(x0, bottom - (x0 - left - offset), x1, bottom - (x1 - left - offset));
+      }
+      doc.setDrawColor(item.edge);
+      doc.setLineWidth(1.2);
+      doc.roundedRect(left, top, item.swatch, 9, 1.5, 1.5, 'S');
+    } else if (item.kind === 'dashed') {
+      // Moderate liquefaction: a dashed edge, no fill.
+      doc.setDrawColor(item.edge);
+      doc.setLineWidth(1);
+      doc.setLineDashPattern([2, 1.5], 0);
+      doc.roundedRect(item.left, cy - 4.5, item.swatch, 9, 1.5, 1.5, 'S');
+      doc.setLineDashPattern([], 0);
     } else {
       doc.setFillColor(item.color);
       doc.setDrawColor(item.edge);
@@ -5695,7 +5792,7 @@ async function getReportHazardLayer(isEq) {
     if (!ui?.paintHazardLayers || !layers) return null;
     return {
       paint: (ctx, project) => ui.paintHazardLayers(ctx, layers, activeEarthquakeView, project),
-      legend: ui.getLegendItems(activeEarthquakeView),
+      legend: ui.getLegendItems(activeEarthquakeView, layers),
     };
   }
   const ui = window.floodHazardUI;
@@ -5902,9 +5999,13 @@ async function downloadSimulationReport() {
       doc.setFont('helvetica', 'normal');
       doc.text(lines, margin + labelColWidth, y);
       y += lines.length * 11;
-      doc.setTextColor(...LINK_RGB);
-      doc.textWithLink(url, margin + labelColWidth, y, { url });
-      y += 15;
+      if (url) {
+        doc.setTextColor(...LINK_RGB);
+        doc.textWithLink(url, margin + labelColWidth, y, { url });
+        y += 15;
+      } else {
+        y += 4;
+      }
     });
     const allSourcesUrl = new URL(DATA_SOURCES_PAGE_PATH, window.location.origin).href;
     doc.setFont('helvetica', 'bold');

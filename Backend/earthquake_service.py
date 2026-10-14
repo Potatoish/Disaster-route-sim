@@ -746,7 +746,13 @@ def simulate_earthquake(start, barangay_name):
             "safe_threshold": HAZARD_THRESHOLD,
             "evacuation_sites": dataset["evacuation_sites"],
             "reachable_evacuation_sites": evaluated_sites,
-            "hazard_layers": dataset["layer_payloads"],
+            # shaking_intensity is display only (the map and the intro);
+            # routing used ground_shaking.
+            "hazard_layers": {
+                **dataset["layer_payloads"],
+                "shaking_intensity": dataset["shaking_intensity"],
+            },
+            "earthquake_scenario": dataset["scenario"],
             "active_view": REPLAY_VIEW,
             "views": views,
             "replay": replay,

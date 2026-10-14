@@ -2,8 +2,9 @@
 // results: the colony's ants leave the start round by round, their trails
 // grow on the streets it comes to prefer, then Route 1 is drawn along the
 // strongest trail and walked to its end with the camera following (slower
-// through flood water). It is drawn from what the backend recorded of this
-// very run (build_colony_replay in osm_routing.py), sped up.
+// through flood water) -- by an ant, or by an arrow when a regular map search
+// found Route 1 instead of the ants. It is drawn from what the backend
+// recorded of this very run (build_colony_replay in osm_routing.py), sped up.
 //
 // script.js decides when it plays (playSimulationReplay) and where its panel
 // goes: the results column on a desktop, the phone sheet (mobile-sim.js), or
@@ -180,6 +181,8 @@
   //     color, edgeColor, walk (false: Route 1 is not walked), wading }
   //   startName, endName, antsTotal
   //   legendBody: the map legend's body element (rewritten while it plays)
+  //   hazardLegendHtml: the legend's hazard rows (earthquake.js), in place
+  //     of the two-swatch default
   //   getPadding(): fitBounds padding that keeps clear of the panels
   //   onPanelChange(): the panel's content changed size
   //   mobileLayout: plays in the phone/tablet sheet (cased lines, compact
@@ -209,6 +212,10 @@
     const route1 = measure((route1Info?.points || []).map(point => [Number(point.lat), Number(point.lng)]));
     const hasRoute1 = route1.points.length > 1 && route1.len > 0;
     const walksRoute1 = hasRoute1 && route1Info.walk !== false;
+    // Route 1 is walked by an ant only when the ants found it; one a
+    // regular map search found (Dijkstra: the safety-first baseline or the
+    // backup search) is walked by a navigation arrow instead.
+    const antFoundRoute1 = !['shortest_path', 'backup_search'].includes(replay.route1?.source);
     const spans = buildSpans(replay.route1?.spans || [], route1.len);
 
     const state = {
@@ -386,7 +393,9 @@
 
     // ---- the legend ----
     const antSvg = '<svg class="aco-legend-ant" viewBox="0 0 24 14" aria-hidden="true"><path d="M9 7 5 2.5M9 7 5 11.5M12 7l-1-5M12 7l-1 5M14 7l3-4.5M14 7l3 4.5"/><ellipse cx="6.5" cy="7" rx="4.4" ry="3"/><ellipse cx="12" cy="7" rx="2" ry="1.8"/><ellipse cx="16.6" cy="7" rx="2.5" ry="2.3"/></svg>';
-    const walkerSvg = `<svg class="aco-legend-walker" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="#fff" stroke="${route1Info?.edgeColor || '#15803d'}" stroke-width="2"/><g fill="#111827" stroke="#111827" stroke-width=".7" stroke-linecap="round"><path d="M9.5 10 7 6.6M9.5 10 7 13.4M10.6 10l-.4-3.6M10.6 10l-.4 3.6M11.6 10l2-3M11.6 10l2 3" fill="none"/><ellipse cx="7.4" cy="10" rx="2.6" ry="1.8"/><ellipse cx="10.5" cy="10" rx="1.2" ry="1.1"/><ellipse cx="13.1" cy="10" rx="1.4" ry="1.35"/></g></svg>`;
+    const walkerSvg = antFoundRoute1
+      ? `<svg class="aco-legend-walker" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="#fff" stroke="${route1Info?.edgeColor || '#15803d'}" stroke-width="2"/><g fill="#111827" stroke="#111827" stroke-width=".7" stroke-linecap="round"><path d="M9.5 10 7 6.6M9.5 10 7 13.4M10.6 10l-.4-3.6M10.6 10l-.4 3.6M11.6 10l2-3M11.6 10l2 3" fill="none"/><ellipse cx="7.4" cy="10" rx="2.6" ry="1.8"/><ellipse cx="10.5" cy="10" rx="1.2" ry="1.1"/><ellipse cx="13.1" cy="10" rx="1.4" ry="1.35"/></g></svg>`
+      : `<svg class="aco-legend-walker" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="#fff" stroke="${route1Info?.edgeColor || '#15803d'}" stroke-width="2"/><path d="M14.6 10 7.4 6.2 9 10l-1.6 3.8Z" fill="${route1Info?.color || '#16a34a'}"/></svg>`;
     const legendRow = (swatch, label) => `<div class="legend-row">${swatch}<span>${escapeHtml(label)}</span></div>`;
 
     function renderLegend(walking) {
@@ -397,9 +406,9 @@
         : legendRow(antSvg, 'Virtual ant')
           + legendRow('<span class="aco-legend-trail"></span>', 'Ant trail')
           + legendRow('<span class="aco-legend-stuck"></span>', 'Ant that got stuck');
-      const hazards = isFlood
+      const hazards = options.hazardLegendHtml || (isFlood
         ? '<div class="aco-legend-levels"><span><i style="background:rgba(250,204,21,.86)"></i>Low</span><span><i style="background:rgba(249,115,22,.9)"></i>Medium</span><span><i style="background:rgba(225,29,72,.94)"></i>High</span></div>'
-        : '<div class="aco-legend-levels"><span><i style="background:#f59e0b"></i>Liquefaction</span><span><i style="background:#c2410c"></i>Ground shaking</span></div>';
+        : '<div class="aco-legend-levels"><span><i style="background:#f59e0b"></i>Liquefaction</span><span><i style="background:#c2410c"></i>Ground shaking</span></div>');
       // One wrapper, so the phone legend (mobile-sim.js) keeps every row; it
       // leaves out the pin rows (.aco-legend-pins) to stay short there.
       options.legendBody.innerHTML = `<div class="aco-legend">${rows}<div class="aco-legend-pins">${options.legendExtra || ''}</div>${hazards}</div>`;
@@ -995,11 +1004,13 @@
       setText('hereSub', sub);
     }
 
-    // The walker is one of the colony's ants, larger, on a white disc ringed
-    // in Route 1's color, so it stands out on the line. Its legs keep time
-    // with the distance it covers. opts: arrived (0-1 at the end), gait,
-    // ripples ({ t, level }), wet (0-1, easing in and out of flood water),
-    // level (the water or road level under it).
+    // The walker is a white disc ringed in Route 1's color, so it stands out
+    // on the line, carrying one of the colony's ants (larger; its legs keep
+    // time with the distance it covers) when the ants found Route 1, or a
+    // navigation arrow in Route 1's color pointing the way when a regular
+    // map search did. opts: arrived (0-1 at the end), gait, ripples ({ t,
+    // level }), wet (0-1, easing in and out of flood water), level (the
+    // water or road level under it).
     function drawWalker(latlng, heading, opts = {}) {
       const { arrived = 0, gait = 0, ripples = [], wet = 0, level = 0 } = opts;
       drawAnts({ kind: 'none' });
@@ -1030,10 +1041,23 @@
       g.strokeStyle = route1Info.edgeColor;
       g.lineWidth = 3;
       g.stroke();
-      // The ant's body runs from abdomen (behind) to head (ahead); nudge it
-      // forward so the whole ant sits centered in the disc.
       const c = Math.cos(heading);
       const s = Math.sin(heading);
+      if (!antFoundRoute1) {
+        // An arrowhead with a notched tail, centered on the disc.
+        const k = 1.32;
+        g.fillStyle = route1Info.color;
+        g.beginPath();
+        g.moveTo(p.x + c * 6 * k, p.y + s * 6 * k);
+        g.lineTo(p.x - c * 4 * k - s * 4.6 * k, p.y - s * 4 * k + c * 4.6 * k);
+        g.lineTo(p.x - c * 1.6 * k, p.y - s * 1.6 * k);
+        g.lineTo(p.x - c * 4 * k + s * 4.6 * k, p.y - s * 4 * k - c * 4.6 * k);
+        g.closePath();
+        g.fill();
+        return;
+      }
+      // The ant's body runs from abdomen (behind) to head (ahead); nudge it
+      // forward so the whole ant sits centered in the disc.
       drawAnt(p.x + c * 1.2, p.y + s * 1.2, heading, 1, gait, 1.45);
     }
 

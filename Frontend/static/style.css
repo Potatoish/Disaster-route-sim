@@ -24,6 +24,8 @@
   /* Amber text: --yellow is too light to read as text on the light panels. */
   --yellow-ink: #b45309;
   --red:     #dc2626;
+  /* Ground shaking text and traces: the map's ground-shaking orange. */
+  --shake-ink: #c2410c;
 
   --text:    #0f172a;
   --muted:   #516579;
@@ -88,6 +90,7 @@ body.dark {
   --yellow:  #eab308;
   --yellow-ink: #eab308;
   --red:     #ef4444;
+  --shake-ink: #fb923c;
 
   --text:    #e6edf5;
   --muted:   #8ca1b6;
@@ -4977,7 +4980,8 @@ body.dark .aco-legend-stuck {
 }
 
 #appShell.aco-replay-card .map-legend .legend-head,
-#appShell.aco-replay-card .map-legend .aco-legend-pins {
+#appShell.aco-replay-card .map-legend .aco-legend-pins,
+#appShell.aco-replay-card .map-legend .quake-legend-keys {
   display: none;
 }
 
@@ -5197,6 +5201,321 @@ body.dark .aco-legend-stuck {
       .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
       .safety-card-action, .mrescue, .aco-replay-skip):active:not(:disabled) {
     scale: .97;
+  }
+}
+
+/* ---------- EARTHQUAKE MAP AND INTRO ----------
+   The earthquake legend's rows (earthquake.js): ground shaking classes by
+   Roman numeral, liquefaction as stripes (High) or a dashed edge (Moderate),
+   as on the map. Then quake-intro.js: the earthquake scenario before an
+   earthquake run's ant replay, in the replay's own panel (.aco-replay) plus
+   a meter, and its labels, epicenter and callout on the map. */
+.quake-levels {
+  margin-top: 6px;
+}
+
+.quake-levels b {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--map-ui-muted);
+  font: 500 .66rem var(--font-meta);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mmi-legend {
+  display: grid;
+  gap: 3px;
+  color: var(--map-ui-muted);
+  font-size: .76rem;
+  white-space: nowrap;
+}
+
+.mmi-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  margin: 0 6px 0 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .22);
+}
+
+.mmi-roman {
+  display: inline-block;
+  min-width: 2.1em;
+  color: var(--map-ui-text);
+  font-family: var(--font-meta);
+  font-weight: 500;
+}
+
+.liq-swatch {
+  flex: none;
+  box-sizing: border-box;
+  width: 20px;
+  height: 11px;
+  margin: 0 1px;
+  border-radius: 2px;
+}
+
+.liq-swatch--high {
+  border: 2px solid #b45309;
+  background: repeating-linear-gradient(45deg, rgba(245, 158, 11, .75) 0 2px, transparent 2px 5px);
+}
+
+.liq-swatch--moderate {
+  border: 1.6px dashed #b45309;
+}
+
+.legend-sym {
+  flex: none;
+  width: 22px;
+  height: 16px;
+}
+
+.quake-legend-fault {
+  height: 3.5px;
+  background: #7f1d1d;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px rgba(127, 29, 29, .25);
+}
+
+.quake-meter {
+  margin: 0 0 8px;
+  padding: 10px 10px 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  transition: border-color .3s ease;
+}
+
+.quake-meter.is-hit {
+  border-color: color-mix(in srgb, var(--shake-ink) 55%, var(--border));
+}
+
+.quake-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.quake-meter-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .77rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quake-meter-value {
+  flex: none;
+  color: var(--dim);
+  font-size: .84rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  transition: color .3s ease;
+}
+
+.quake-meter.is-hit .quake-meter-value {
+  color: var(--shake-ink);
+}
+
+/* The seismogram, on a faint time grid. */
+.quake-trace {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin: 6px 0;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 23px, color-mix(in srgb, var(--border) 55%, transparent) 23px 24px),
+    color-mix(in srgb, var(--surface) 70%, var(--panel));
+}
+
+.quake-meter-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.quake-meter-foot b {
+  color: var(--ink-strong);
+  font-weight: 800;
+}
+
+/* The intro folded to one line over the ants' panel. */
+.quake-summary {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  margin: 2px 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink-strong);
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+.quake-summary .aco-step-icon {
+  margin-top: 0;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green-ink);
+}
+
+.quake-summary .aco-step-icon svg {
+  display: block;
+}
+
+.quake-summary b {
+  display: block;
+  color: var(--muted);
+  font: 500 .7rem var(--font-meta);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+/* On the map, which stays light: names with a white halo, and the callout
+   over the start pin. */
+.quake-label {
+  pointer-events: none;
+  transition: opacity .5s ease;
+}
+
+.quake-label.is-hidden {
+  opacity: 0;
+}
+
+.quake-label span {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .18);
+  color: #0f172a;
+  font: 700 11px var(--font-body);
+  white-space: nowrap;
+}
+
+.quake-label--fault > span,
+.quake-label--place > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff;
+}
+
+.quake-label--fault > span {
+  color: #7f1d1d;
+  font-size: 12px;
+  letter-spacing: .12em;
+}
+
+.quake-label--place > span {
+  color: #1e3a8a;
+  font-size: 15px;
+  letter-spacing: .1em;
+}
+
+.quake-epicenter,
+.quake-callout {
+  pointer-events: none;
+}
+
+.quake-epicenter-in {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.quake-callout-box {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+}
+
+.quake-callout-in {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .25), 0 0 0 1px rgba(15, 23, 42, .12);
+  color: #0f172a;
+  white-space: nowrap;
+  transform-origin: 50% 100%;
+  animation: quakeCalloutIn .38s cubic-bezier(.2, .9, .3, 1.25) both;
+}
+
+.quake-callout-in b {
+  font: 800 12.5px var(--font-body);
+}
+
+.quake-callout-in small {
+  display: block;
+  color: #475569;
+  font: 600 10.5px var(--font-body);
+}
+
+.quake-callout-swatch {
+  flex: none;
+  width: 14px;
+  height: 30px;
+  border-radius: 4px;
+}
+
+@keyframes quakeCalloutIn {
+  from { opacity: 0; transform: scale(.7) translateY(6px); }
+}
+
+/* The mask outside the barangay lightens while the fault and the waves,
+   outside it, are in view. */
+.barangay-scope-mask {
+  transition: fill-opacity 1.2s ease;
+}
+
+.leaflet-container.quake-intro-wide .barangay-scope-mask {
+  fill-opacity: .14;
+}
+
+@media (max-width: 639px) {
+  .msheet .quake-meter {
+    margin-bottom: 0;
+    padding: 8px 10px 7px;
+  }
+
+  .msheet .quake-trace {
+    height: 28px;
+    margin: 4px 0;
+  }
+
+  .msheet[data-snap="peek"] .quake-summary {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quake-callout-in {
+    animation: none;
   }
 }
 
