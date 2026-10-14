@@ -185,7 +185,7 @@
             color: SHAKING_CLASS_COLORS[Math.min(rank, SHAKING_CLASS_COLORS.length - 1)],
             numeral,
             word: INTENSITY_WORDS[numeral] || '',
-            part: zones.length < 2 ? '' : rank === 0 ? 'stronger' : 'less strong',
+            part: zones.length < 2 ? '' : rank === 0 ? 'stronger' : 'strong',
             where: props.where || '',
             source: props.source || '',
             range: props.mmi_min != null && props.mmi_max != null

@@ -2,10 +2,12 @@ import json
 import math
 from pathlib import Path
 
+import shapely
 from shapely.affinity import affine_transform
-from shapely.geometry import shape
+from shapely.geometry import mapping, shape
 from shapely.ops import nearest_points, substring, unary_union
 from shapely.prepared import prep
+from shapely.validation import make_valid
 
 from osm_routing import (
     HAZARD_COVERAGE_TOLERANCE_METERS,
@@ -226,7 +228,24 @@ def _normalize_evacuation_sites(raw_sites, canonical_barangay):
     return sites
 
 
-def _load_intensity_zones(canonical_barangay):
+def _clip_to_barangay(geometry_data, area):
+    """The part of a zone the map shows: the piece inside the barangay. The
+    traced hazard polygons run past the barangay line (Pinagbuhatan's reaches
+    well into Taytay), which reads as hazard data for the neighbours. Routing
+    keeps the full shapes; it only uses roads inside the barangay anyway."""
+    if area is None:
+        return geometry_data
+    geometry = make_valid(shape(geometry_data))
+    clipped = geometry.intersection(area)
+    if clipped.geom_type == "GeometryCollection":
+        # Edges the zone shares with the barangay line come back as lines or
+        # points; keep only the pieces of the zone's own kind.
+        dimension = shapely.get_dimensions(geometry)
+        clipped = unary_union([part for part in clipped.geoms if shapely.get_dimensions(part) == dimension])
+    return None if clipped.is_empty else mapping(clipped)
+
+
+def _load_intensity_zones(canonical_barangay, area):
     """The barangay's ground shaking intensity zones, strongest first; none
     for a barangay without an intensity map (its map shows the routing
     layer's level instead)."""
@@ -237,10 +256,11 @@ def _load_intensity_zones(canonical_barangay):
         properties = dict(feature.get("properties") or {})
         if normalize_barangay_name(properties.get("barangay")) != canonical_barangay:
             continue
-        if not feature.get("geometry"):
+        geometry = feature.get("geometry") and _clip_to_barangay(feature["geometry"], area)
+        if not geometry:
             continue
         properties["barangay"] = DISPLAY_BARANGAY_NAMES[canonical_barangay]
-        features.append({"type": "Feature", "properties": properties, "geometry": feature["geometry"]})
+        features.append({"type": "Feature", "properties": properties, "geometry": geometry})
     features.sort(key=lambda feature: -float(feature["properties"].get("mmi_max") or 0))
     return features
 
@@ -304,6 +324,8 @@ def get_earthquake_dataset(barangay_name):
             f"No earthquake evacuation sites configured for '{DISPLAY_BARANGAY_NAMES[canonical_name]}'"
         )
 
+    boundary = get_barangay_boundary(canonical_name)
+    barangay_area = boundary["geometry"] if boundary else None
     layer_payloads = {}
     layer_zones = {}
     layer_extents = {}
@@ -318,17 +340,14 @@ def get_earthquake_dataset(barangay_name):
         layer_extents[layer_key] = unary_union([
             feature["evaluation_geometry"] for feature in normalized_features
         ])
-        layer_payloads[layer_key] = {
-            "type": "FeatureCollection",
-            "features": [
-                _build_layer_feature(
-                    feature["feature_id"],
-                    feature["properties"],
-                    feature["display_geometry"],
+        shown_features = []
+        for feature in normalized_features:
+            shown_geometry = _clip_to_barangay(feature["display_geometry"], barangay_area)
+            if shown_geometry:
+                shown_features.append(
+                    _build_layer_feature(feature["feature_id"], feature["properties"], shown_geometry)
                 )
-                for feature in normalized_features
-            ],
-        }
+        layer_payloads[layer_key] = {"type": "FeatureCollection", "features": shown_features}
 
     dataset = {
         "canonical_barangay": canonical_name,
@@ -339,7 +358,7 @@ def get_earthquake_dataset(barangay_name):
         "layer_extents": layer_extents,
         "shaking_intensity": {
             "type": "FeatureCollection",
-            "features": _load_intensity_zones(canonical_name),
+            "features": _load_intensity_zones(canonical_name, barangay_area),
         },
         "scenario": _build_scenario(canonical_name),
     }

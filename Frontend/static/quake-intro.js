@@ -200,11 +200,11 @@
       if (numerals.length !== 1) {
         return `${intro} ${barangay} gets intensity ${numerals.join(' to ')}.`;
       }
-      const [strong, weak] = classes;
-      const where = strong?.where && weak?.where
-        ? ` It is strongest ${strong.where} and a little less ${weak.where}.`
+      const [stronger, strong] = classes;
+      const where = stronger?.where && strong?.where
+        ? ` It is stronger ${stronger.where} and strong ${strong.where}.`
         : '';
-      return `${intro} All of ${barangay} gets intensity ${numerals[0]}, ${(strong.word || '').toLowerCase()} shaking.${where}`;
+      return `${intro} All of ${barangay} gets intensity ${numerals[0]}, ${(stronger.word || '').toLowerCase()} shaking.${where}`;
     }
 
     function sourceText() {
