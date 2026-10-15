@@ -3063,32 +3063,33 @@ function syncEarthquakeRouteUi() {
     pinFieldHelp.textContent = 'Click the destination to show the evacuation sites or to choose your own destination. Drag a pin to adjust it.';
   }
 
+  // Flood and earthquake alike: once the start is pinned, a button right
+  // under the fields puts the evacuation sites on the map (the destination
+  // menu offers the same).
+  const toEvacSites = isEarthquakeMode() ? earthquakeToEvacSite : isFloodToEvacSite() && !routePins.end;
+  const sitesShown = isEarthquakeMode() ? earthquakeEvacSitesVisible : areFloodEvacSitesShown();
+  const sitesLoading = isEarthquakeMode() && earthquakeEvacSitesLoading;
+  const sitesCount = isEarthquakeMode() ? earthquakeEvacSites.length : floodEvacSites.length;
+
   if (earthquakeRoutePanel) {
-    earthquakeRoutePanel.hidden = !isEarthquakeMode() || !earthquakeToEvacSite || !hasStart;
+    earthquakeRoutePanel.hidden = !toEvacSites || !hasStart;
   }
 
   if (showEvacBtn) {
-    showEvacBtn.hidden = earthquakeEvacSitesVisible;
-    showEvacBtn.textContent = earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show Evacuation Sites';
-    showEvacBtn.disabled = !(
-      isEarthquakeMode()
-      && isEarthquakeBarangaySupported()
-      && hasStart
-      && !earthquakeEvacSitesLoading
-    );
+    showEvacBtn.hidden = sitesShown;
+    showEvacBtn.textContent = sitesLoading ? 'Loading evacuation sites…' : 'Show Evacuation Sites';
+    showEvacBtn.disabled = !toEvacSites || !hasStart || unsupportedEarthquake || sitesLoading;
   }
 
   if (evacStatusTxt) {
-    if (!isEarthquakeMode()) {
-      evacStatusTxt.textContent = 'Evacuation sites are hidden.';
-    } else if (unsupportedEarthquake) {
+    if (unsupportedEarthquake) {
       evacStatusTxt.textContent = `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
-    } else if (!earthquakeEvacSitesVisible) {
+    } else if (!sitesShown) {
       evacStatusTxt.textContent = hasStart
         ? 'Evacuation sites are hidden.'
         : 'Pin your location before revealing evacuation sites.';
     } else {
-      evacStatusTxt.textContent = `${earthquakeEvacSites.length} evacuation site(s) loaded on the map.`;
+      evacStatusTxt.textContent = `${sitesCount} evacuation site(s) loaded on the map.`;
     }
   }
 
@@ -3804,7 +3805,7 @@ function buildRouteInfoHtml() {
     }
     return areFloodEvacSitesShown()
       ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the ${getRouteRankingLabel()}.<br>Click <strong>Run Simulation</strong>.`
-      : 'Location pinned. Now click <strong>Evacuation site</strong>, then <strong>Show the evacuation sites</strong>, or choose your own destination there.';
+      : 'Location pinned. Now click <strong>Show Evacuation Sites</strong> to load the available evacuation shelters.';
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
   if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;
