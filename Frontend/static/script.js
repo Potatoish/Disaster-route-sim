@@ -2445,6 +2445,19 @@ function isToEvacuationSite() {
   return isEarthquakeMode() ? earthquakeToEvacSite : isFloodToEvacSite();
 }
 
+// The sites go on the map only once the visitor picks "Show the evacuation
+// sites" from the destination menu; until then flood cannot run either.
+function areFloodEvacSitesShown() {
+  return isFloodToEvacSite() && floodEvacSites.length > 0;
+}
+
+// The destination is the evacuation sites, but they are not on the map yet.
+function isWaitingForEvacSites() {
+  return isEarthquakeMode()
+    ? earthquakeToEvacSite && !earthquakeEvacSitesVisible
+    : isFloodToEvacSite() && !floodEvacSites.length && !routePins.end;
+}
+
 function isCustomEarthquakeResult(result = simData) {
   return isEarthquakeSimulationResult(result) && result.to_evacuation_site === false;
 }
@@ -2473,7 +2486,7 @@ function getActivePinRoles() {
 }
 
 function canRunFloodSimulation() {
-  return !!(selectedHazard === 'Flood' && getReadyPin('start') && (getReadyPin('end') || isFloodToEvacSite()));
+  return !!(selectedHazard === 'Flood' && getReadyPin('start') && (getReadyPin('end') || areFloodEvacSitesShown()));
 }
 
 function canRunEarthquakeSimulation() {
@@ -2749,8 +2762,8 @@ function syncRoutePinFields() {
   window.mobileSim?.scheduleSync();
 }
 
-// The destination menu (flood): the evacuation site with the safest route
-// comes first -- it is also the default -- and a spot of one's own second.
+// The destination menu: the evacuation sites come first -- the default, shown
+// on the map once picked here -- and a spot of one's own second.
 function syncEndPinMenu() {
   const evacItem = document.getElementById('endMenuEvacBtn');
   const ownItem = document.getElementById('endMenuOwnLabel');
@@ -3047,7 +3060,7 @@ function syncEarthquakeRouteUi() {
 
   const pinFieldHelp = document.getElementById('pinFieldHelp');
   if (pinFieldHelp) {
-    pinFieldHelp.textContent = 'To go somewhere else, click the destination, then Choose my own destination. Drag a pin to adjust it.';
+    pinFieldHelp.textContent = 'Click the destination to show the evacuation sites or to choose your own destination. Drag a pin to adjust it.';
   }
 
   if (earthquakeRoutePanel) {
@@ -3204,7 +3217,7 @@ function setFloodLegendContent() {
     ${showRouteKeys ? buildRouteLegendRows() : ''}
     <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
       ${buildPinLegendRow('start')}
-      ${isFloodToEvacSite() ? buildFloodEvacLegendRows() : buildPinLegendRow('end')}
+      ${areFloodEvacSitesShown() ? buildFloodEvacLegendRows() : isFloodToEvacSite() ? '' : buildPinLegendRow('end')}
       ${buildBoundaryLegendRow()}
     </div>`;
 }
@@ -3648,7 +3661,7 @@ async function selectBarangay(name) {
   if (selectedHazard === 'Flood') {
     floodHazardOverlayMode = 'all';
     // The new barangay's evacuation sites are the destination, as on
-    // choosing Flood (selectHazard).
+    // choosing Flood (selectHazard); they show once picked from the menu.
     floodToEvacSite = true;
   }
 
@@ -3658,7 +3671,6 @@ async function selectBarangay(name) {
   showPinningLegend();
   advanceStep(selectedHazard ? 3 : 2);
   if (selectedHazard) setPinPlacementRole(getNextUnpinnedRole());
-  if (selectedHazard === 'Flood') await useFloodEvacSitesByDefault();
   syncRouteInfoBox();
 }
 
@@ -3787,9 +3799,12 @@ function buildRouteInfoHtml() {
     return `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to <strong>${escapeHtml(describePinPlace(endPin))}</strong>.<br>Click <strong>Run Simulation</strong>.`;
   }
   if (isFloodToEvacSite() && !routePins.end) {
-    return startPin
+    if (!startPin) {
+      return `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
+    }
+    return areFloodEvacSitesShown()
       ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the ${getRouteRankingLabel()}.<br>Click <strong>Run Simulation</strong>.`
-      : `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
+      : 'Location pinned. Now click <strong>Evacuation site</strong>, then <strong>Show the evacuation sites</strong>, or choose your own destination there.';
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
   if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;
@@ -3852,23 +3867,6 @@ async function selectHazard(name, el) {
   } else {
     setPinPlacementRole(getNextUnpinnedRole());
   }
-  if (name === 'Flood' && toEvacSites) await useFloodEvacSitesByDefault();
-}
-
-// Flood's default destination: the barangay's evacuation sites, on the map
-// at once, the run picking the one with the safest route (floodToEvacSite).
-// A destination of one's own is the menu's second choice. If the sites
-// can't load, the visitor pins one instead.
-async function useFloodEvacSitesByDefault() {
-  if (selectedHazard !== 'Flood' || routePins.end) return;
-  floodToEvacSite = true;
-  await showFloodEvacuationSites({ fit: false });
-  if (selectedHazard === 'Flood' && !floodEvacSites.length && !routePins.end) {
-    floodToEvacSite = false;
-    setFloodLegendContent();
-    if (!pinPlacementRole) setPinPlacementRole(getNextUnpinnedRole());
-    onRoutePinsChange();
-  }
 }
 
 function getCompletedSteps() {
@@ -3878,7 +3876,7 @@ function getCompletedSteps() {
     3: !!getReadyPin('start'),
     4: isEarthquakeMode()
       ? (earthquakeToEvacSite ? earthquakeEvacSitesVisible : !!getReadyPin('end'))
-      : !!getReadyPin('end') || isFloodToEvacSite(),
+      : !!getReadyPin('end') || areFloodEvacSitesShown(),
     5: canRunCurrentSimulation(),
   };
 }
@@ -3895,7 +3893,7 @@ function getMaxReachableStep() {
   }
 
   if (!getReadyPin('start')) return 3;
-  if (!getReadyPin('end') && !isFloodToEvacSite()) return 4;
+  if (!getReadyPin('end') && !areFloodEvacSitesShown()) return 4;
   return 5;
 }
 
@@ -4177,10 +4175,10 @@ function fitMapToFloodEvacSites() {
   gMap.fitBounds(bounds, mapMoveOptions({ ...padding, maxZoom: PIN_PLACEMENT_ZOOM }));
 }
 
-// The destination field's "Show Evacuation Sites" (flood): the destination
+// The destination menu's "Show the evacuation sites" (flood): the destination
 // becomes the barangay's evacuation sites, shown on the map, in place of a
 // pin -- the run picks the one with the safest route -- and the setup moves
-// straight on to Run.
+// on to Run.
 async function showFloodEvacuationSites({ fit = true } = {}) {
   closePinMenus();
   if (isSimulationInteractionLocked() || selectedHazard !== 'Flood' || !selectedBarangay) return;

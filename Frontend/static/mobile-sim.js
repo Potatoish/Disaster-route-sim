@@ -653,8 +653,7 @@
 
     const role = getPinRole();
     const checking = isAnyRoutePinChecking();
-    const needsEvacSites = isEarthquakeMode() && earthquakeToEvacSite
-      && !!getReadyPin('start') && !earthquakeEvacSitesVisible && !role;
+    const needsEvacSites = isWaitingForEvacSites() && !!getReadyPin('start') && !role;
     // The open destination menu already offers the sites; one button is enough.
     $('msimEvacAction').hidden = !needsEvacSites || !$('msimDestinationMenu').hidden;
     $('msimShowEvacBtn').disabled = locked || earthquakeEvacSitesLoading;
@@ -738,7 +737,7 @@
     // An empty slot being set already says what to do ("Move the map, then
     // tap ..."; syncPinSlot), so the sheet says it once.
     if (role) return routePins[role] ? `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.` : '';
-    if (isEarthquakeMode() && earthquakeToEvacSite && getReadyPin('start') && !earthquakeEvacSitesVisible) {
+    if (isWaitingForEvacSites() && getReadyPin('start')) {
       return 'Show the evacuation sites, or tap Change to choose your own destination.';
     }
     if (canRunCurrentSimulation()) {
