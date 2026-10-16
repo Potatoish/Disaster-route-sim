@@ -14,9 +14,9 @@ let earthquakeEvacSitesVisible = false;
 let earthquakeToEvacSite = true;
 let earthquakeEvacSitesLoading = false;
 let earthquakeDestinationChoice = 0;
-// The destination field's "Show Evacuation Sites" (flood) makes the
-// destination the barangay's evacuation sites instead of a pin: the run
-// picks the site, as in earthquake mode.
+// "Show Evacuation Sites" (flood) makes the destination the barangay's
+// evacuation sites instead of a pin: the run picks the site, as in
+// earthquake mode.
 let floodEvacSites = [];
 let floodToEvacSite = false;
 let mapLayers = { boundaries: [], routes: [], routeGroups: [] };
@@ -783,7 +783,7 @@ function syncSimulationConfigLock() {
   syncRoutePinMarkers();
   syncBarangaySwitch();
 
-  ['showEvacBtn', 'runBtn']
+  ['showEvacBtn', 'chooseOwnDestinationBtn', 'runBtn']
     .forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -2445,8 +2445,8 @@ function isToEvacuationSite() {
   return isEarthquakeMode() ? earthquakeToEvacSite : isFloodToEvacSite();
 }
 
-// The sites go on the map only once the visitor picks "Show the evacuation
-// sites" from the destination menu; until then flood cannot run either.
+// The sites go on the map only once the visitor picks Show Evacuation Sites;
+// until then flood cannot run either.
 function areFloodEvacSitesShown() {
   return isFloodToEvacSite() && floodEvacSites.length > 0;
 }
@@ -2456,6 +2456,13 @@ function isWaitingForEvacSites() {
   return isEarthquakeMode()
     ? earthquakeToEvacSite && !earthquakeEvacSitesVisible
     : isFloodToEvacSite() && !floodEvacSites.length && !routePins.end;
+}
+
+// The start is pinned and the destination is still the unshown evacuation
+// sites: the panel under the fields holds both choices (show them, or a spot
+// of one's own), so the destination field is no dropdown meanwhile.
+function isEvacChoicePending() {
+  return isWaitingForEvacSites() && !!getReadyPin('start') && pinPlacementRole !== 'end';
 }
 
 function isCustomEarthquakeResult(result = simData) {
@@ -2700,6 +2707,7 @@ function cancelPinPlacement() {
 
 function syncRoutePinFields() {
   const locked = isSimulationInteractionLocked();
+  const choiceBelow = isEvacChoicePending();
 
   PIN_ROLES.forEach(role => {
     const row = document.getElementById(`${role}Field`);
@@ -2714,11 +2722,13 @@ function syncRoutePinFields() {
     const placingOwn = role === 'end' && !pin && pinPlacementRole === 'end';
     const toEvacSite = role === 'end' && !pin && !placingOwn && isToEvacuationSite();
     const resultSite = toEvacSite ? getResultEvacSite() : null;
-    input.disabled = locked || !canPlaceRoutePins();
+    const choiceBelowField = role === 'end' && choiceBelow;
+    input.disabled = locked || !canPlaceRoutePins() || choiceBelowField;
     if (input.disabled) {
       document.getElementById(`${role}PinMenu`)?.setAttribute('hidden', '');
       input.setAttribute('aria-expanded', 'false');
     }
+    row.classList.toggle('is-choice-below', choiceBelowField);
     row.classList.toggle('is-placing', pinPlacementRole === role);
     row.classList.toggle('is-set', !!pin || toEvacSite);
     row.classList.toggle('is-evac', toEvacSite);
@@ -3043,12 +3053,9 @@ function syncEarthquakeRouteUi() {
   const routeCardLabel = document.getElementById('routeCardLabel');
   const endField = document.getElementById('endField');
   const earthquakeRoutePanel = document.getElementById('earthquakeRoutePanel');
-  const earthquakeRouteCopy = document.getElementById('earthquakeRouteCopy');
   const showEvacBtn = document.getElementById('showEvacBtn');
-  const evacStatusTxt = document.getElementById('evacStatusTxt');
+  const chooseOwnBtn = document.getElementById('chooseOwnDestinationBtn');
   const unsupportedEarthquake = isEarthquakeMode() && !isEarthquakeBarangaySupported();
-  const hasStart = !!getReadyPin('start');
-  const earthquakeSelectedBarangay = selectedBarangay || 'the selected barangay';
 
   if (routeCardLabel) {
     routeCardLabel.textContent = 'Start / End';
@@ -3058,45 +3065,31 @@ function syncEarthquakeRouteUi() {
     endField.hidden = false;
   }
 
-  const pinFieldHelp = document.getElementById('pinFieldHelp');
-  if (pinFieldHelp) {
-    pinFieldHelp.textContent = 'Click the destination to show the evacuation sites or to choose your own destination. Drag a pin to adjust it.';
-  }
-
-  // Flood and earthquake alike: once the start is pinned, a button right
-  // under the fields puts the evacuation sites on the map (the destination
-  // menu offers the same).
-  const toEvacSites = isEarthquakeMode() ? earthquakeToEvacSite : isFloodToEvacSite() && !routePins.end;
-  const sitesShown = isEarthquakeMode() ? earthquakeEvacSitesVisible : areFloodEvacSitesShown();
-  const sitesLoading = isEarthquakeMode() && earthquakeEvacSitesLoading;
-  const sitesCount = isEarthquakeMode() ? earthquakeEvacSites.length : floodEvacSites.length;
+  // Flood and earthquake alike: once the start is pinned, the panel right
+  // under the fields is the one place to pick the destination: the
+  // evacuation sites, or a spot of one's own. Afterwards the destination
+  // field's menu switches between them.
+  const choicePending = isEvacChoicePending() && !unsupportedEarthquake;
 
   if (earthquakeRoutePanel) {
-    earthquakeRoutePanel.hidden = !toEvacSites || !hasStart;
+    earthquakeRoutePanel.hidden = !choicePending;
   }
 
   if (showEvacBtn) {
-    showEvacBtn.hidden = sitesShown;
+    const sitesLoading = isEarthquakeMode() && earthquakeEvacSitesLoading;
     showEvacBtn.textContent = sitesLoading ? 'Loading evacuation sites…' : 'Show Evacuation Sites';
-    showEvacBtn.disabled = !toEvacSites || !hasStart || unsupportedEarthquake || sitesLoading;
+    showEvacBtn.disabled = !choicePending || sitesLoading;
   }
 
-  if (evacStatusTxt) {
-    if (unsupportedEarthquake) {
-      evacStatusTxt.textContent = `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
-    } else if (!sitesShown) {
-      evacStatusTxt.textContent = hasStart
-        ? 'Evacuation sites are hidden.'
-        : 'Pin your location before revealing evacuation sites.';
-    } else {
-      evacStatusTxt.textContent = `${sitesCount} evacuation site(s) loaded on the map.`;
-    }
+  if (chooseOwnBtn) {
+    chooseOwnBtn.disabled = !choicePending;
   }
 
-  if (earthquakeRouteCopy) {
-    earthquakeRouteCopy.innerHTML = unsupportedEarthquake
-      ? `Earthquake routing is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`
-      : `Click <strong>Show Evacuation Sites</strong> to reveal the available evacuation shelters for <strong>${escapeHtml(earthquakeSelectedBarangay)}</strong>.`;
+  const pinFieldHelp = document.getElementById('pinFieldHelp');
+  if (pinFieldHelp) {
+    pinFieldHelp.textContent = choicePending
+      ? 'Drag a pin to adjust it.'
+      : 'Click a field to change it. Drag a pin to adjust it.';
   }
 
   syncRoutePinFields();
@@ -3784,7 +3777,7 @@ function buildRouteInfoHtml() {
       return `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
     }
     if (!earthquakeEvacSitesVisible) {
-      return 'Location pinned. Now click <strong>Show Evacuation Sites</strong> to load the available evacuation shelters.';
+      return 'Location pinned. Now click <strong>Show Evacuation Sites</strong>, or choose your own destination.';
     }
     return `The system will compare routes from <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the evacuation sites that can still be reached.<br>Click <strong>Run Earthquake Simulation</strong> to view the results.`;
   }
@@ -3805,7 +3798,7 @@ function buildRouteInfoHtml() {
     }
     return areFloodEvacSitesShown()
       ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the ${getRouteRankingLabel()}.<br>Click <strong>Run Simulation</strong>.`
-      : 'Location pinned. Now click <strong>Show Evacuation Sites</strong> to load the available evacuation shelters.';
+      : 'Location pinned. Now click <strong>Show Evacuation Sites</strong>, or choose your own destination.';
   }
   if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
   if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;

@@ -144,8 +144,9 @@
               </div>
 
               {# The destination is the evacuation sites by default (.is-evac:
-                 a house icon), put on the map by the menu's first item; a
-                 spot of one's own is its second choice (syncEndPinMenu). #}
+                 a house icon). From the start pin until the visitor picks the
+                 sites or a spot of their own, the panel below offers both;
+                 otherwise this menu does (syncEndPinMenu). #}
               <div class="pin-input-row pin-input-row-end" id="endField">
                 <span class="pin-input-icon" aria-hidden="true">
                   <svg class="pin-input-icon-pin" viewBox="0 0 24 24"><path d="M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -170,17 +171,18 @@
               </div>
             </div>
 
-            <div class="pin-field-help" id="pinFieldHelp">Choose on Map, then tap the spot. Drag a pin to adjust it.</div>
-
-            <div class="earthquake-route-panel" id="earthquakeRoutePanel" hidden>
-              <div class="earthquake-route-copy" id="earthquakeRouteCopy">
-                Click <strong>Show Evacuation Sites</strong> to reveal the available evacuation shelters for Pinagbuhatan.
-              </div>
+            {# Start pinned, sites not shown yet: the destination's two choices,
+               in one place (isEvacChoicePending). #}
+            <div class="earthquake-route-panel" id="earthquakeRoutePanel" role="group" aria-label="Destination" hidden>
               <button class="evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
                 Show Evacuation Sites
               </button>
-              <div class="earthquake-route-status" id="evacStatusTxt">Evacuation sites are hidden.</div>
+              <button type="button" class="pin-input-menu-item evac-choice-own" id="chooseOwnDestinationBtn" onclick="chooseOnMap('end')" disabled>
+                Choose my own destination
+              </button>
             </div>
+
+            <div class="pin-field-help" id="pinFieldHelp">Choose on Map, then tap the spot. Drag a pin to adjust it.</div>
           </div>
         </div>
       </div>

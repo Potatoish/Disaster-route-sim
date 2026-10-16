@@ -451,25 +451,47 @@ body.dark .workflow-card.active {
 .earthquake-route-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   border: 1px dashed var(--hazard-panel-border);
   border-radius: 12px;
   background: var(--hazard-panel-bg);
 }
 
-.earthquake-route-copy {
-  color: var(--muted);
-  font-family: var(--font-body);
-  font-size: .82rem;
-  font-weight: 500;
-  line-height: 1.55;
+/* The panel's second choice: the destination menu's item as an outlined
+   button, in Show Evacuation Sites' condensed face so the pair matches and
+   the label stays on one line in the narrow panel. */
+.pin-input-menu-item.evac-choice-own {
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border2));
+  border-radius: 10px;
+  background: var(--panel);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: .95rem;
+  letter-spacing: .4px;
+  text-align: center;
 }
 
-.earthquake-route-copy strong {
-  color: var(--hazard-panel-strong);
-  font-family: var(--font-body);
-  font-weight: 800;
+.evac-choice-own:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+/* Meanwhile the destination field only shows the default: no caret, and
+   not faded like a field that cannot be used yet. */
+.pin-input-row.is-choice-below .pin-input:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.pin-input-row.is-choice-below .pin-input-caret {
+  display: none;
+}
+
+.pin-input-row.is-choice-below .pin-input--menu {
+  padding-right: 12px;
 }
 
 .evac-btn {
@@ -498,14 +520,6 @@ body.dark .workflow-card.active {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
-}
-
-.earthquake-route-status {
-  font-family: var(--font-body);
-  font-size: .79rem;
-  font-weight: 600;
-  color: var(--muted);
-  line-height: 1.5;
 }
 
 .workflow-run-body .info-box {
@@ -5569,7 +5583,6 @@ body.dark .aco-legend-stuck {
    unaffected; labels, buttons and numbers are not paragraphs. */
 .panel-head-sub,
 .workflow-card-summary,
-.earthquake-route-copy,
 .pin-field-help,
 .info-box,
 .safety-route-hint,
