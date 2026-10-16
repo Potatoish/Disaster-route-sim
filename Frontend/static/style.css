@@ -2567,19 +2567,6 @@ body.dark .leaflet-popup-close-button {
   padding: 0 2px 2px;
 }
 
-/* An evacuation site's photo under its name (osm.js buildEvacSitePhotoHtml). */
-.popup-photo {
-  display: block;
-  width: 240px;
-  max-width: 100%;
-  height: auto;
-  aspect-ratio: 3 / 2;
-  margin: 2px 0 8px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--border);
-}
-
 .popup-title {
   font-family: var(--font-heading);
   font-size: .95rem;

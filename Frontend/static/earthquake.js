@@ -108,7 +108,6 @@
     return `
       <div class="popup-shell">
         <div class="popup-title">${escapeHtml(site.name)}</div>
-        ${buildEvacSitePhotoHtml(site)}
         <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Target evacuation site' : 'Evacuation site'}</span></div>
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pasig City')}</span></div>
         ${buildEvacDetailRow('Site Setup', site.site_setup)}

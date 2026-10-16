@@ -245,7 +245,6 @@
           .setContent(`
             <div class="popup-shell">
               <div class="popup-title">${escapeHtml(site.name)}</div>
-              ${buildEvacSitePhotoHtml(site)}
               <div class="popup-row"><span>Role</span><span>${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}</span></div>
             </div>`)
           .openOn(map);
