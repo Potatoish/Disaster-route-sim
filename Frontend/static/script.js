@@ -1147,10 +1147,10 @@ function initMap() {
     center: [14.5590, 121.0955],
     zoom: 15,
     zoomControl: false,
-    // Fractional zoom levels, so the +/- buttons and the scroll wheel ease
-    // instead of jumping.
-    zoomSnap: 0.25,
-    zoomDelta: 0.5,
+    // Raster labels stay at their native scale after a pinch or button zoom.
+    // Leaflet still animates the movement between these whole zoom levels.
+    zoomSnap: 1,
+    zoomDelta: 1,
     wheelPxPerZoomLevel: 100,
     // Leaflet's own zoom/fade animations; programmatic moves opt out
     // individually through mapMoveOptions() (osm.js). Read once here, like
@@ -1166,11 +1166,9 @@ function initMap() {
   }).addTo(gMap);
 
   const satelliteLayer = makeBaseMapLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    // Esri has imagery here only up to zoom 19; its zoom-20 tiles are a
-    // grey "Map data not yet available" placeholder. Past 19, Leaflet
-    // enlarges the zoom-19 tiles instead of requesting those.
+    // Stop at the imagery's native limit instead of enlarging its last tile.
     maxNativeZoom: 19,
-    maxZoom: 20,
+    maxZoom: 19,
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
   });
   mapBaseLayers = { street: streetLayer, satellite: satelliteLayer };
@@ -5110,13 +5108,19 @@ function formatTurnStepInstruction(step, index) {
   return name ? `${verb} onto ${name}` : verb;
 }
 
-function toggleBestRouteStreets() {
-  const chip = document.getElementById('safetyRouteChip');
-  const list = document.getElementById('safetyRouteStreets');
-  if (!chip || !list) return;
-  const expand = list.hidden;
-  list.hidden = !expand;
-  chip.setAttribute('aria-expanded', String(expand));
+function buildRouteDirectionsMarkup(route) {
+  const steps = getRouteTurnSteps(route);
+  if (!steps.length) return '';
+  return `<ol class="mroute-steps" aria-label="Directions for route ${escapeHtml(route.display_route_no)}">
+    ${steps.map((step, index) => `<li class="turn-step">
+      <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>
+      <span class="turn-step-text"><span class="turn-step-instruction">${escapeHtml(formatTurnStepInstruction(step, index))}</span>
+      ${Number(step.distance) > 0 ? `<span class="turn-step-distance">${escapeHtml(formatDistanceCompact(step.distance))}</span>` : ''}</span>
+    </li>`).join('')}
+    <li class="turn-step"><span class="turn-step-icon">${safetyIcon('flag')}</span>
+      <span class="turn-step-text"><span class="turn-step-instruction">${escapeHtml(route.destination_name || 'Your destination')}</span></span>
+    </li>
+  </ol>`;
 }
 
 function getBestRoute(routes) {
@@ -5130,6 +5134,68 @@ const SAFETY_DISCLAIMER_TEXT = 'This site offers disaster planning information, 
   + 'emergency alerts or professional safety advice. During an active flood or earthquake, '
   + 'always follow the instructions of local authorities. Rely on this content at your own '
   + 'risk; we assume no liability for any loss or damage.';
+
+const PREPAREDNESS_NOTE = 'For disaster preparedness. Based on stored hazard maps, not live conditions.';
+
+// Presentation only: the map, summary and directions share the selected route.
+function getResultRouteDetails(route, result = simData) {
+  const best = getBestRoute(result?.routes || []);
+  const isBest = route === best;
+  const isEarthquake = isEarthquakeRouteRecord(route);
+  const tier = getRouteSafetyTier(route);
+  const peak = getPeakRiskRow(route, isEarthquake);
+  const warning = tier === 'caution'
+    ? `${describeMediumFloodCrossing(route)} ${MEDIUM_FLOOD_WARNING}`
+    : tier === 'unsafe'
+      ? isAreaWideHighRisk(route)
+        ? `${describeAreaWideHighRisk(route, result?.barangay || selectedBarangay)} ${describeLeastExposedRoute(route)}`
+        : describeUnsafeCrossing(route)
+      : '';
+  return {
+    route, best, isBest, isEarthquake, tier, peak, warning,
+    context: `Route ${route.display_route_no} · ${isBest ? 'best-ranked' : route.category === 'eliminated' ? 'eliminated' : 'alternative'}`,
+    // "No safe route" describes the whole search only for its best result.
+    title: isBest ? getRouteVerdictTitle(route)
+      : isFloodFreeRoute(route) ? 'No flood zone along this route' : getTopRouteTitle(route),
+    notWalkable: !isEarthquake && tier === 'unsafe',
+    action: isBest ? getNoSafeRouteAction(route) : null,
+  };
+}
+
+function getRouteComparisonText(route, best) {
+  if (!best || route === best) return '';
+  const delta = Number(route.distance) - Number(best.distance);
+  if (!Number.isFinite(delta)) return '';
+  const distance = Math.abs(delta) < 1 ? 'Same distance as the best-ranked route.'
+    : `${formatDistanceCompact(Math.abs(delta))} ${delta > 0 ? 'longer' : 'shorter'} than the best-ranked route.`;
+  return `${distance} Rankings prioritize safety before distance.`;
+}
+
+function buildCurrentRouteSummary(route, result) {
+  const view = getResultRouteDetails(route, result);
+  const verdict = ROUTE_VERDICTS[view.tier];
+  const start = result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel;
+  const end = route.destination_name || result.end || getReadyPin('end')?.label || PIN_ROLE_COPY.end.fallbackLabel;
+  const comparison = getRouteComparisonText(route, view.best);
+  return `<div class="safety-section-label" data-current-route-context>${escapeHtml(view.context)}</div>
+    <div class="safety-result-cards">
+      <div class="safety-result-card result-route-assessment ${verdict.card}">
+        <div class="safety-icon-box">${safetyIcon(verdict.icon)}</div>
+        <div><div class="safety-card-label">Scenario assessment</div><div class="safety-card-value">${escapeHtml(view.title)}</div>
+          ${view.warning ? `<p class="safety-card-sub result-route-warning">${escapeHtml(view.warning)}</p>` : ''}</div>
+      </div>
+      <dl class="result-route-facts result-summary-facts">
+        <div><dt>Distance</dt><dd data-current-route-distance>${escapeHtml(route.display_distance || formatDistanceCompact(route.distance))}</dd></div>
+        <div><dt>Estimated walk</dt><dd data-current-route-time>${escapeHtml(view.notWalkable ? 'Not walkable' : route.display_duration || formatRouteWalkingDuration(route))}</dd></div>
+      </dl>
+      ${buildSafetyHazardCard(view.peak, Number(route.max_hazard || 0), view.isEarthquake)}
+      ${buildSafetyActionCard(view.action)}
+    </div>
+    ${isFarFromOpenArea(route) ? `<p class="result-route-description">${escapeHtml(FAR_FROM_OPEN_AREA_NOTE)}</p>` : ''}
+    ${!view.notWalkable && routeHasWadingTime(route) ? '<p class="result-walking-note">Slower pace through flood water</p>' : ''}
+    ${comparison ? `<p class="result-route-description">${escapeHtml(comparison)}</p>` : ''}
+    <div class="safety-route-chip">${safetyIcon('pin')}<span>${escapeHtml(start)} &rarr; ${escapeHtml(end)}</span></div>`;
+}
 
 // Shared by desktop and mobile, so safety content and its styling stay in sync.
 function buildSafetyActionCard(action, routeText = '') {
@@ -5165,129 +5231,103 @@ function renderRouteSafetyPanel(result) {
   }
 
   const isEarthquake = isEarthquakeSimulationResult(result);
-  const best = getBestRoute(routes);
-  const bestRouteNo = best?.display_route_no ?? 1;
-  const bestCategory = best?.category || '';
-
-  const start = result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel;
-  const end = result.end
-    || best?.destination_name
-    || getReadyPin('end')?.label
-    || PIN_ROLE_COPY.end.fallbackLabel;
-
-  const peakScore = Number(best?.max_hazard || 0);
-  const peak = getPeakRiskRow(best, isEarthquake);
-  const bestDistanceText = [best?.display_distance || 'Unavailable', best?.display_duration && `${best.display_duration} walk`]
-    .filter(Boolean)
-    .join(' · ');
-  const tier = getRouteSafetyTier(best);
-  const verdict = { ...ROUTE_VERDICTS[tier], title: getRouteVerdictTitle(best) };
-  const action = getNoSafeRouteAction(best);
-  // With no safe route, what to do takes the walking-time card's place; an
-  // earthquake route is still walked, so its distance stays in the card.
-  // Its Emergency hotlines button replaces the one under the disclaimer.
-  const routeCardMarkup = action
-    ? buildSafetyActionCard(action, isEarthquake ? `Route ${bestRouteNo}: ${bestDistanceText}` : '')
-    : `
-      <div class="safety-result-card">
-        <div class="safety-icon-box">${safetyIcon('ruler')}</div>
-        <div><div class="safety-card-label">${escapeHtml(getTopRouteTitle(best))}</div><div class="safety-card-value">${escapeHtml(bestDistanceText)}</div>${routeHasWadingTime(best) ? '<div class="safety-card-sub">Slower pace through flood water</div>' : ''}</div>
-      </div>`;
   const fullySafeCount = routes.filter(route => getRouteSafetyTier(route) === 'safe').length;
-  const dryCount = routes.filter(route => getRouteSafetyTier(route) === 'safe' && isFloodFreeRoute(route)).length;
-  // The list button covers only the routes not already on the map; none off
-  // the map, no button.
-  const offMapCount = getRoutesOffMap(routes).length;
-
-  // Plain wording: barangay residents read this panel, so no "ACO",
-  // "evaluated" or "hazard lens".
-  const single = routes.length === 1;
-  const checkedLabel = `We checked ${routes.length} route${single ? '' : 's'}.`;
   const antSearchNote = buildAntSearchNote(result);
-  const notes = [];
-  if (tier === 'safe') {
-    notes.push(
-      `${checkedLabel} ${describeGreenRouteCount(fullySafeCount, isEarthquake, { total: routes.length, dryCount })}`,
-      antSearchNote || `The ${getRouteRankingLabel(best)} is shown first.`,
-    );
-  } else if (tier === 'caution') {
-    // Routes with less Medium water rank first, so when the best one has
-    // some, every route shown does.
-    notes.push(
-      `${checkedLabel} ${single ? 'It is not' : 'None are'} fully safe.`,
-      `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-    );
-    if (antSearchNote) notes.push(antSearchNote);
-  } else if (isAreaWideHighRisk(best)) {
-    notes.push(`${checkedLabel} ${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)}`);
-    if (antSearchNote) notes.push(antSearchNote);
-  } else {
-    notes.push(
-      `${checkedLabel} ${single ? 'It is not' : 'None are'} safe.`,
-      describeUnsafeCrossing(best),
-    );
-    if (antSearchNote) notes.push(antSearchNote);
-  }
-  // What to do comes right after the verdict, before how the search ran.
-  if (isFarFromOpenArea(best)) notes.splice(1, 0, FAR_FROM_OPEN_AREA_NOTE);
+  const notes = [`${routes.length} route${routes.length === 1 ? '' : 's'} checked · ${formatGreenRouteTally(fullySafeCount, isEarthquake)}.`];
+  if (antSearchNote) notes.push(antSearchNote);
   if (isEarthquake && result.active_view_label) {
     notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
   }
   const sourceNoteHtml = buildHazardSourceNoteHtml(isEarthquake);
 
-  const bestTurnSteps = getRouteTurnSteps(best);
-  const chipLabel = `${start} → ${end}`;
-
-  const routeChipMarkup = bestTurnSteps.length
-    ? `
-    <div class="safety-route-hint">Tap the route below for turn-by-turn directions and to highlight it on the map.</div>
-    <button class="safety-route-chip is-interactive" type="button" id="safetyRouteChip"
-        aria-expanded="false" aria-controls="safetyRouteStreets" onclick="toggleBestRouteStreets()"
-        data-focus-route="${escapeHtml(bestRouteNo)}" data-focus-category="${escapeHtml(bestCategory)}">
-      ${safetyIcon('pin')}<span title="${escapeHtml(chipLabel)}">${escapeHtml(start)} &rarr; ${escapeHtml(end)}</span>
-      <svg class="safety-route-chip-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
-    </button>
-    <ol class="safety-route-streets" id="safetyRouteStreets" hidden>
-      ${bestTurnSteps.map((step, index) => `
-        <li class="turn-step">
-          <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>
-          <span class="turn-step-text">
-            <span class="turn-step-instruction">${escapeHtml(formatTurnStepInstruction(step, index))}</span>
-            ${Number(step.distance) > 0 ? `<span class="turn-step-distance">${escapeHtml(formatDistanceCompact(step.distance))}</span>` : ''}
-          </span>
-        </li>`).join('')}
-      <li class="turn-step">
-        <span class="turn-step-icon">${safetyIcon('flag')}</span>
-        <span class="turn-step-text">
-          <span class="turn-step-instruction">${escapeHtml(!isEarthquakeRouteRecord(best) && best?.destination_name ? best.destination_name : 'Your destination')}</span>
-        </span>
-      </li>
-    </ol>`
-    : `<div class="safety-route-chip">${safetyIcon('pin')}<span title="${escapeHtml(chipLabel)}">${escapeHtml(start)} &rarr; ${escapeHtml(end)}</span></div>`;
-
   setRouteSafetyPanelVisible(true);
   content.hidden = false;
   content.innerHTML = `
-    ${routeChipMarkup}
-    <div class="safety-section-label">Route safety results</div>
-    <div class="safety-result-cards">
-      <div class="safety-result-card ${verdict.card}">
-        <div class="safety-icon-box">${safetyIcon(verdict.icon)}</div>
-        <div><div class="safety-card-label">Overall verdict</div><div class="safety-card-value">${escapeHtml(verdict.title)}</div></div>
-      </div>
-      ${routeCardMarkup}
-      ${buildSafetyHazardCard(peak, peakScore, isEarthquake)}
-    </div>
-    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
+    <p class="result-simulation-note">${escapeHtml(PREPAREDNESS_NOTE)}</p>
+    ${buildResultRouteNavigation(routes)}
+    <section data-current-route-summary></section>
+    <details class="maccordion result-desktop-directions" id="selectedRouteDirections" hidden>
+      <summary><span data-selected-directions-label>Directions</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div id="selectedRouteDirectionsBody"></div>
+    </details>
+    <div class="safety-notes"><em>Search summary:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
-        ${action ? '' : '<button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>'}
+        <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
       </div>
-    </div>
-    ${offMapCount ? `<button class="safety-all-routes-btn" type="button" onclick="openRouteListModal()">See ${offMapCount} more route${offMapCount === 1 ? '' : 's'}</button>` : ''}`;
+    </div>`;
   window.mobileSim?.renderResults(result);
+  syncResultRouteNavigation();
 }
+
+// Both layouts use the existing ranked routes and map focus; no new ranking.
+function buildResultRouteNavigation(routes) {
+  const best = getBestRoute(routes);
+  const bestNo = best?.display_route_no ?? 1;
+  return `<section class="result-route-nav" aria-label="Choose a route on the map">
+    <label class="result-route-label">Route on map
+      <select data-result-route-picker>
+        ${routes.map((route, index) => {
+          const number = route.display_route_no ?? index + 1;
+          const tag = route === best ? ' · Best' : route.category === 'eliminated' ? ' · Eliminated' : '';
+          return `<option value="${escapeHtml(number)}">Route ${escapeHtml(number)}${tag}</option>`;
+        }).join('')}
+      </select>
+    </label>
+    <button class="result-route-reset" type="button" onclick="returnToBestRankedRoute()" data-return-best hidden>Back to best-ranked</button>
+    <span class="sr-only" role="status" data-result-route-status></span>
+    <p class="result-route-help">Details follow your selected route. PDF reports best-ranked Route ${escapeHtml(bestNo)}.</p>
+  </section>`;
+}
+
+function syncResultRouteNavigation() {
+  const routes = simData?.routes || [];
+  const best = getBestRoute(routes);
+  if (!best) return;
+  const current = routes.find(route => Number(route.display_route_no) === Number(selectedRouteFocus?.routeNo)) || best;
+  const isBest = current === best;
+  document.querySelectorAll('[data-result-route-picker]').forEach(select => {
+    select.value = String(current.display_route_no);
+  });
+  document.querySelectorAll('[data-return-best]').forEach(button => { button.hidden = isBest; });
+  const text = isBest ? 'Top-ranked route selected' : `Viewing Route ${current.display_route_no} · ${current.category === 'eliminated' ? 'eliminated' : 'alternative'}`;
+  document.querySelectorAll('[data-result-route-status]').forEach(status => {
+    if (status.textContent !== text) status.textContent = text;
+  });
+  document.querySelectorAll('[data-current-route-summary]').forEach(summary => {
+    if (summary._routeRecord === current) return;
+    summary._routeRecord = current;
+    summary.innerHTML = buildCurrentRouteSummary(current, simData);
+  });
+  const hasDirections = getRouteTurnSteps(current).length > 0;
+  const directions = document.getElementById('selectedRouteDirections');
+  if (directions && directions._routeRecord !== current) {
+    directions._routeRecord = current;
+    directions.hidden = !hasDirections;
+    directions.open = false;
+    directions.querySelector('[data-selected-directions-label]').textContent = `Directions · Route ${current.display_route_no}`;
+    document.getElementById('selectedRouteDirectionsBody').innerHTML = buildRouteDirectionsMarkup(current);
+  }
+}
+
+function selectResultRoute(routeNo) {
+  const route = simData?.routes?.find(item => Number(item.display_route_no) === Number(routeNo));
+  if (!route) return;
+  selectedRouteFocus = { routeNo: Number(route.display_route_no), category: route.category || '' };
+  applyRouteFocusState(selectedRouteFocus.routeNo);
+  window.mobileSim?.resumeAutoFit();
+  refitMapToCurrentRoute({ flySeconds: SHEET_REFIT_FLY_SECONDS });
+}
+
+function returnToBestRankedRoute() {
+  const best = getBestRoute(simData?.routes || []);
+  if (best) selectResultRoute(best.display_route_no);
+}
+
+document.addEventListener('change', event => {
+  if (event.target.matches?.('[data-result-route-picker]')) selectResultRoute(event.target.value);
+});
 
 let routeListModalReturnFocus = null;
 
@@ -5386,7 +5426,7 @@ document.addEventListener('click', event => {
   if (trigger.closest('#routeListModal')) {
     focusRouteFromModal(routeNo, trigger.dataset.focusCategory || '');
   } else {
-    window.toggleRouteFocus(routeNo, trigger.dataset.focusCategory || '', !trigger.closest('#msimRouteList'));
+    window.toggleRouteFocus(routeNo, trigger.dataset.focusCategory || '');
   }
 });
 
@@ -5561,7 +5601,8 @@ function applyRouteFocusState(routeNo) {
   const shownGroups = groups.filter(group => gMap.hasLayer(group.mainLayer));
   stackRouteGroups(shownGroups);
   bringRouteGroupToFront(shownGroups.find(group => hasFocus && group.routeNo === routeNo));
-  window.mobileSim?.syncRouteRows();
+  syncResultRouteNavigation();
+  window.mobileSim?.syncRouteSelection();
 }
 
 // Re-applies the route styles (widths are zoom-scaled) for the current focus.

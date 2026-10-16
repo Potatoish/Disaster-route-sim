@@ -138,6 +138,91 @@ html[data-keyboard-open="true"] .fab-panel {
 .sim-page .maccordion summary { min-height: 44px; }
 .sim-page :is(.route-list-modal, .about-modal, .tutorial-modal-panel) { max-height: calc(var(--visual-height) - 24px); }
 
+/* Clear actions in either results layout, including narrow and zoomed views. */
+.sim-page :is(.safety-actions .reset-btn, .safety-download-btn, #msimNewSimBtn, #msimReportBtn) {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-width: 2px;
+  font-size: .8125rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+}
+.sim-page :is(.safety-actions .reset-btn, #msimNewSimBtn, #msimDetailsBtn.mbtn--primary, .result-route-reset) {
+  background: var(--hazard-panel-strong);
+  border-color: var(--hazard-panel-strong);
+  color: var(--accent-ink);
+}
+.sim-page :is(.safety-download-btn, #msimReportBtn) {
+  background: #15803d;
+  border-color: #15803d;
+  color: #fff;
+}
+.sim-page.dark :is(.safety-download-btn, #msimReportBtn) {
+  background: #86efac;
+  border-color: #86efac;
+  color: #052e16;
+}
+.sim-page :is(.safety-actions button, #msimNewSimBtn, #msimReportBtn):hover:not(:disabled) { filter: brightness(1.08); }
+.result-route-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-block: 12px;
+  padding: 12px;
+  border: 2px solid var(--border2);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+}
+.result-route-label { flex: 1 1 140px; min-width: 0; color: var(--text); font-size: var(--text-xs); font-weight: 800; }
+.result-route-label select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 8px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: 700 .875rem var(--font-body);
+}
+.result-route-reset {
+  flex: 1 1 150px;
+  min-height: 44px;
+  padding: 8px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--hazard-panel-strong);
+  color: var(--accent-ink);
+  font: 800 .8125rem var(--font-body);
+  cursor: pointer;
+}
+.result-route-help { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.result-route-description { margin: 8px 0 12px; color: var(--text); font-size: var(--text-sm); line-height: 1.5; }
+.result-route-description:empty { display: none; }
+.result-route-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.result-route-facts dt { color: var(--muted); font-size: var(--text-xs); }
+.result-route-facts dd { margin: 2px 0 0; color: var(--text); font-size: .9375rem; line-height: 1.4; font-weight: 700; overflow-wrap: anywhere; }
+.result-summary-facts { padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.result-simulation-note { margin: 8px 0 12px; padding: 8px 10px; border-left: 2px solid var(--accent); background: var(--panel); color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.result-route-warning { margin: 6px 0 0; font-weight: 500; }
+.result-route-assessment { align-items: start; }
+.result-walking-note { margin: 6px 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.result-desktop-directions { margin-bottom: 12px; }
+.result-desktop-directions summary { font-size: .8125rem; font-weight: 700; }
+.msheet .result-route-nav { padding: 0; border: 0; margin-block: 10px 0; }
+#msimRouteNavigation { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+.sim-page .msheet[data-mode="results"][data-snap="peek"] #msimResultActions {
+  z-index: 3;
+  padding-top: 8px;
+}
+.msheet .result-route-label { flex-basis: 120px; }
+.msheet .result-route-reset { flex-basis: 140px; }
+.msheet[data-snap="peek"] .result-route-help { display: none; }
+.sim-page #msimResultActions .mbtn { padding-block: 8px; font-size: .875rem; line-height: 1.35; font-weight: 700; }
+
 @media (max-width: 639px) {
   .site-page .wrap { padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right)); }
   .site-page .site-nav .wrap { padding-inline: 0; }

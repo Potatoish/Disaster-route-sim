@@ -34,7 +34,6 @@
   const LEGEND_CHIP_FALLBACK_H = 28;
   // Below this the sheet is full height and the map is just a sliver.
   const MAP_COVERED_ROOM = 40;
-  const ROUTES_SHOWN = 3;
   // A second tap inside this window is a double-tap zoom, not a pin move.
   const MAP_TAP_DELAY_MS = 260;
   const TOAST_MS = 2200;
@@ -77,7 +76,7 @@
     snap: 'peek', // 'peek' | 'half' | 'full'
     height: 0, // the sheet's visible height, px
     snaps: { peek: 0, half: 0, full: 0 },
-    routesExpanded: false,
+    describedRoute: null,
     syncFrame: null,
     drag: null,
     suppressHandleClick: false,
@@ -395,7 +394,8 @@
     handle.setAttribute('aria-label', state.snap === last ? 'Collapse panel' : 'Expand panel');
     handle.setAttribute('aria-expanded', String(state.snap !== 'peek'));
     const detailsBtn = $('msimDetailsBtn');
-    setText(detailsBtn, state.snap === 'full' ? 'Show map' : 'See details');
+    setText(detailsBtn, state.snap === 'full' ? 'Back to map' : 'Routes & directions');
+    detailsBtn?.setAttribute('aria-expanded', String(state.snap === 'full'));
     const more = $('msimReplay').querySelector('.aco-replay-more');
     if (more) {
       setText(more, state.snap === 'peek' ? 'More' : 'Less');
@@ -818,74 +818,6 @@
     });
   }
 
-  // The worst hazard a route crosses: its peak level, how much of a flood
-  // route is in Medium water, and how much is above the safety limit.
-  function describeRouteRisk(route) {
-    const isEarthquake = isEarthquakeRouteRecord(route);
-    const label = isEarthquake ? getRiskLevelLabelFromScore(route?.max_hazard) : formatFloodPeakRisk(route);
-    const medium = isEarthquake ? 0 : getMediumFloodDistance(route);
-    const unsafe = Number(route?.unsafe_distance) || 0;
-    // "Medium flooding for 193 m"; with unsafe parts too, both lengths.
-    const mediumFor = medium > 0 && unsafe === 0 ? ` for ${formatDistanceCompact(medium)}` : '';
-    const dry = !isEarthquake && getFloodPeakVar(route) === 0;
-    const parts = [dry ? 'No flooding' : `${label} ${isEarthquake ? 'road risk' : 'flooding'}${mediumFor}`];
-    if (unsafe > 0) parts.push(`${formatDistanceCompact(unsafe)} unsafe`);
-    if (medium > 0 && unsafe > 0) parts.push(`${formatDistanceCompact(medium)} medium`);
-    return { level: label.toLowerCase(), text: parts.join(' · ') };
-  }
-
-  function buildTurnStepsMarkup(route, routeNo) {
-    const steps = getRouteTurnSteps(route);
-    if (!steps.length) return '';
-
-    const destination = route.destination_name || 'Your destination';
-    const items = steps.map((step, index) => `
-      <li class="turn-step">
-        <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>
-        <span class="turn-step-text">
-          <span class="turn-step-instruction">${escapeHtml(formatTurnStepInstruction(step, index))}</span>
-          ${Number(step.distance) > 0 ? `<span class="turn-step-distance">${escapeHtml(formatDistanceCompact(step.distance))}</span>` : ''}
-        </span>
-      </li>`).join('');
-
-    return `<ol class="mroute-steps" hidden aria-label="Directions for route ${escapeHtml(routeNo)}">
-      ${items}
-      <li class="turn-step">
-        <span class="turn-step-icon">${safetyIcon('flag')}</span>
-        <span class="turn-step-text"><span class="turn-step-instruction">${escapeHtml(destination)}</span></span>
-      </li>
-    </ol>`;
-  }
-
-  // data-focus-route/-category are what script.js's delegated click handler
-  // reads to focus the route on the map (the same one the desktop list uses).
-  function buildRouteRow(route, index, best) {
-    const routeNo = route.display_route_no ?? index + 1;
-    const isBest = route === best;
-    const swatch = isBest
-      ? { safe: 'best', caution: 'best-caution', unsafe: 'best-unsafe' }[getRouteSafetyTier(route)]
-      : route.category === 'available' ? 'available' : 'eliminated';
-    const tag = isBest ? ` · ${getTopRouteName(route).toLowerCase()}` : route.category === 'eliminated' ? ' · eliminated' : '';
-    const risk = describeRouteRisk(route);
-    const destination = route.destination_name
-      ? `<span class="mroute-dest">To ${escapeHtml(route.destination_name)}</span>`
-      : '';
-
-    return `<li class="mroute-item"${index >= ROUTES_SHOWN ? ' data-extra' : ''}>
-      <button type="button" class="mroute${isBest ? ' is-best' : ''}" aria-pressed="false"
-          data-focus-route="${escapeHtml(routeNo)}" data-focus-category="${escapeHtml(route.category || '')}">
-        <span class="mroute-swatch mroute-swatch--${swatch}" aria-hidden="true"></span>
-        <span class="mroute-text">
-          <span class="mroute-name">Route ${escapeHtml(routeNo)}${tag}</span>
-          <span class="mroute-risk mroute-risk--${escapeHtml(risk.level)}">${escapeHtml(risk.text)}</span>
-          ${destination}
-        </span>
-        <span class="mroute-time">${escapeHtml(route.display_duration || '')}</span>
-      </button>
-      ${buildTurnStepsMarkup(route, routeNo)}
-    </li>`;
-  }
-
   // Uses the desktop panel's data helpers and card styles so the mobile
   // layout preserves its full safety guidance and per-hazard distances.
   function renderSafetyDetails(route, peak, action, isEarthquake) {
@@ -893,7 +825,43 @@
       + buildSafetyHazardCard(peak, Number(route?.max_hazard || 0), isEarthquake);
   }
 
-  // Called by renderRouteSafetyPanel (script.js) with the same result.
+  function renderCurrentRoute(view) {
+    const { route, best, tier, peak, isEarthquake, action, notWalkable } = view;
+    const verdict = $('msimVerdict');
+    verdict.classList.toggle('is-safe', tier === 'safe');
+    verdict.classList.toggle('is-caution', tier === 'caution');
+    verdict.classList.toggle('is-danger', tier === 'unsafe');
+    setText($('msimVerdictTitle'), view.title);
+    setText($('msimVerdictSub'), view.warning);
+    $('msimVerdictSub').hidden = !view.warning;
+
+    const duration = route.display_duration || formatRouteWalkingDuration(route);
+    const distance = route.display_distance || formatDistanceCompact(route.distance);
+    renderSafetyDetails(route, peak, action, isEarthquake);
+    const showRescue = !!action && !isEarthquake;
+    $('msimSummaryMain').innerHTML = notWalkable
+      ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong> · not walkable</span>`
+      : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
+    $('msimSummaryMain').classList.toggle('is-danger', notWalkable);
+    const rescue = $('msimRescue');
+    rescue.hidden = !showRescue;
+    setText($('msimRescueText'), showRescue ? action.title : '');
+    // One primary action at a time: rescue, else the details.
+    $('msimDetailsBtn').classList.toggle('mbtn--primary', !showRescue);
+    setText($('msimSummaryRoute'), view.context);
+    const comparison = getRouteComparisonText(route, best);
+    setText($('msimRouteComparison'), comparison);
+    $('msimRouteComparison').hidden = !comparison;
+
+    const destination = $('msimSummaryDest');
+    destination.hidden = !route.destination_name;
+    setText(destination, route.destination_name ? `To ${route.destination_name}` : '');
+    const farNote = $('msimFarNote');
+    farNote.hidden = !isFarFromOpenArea(route);
+    setText(farNote, farNote.hidden ? '' : FAR_FROM_OPEN_AREA_NOTE);
+  }
+
+  // The same route model drives the desktop panel and mobile sheet.
   function renderResults(result) {
     const routes = Array.isArray(result?.routes) ? result.routes : [];
     if (!routes.length) {
@@ -901,59 +869,12 @@
       return;
     }
 
-    const isEarthquake = isEarthquakeSimulationResult(result);
-    const best = getBestRoute(routes);
-    const tier = getRouteSafetyTier(best);
-    const peak = getPeakRiskRow(best, isEarthquake);
-
-    // Same wording as the desktop results panel (renderRouteSafetyPanel).
-    const verdict = $('msimVerdict');
-    verdict.classList.toggle('is-safe', tier === 'safe');
-    verdict.classList.toggle('is-caution', tier === 'caution');
-    verdict.classList.toggle('is-danger', tier === 'unsafe');
-    setText($('msimVerdictTitle'), getRouteVerdictTitle(best));
-    const VERDICT_SUBS = {
-      safe: formatPeakRiskSentence(peak),
-      caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
-      unsafe: isAreaWideHighRisk(best)
-        ? `${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)} ${describeLeastExposedRoute(best)}`
-        : `${formatPeakRiskSentence(peak)} ${describeUnsafeCrossing(best)}`,
-    };
-    setText($('msimVerdictSub'), VERDICT_SUBS[tier]);
-
-    const duration = best?.display_duration || formatRouteWalkingDuration(best);
-    const distance = best?.display_distance || formatDistanceCompact(best?.distance);
-    // A flood route with no safe option is not to be walked, so its walking
-    // time gives way to "not walkable" (the homepage's word for High water)
-    // and the call for rescue (getNoSafeRouteAction) becomes the sheet's
-    // first action; an earthquake route is still walked, with care. Either
-    // way the summary row is the same: what the route is, then its risk.
-    const action = getNoSafeRouteAction(best);
-    renderSafetyDetails(best, peak, action, isEarthquake);
-    const showRescue = !!action && !isEarthquake;
-    $('msimSummaryMain').innerHTML = showRescue
-      ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong> · not walkable</span>`
-      : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
-    $('msimSummaryMain').classList.toggle('is-danger', showRescue);
-    const rescue = $('msimRescue');
-    rescue.hidden = !showRescue;
-    setText($('msimRescueText'), showRescue ? action.title : '');
-    // One primary action at a time: rescue, else the details.
-    $('msimDetailsBtn').classList.toggle('mbtn--primary', !showRescue);
-    setText($('msimSummaryRoute'), `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`);
-
-    const destination = $('msimSummaryDest');
-    destination.hidden = !best?.destination_name;
-    setText(destination, best?.destination_name ? `To ${best.destination_name}` : '');
-    const farNote = $('msimFarNote');
-    farNote.hidden = !isFarFromOpenArea(best);
-    setText(farNote, farNote.hidden ? '' : FAR_FROM_OPEN_AREA_NOTE);
-
     const ordered = [...routes].sort((left, right) => (left.display_route_no ?? 99) - (right.display_route_no ?? 99));
-    state.routesExpanded = false;
-    $('msimRouteList').innerHTML = ordered.map((route, index) => buildRouteRow(route, index, best)).join('');
-    syncRouteRows();
+    $('msimRouteNavigation').innerHTML = buildResultRouteNavigation(ordered);
+    state.describedRoute = null;
+    syncRouteSelection();
 
+    const isEarthquake = isEarthquakeSimulationResult(result);
     const antNote = buildAntSearchNote(result);
     $('msimSource').innerHTML = [antNote && escapeHtml(antNote), buildHazardSourceNoteHtml(isEarthquake)]
       .filter(Boolean)
@@ -965,10 +886,13 @@
   }
 
   function clearResults() {
+    $('msimRouteNavigation').innerHTML = '';
     $('msimSafetyDetails').innerHTML = '';
-    $('msimRouteList').innerHTML = '';
-    state.routesExpanded = false;
-    syncMoreRoutes();
+    $('msimRouteComparison').textContent = '';
+    $('msimRouteComparison').hidden = true;
+    $('msimSelectedDirections').innerHTML = '';
+    $('msimDirections').hidden = true;
+    state.describedRoute = null;
     if (state.mode === 'results') {
       state.mode = 'setup';
       state.snap = 'peek';
@@ -976,39 +900,21 @@
     scheduleSync();
   }
 
-  // Row highlight follows the map's route focus (applyRouteFocusState).
-  function syncRouteRows() {
-    const focusNo = selectedRouteFocus ? Number(selectedRouteFocus.routeNo) : null;
-    $('msimRouteList')?.querySelectorAll('.mroute').forEach(button => {
-      const active = focusNo != null && Number(button.dataset.focusRoute) === focusNo;
-      button.classList.toggle('is-active', active);
-      button.setAttribute('aria-pressed', String(active));
-      const steps = button.parentElement.querySelector('.mroute-steps');
-      if (steps) steps.hidden = !active;
-    });
-    syncMoreRoutes();
+  // One description and directions section follow the map's selected route.
+  function syncRouteSelection() {
+    const routes = simData?.routes || [];
+    const route = routes.find(item => Number(item.display_route_no) === Number(selectedRouteFocus?.routeNo)) || getBestRoute(routes);
+    if (route && route !== state.describedRoute) {
+      state.describedRoute = route;
+      renderCurrentRoute(getResultRouteDetails(route));
+      $('msimSelectedDirections').innerHTML = buildRouteDirectionsMarkup(route);
+      $('msimDirections').hidden = !getRouteTurnSteps(route).length;
+      $('msimDirections').open = false;
+    }
     // A picked route past the first few is on the map only while picked.
     renderMapLegend();
-  }
-
-  // Top ROUTES_SHOWN rows, then "+ N more"; a focused extra row stays shown.
-  function syncMoreRoutes() {
-    const list = $('msimRouteList');
-    const more = $('msimRoutesMore');
-    if (!list || !more) return;
-
-    const extra = list.children.length - ROUTES_SHOWN;
-    more.hidden = extra <= 0;
-    setText(more, state.routesExpanded ? 'Show fewer routes' : `+ ${extra} more route${extra === 1 ? '' : 's'}`);
-    more.setAttribute('aria-expanded', String(state.routesExpanded));
-    list.querySelectorAll('[data-extra]').forEach(item => {
-      item.hidden = !state.routesExpanded && !item.querySelector('.mroute.is-active');
-    });
-  }
-
-  function toggleMoreRoutes() {
-    state.routesExpanded = !state.routesExpanded;
-    syncMoreRoutes();
+    // The return button may add a row on a narrow phone; measure peek again.
+    if (isActive() && state.mode === 'results') scheduleSync();
   }
 
   // Each step starts at peek, with the legend folded and the camera the
@@ -1413,18 +1319,6 @@
     }
   }
 
-  // After script.js's delegated handler toggles the route focus: drop the
-  // sheet to half and fit the map to the picked route.
-  document.addEventListener('click', event => {
-    const row = event.target.closest?.('#msimRouteList .mroute[data-focus-route]');
-    if (!row || !isActive() || !gMap) return;
-
-    snapTo('half');
-    window.mobileSim.resumeAutoFit();
-    refitMapToCurrentRoute();
-    revealInSheet(row);
-  });
-
   // ---- hooks ----
 
   // initMap() hands over the map and its two base layers.
@@ -1495,6 +1389,7 @@
   document.fonts?.ready?.then(scheduleSync);
 
   $('msimDisclaimerText').textContent = SAFETY_DISCLAIMER_TEXT;
+  $('msimPreparednessNote').textContent = PREPAREDNESS_NOTE;
 
   window.mobileSim = {
     attachMap,
@@ -1514,7 +1409,7 @@
     showReplay,
     showResults,
     showSetup,
-    syncRouteRows,
+    syncRouteSelection,
   };
 
   // index.html's inline handlers.
@@ -1536,7 +1431,6 @@
     showMobileSetup: showSetup,
     toggleMobileBarangayMenu: toggleBarangayMenu,
     toggleMobileMapLegend: toggleMapLegend,
-    toggleMobileMoreRoutes: toggleMoreRoutes,
     toggleMobileResultDetails: toggleResultDetails,
   });
 

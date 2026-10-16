@@ -425,6 +425,7 @@
           <div class="msheet-mode" id="msimReplay" hidden></div>
 
           <div class="msheet-mode" id="msimResults" hidden>
+            <p class="result-simulation-note" id="msimPreparednessNote"></p>
             <div class="mlens" id="msimLens" role="group" aria-label="Earthquake lens" hidden>
               <button type="button" data-msim-eq-view="overall" aria-pressed="true" onclick="switchEarthquakeView('overall')">Overall</button>
               <button type="button" data-msim-eq-view="liquefaction" aria-pressed="false" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
@@ -451,25 +452,25 @@
             </button>
             <div class="msheet-actions" id="msimResultActions">
               <button class="mbtn" type="button" onclick="showMobileSetup()">Edit setup</button>
-              <button class="mbtn mbtn--primary" id="msimDetailsBtn" type="button" onclick="toggleMobileResultDetails()">See details</button>
+              <button class="mbtn mbtn--primary" id="msimDetailsBtn" type="button" onclick="toggleMobileResultDetails()" aria-controls="msimResultDetails" aria-expanded="false">Routes &amp; directions</button>
             </div>
 
-            <div class="msheet-details">
+            <div class="msheet-details" id="msimResultDetails">
+              <div id="msimRouteNavigation"></div>
               {# Keep the desktop's action guidance and hazard breakdown in
-                 the mobile results too, before the route list. #}
+                 the mobile results too. #}
               <div class="safety-result-cards msheet-safety-details" id="msimSafetyDetails"></div>
+              <p class="result-route-description" id="msimRouteComparison" hidden></p>
 
               <div class="msheet-actions" id="msimDetailActions">
-                <button class="mbtn" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
+                <button class="mbtn mbtn--primary" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
                 <button class="mbtn" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download PDF</button>
               </div>
 
-              <div class="msheet-label-row">
-                <h3 class="msheet-label">Routes</h3>
-                <span class="msheet-label-hint">Tap one to see it on the map</span>
-              </div>
-              <ul class="mroutes" id="msimRouteList"></ul>
-              <button class="mroutes-more" id="msimRoutesMore" type="button" onclick="toggleMobileMoreRoutes()" aria-controls="msimRouteList" aria-expanded="false" hidden></button>
+              <details class="maccordion" id="msimDirections" hidden>
+                <summary>Turn-by-turn directions<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                <div id="msimSelectedDirections"></div>
+              </details>
               <p class="msheet-source" id="msimSource"></p>
 
               <details class="maccordion" id="msimDisclaimer" open>

@@ -62,7 +62,7 @@
   const DRAW_ROUTE_MS = 1000;
   // The walk along Route 1: the camera flies in, the ant walks it at about
   // this pace (dry roads; slower in water), then the camera flies out.
-  const NAV_ZOOM = 17.25;
+  const NAV_ZOOM = 17;
   const NAV_FLY_SECONDS = 1.1;
   const NAV_MS = 6500;
   const ARRIVE_MS = 950;
@@ -92,6 +92,8 @@
   // them a few times a second, not every frame.
   const FOCUS_REFRESH_MS = 250;
   const CARDS_REFRESH_MS = 100;
+  // Keep the full replay on modest devices without painting at 60/120 Hz.
+  const FRAME_INTERVAL = 1000 / (window.agnasUI?.constrained ? 30 : 60);
 
   // Flood: the water the ant walks through, in the map's own fill colors.
   const WATER_RIPPLE = { 1: '#ca8a04', 2: '#ea580c', 3: '#be123c' };
@@ -1157,6 +1159,10 @@
       let lastLevel = 0;
       function step(now) {
         if (!state.nav) return;
+        if (now - last < FRAME_INTERVAL - 1) {
+          state.nav.raf = requestAnimationFrame(step);
+          return;
+        }
         const dt = Math.min(50, now - last);
         last = now;
         const levels = spanAt(distance).levels;
@@ -1284,6 +1290,7 @@
     function frameLoop() {
       let elapsed = 0;
       let last = performance.now();
+      let lastPaint = last;
       drawFrame(0);
       const frame = now => {
         if (!state.running) return;
@@ -1295,7 +1302,10 @@
           startWalk();
           return;
         }
-        drawFrame(elapsed);
+        if (now - lastPaint >= FRAME_INTERVAL - 1) {
+          drawFrame(elapsed);
+          lastPaint = now;
+        }
         state.raf = requestAnimationFrame(frame);
       };
       state.raf = requestAnimationFrame(frame);
