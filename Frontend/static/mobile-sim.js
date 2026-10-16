@@ -653,10 +653,16 @@
 
     const role = getPinRole();
     const checking = isAnyRoutePinChecking();
-    const needsEvacSites = isWaitingForEvacSites() && !!getReadyPin('start') && !role;
-    // The open destination menu already offers the sites; one button is enough.
-    $('msimEvacAction').hidden = !needsEvacSites || !$('msimDestinationMenu').hidden;
+    const needsEvacSites = isDestinationChoicePending();
+    // The buttons under the slots are then the one place for the choice, so
+    // the destination menu (and its Change) stays shut.
+    if (needsEvacSites && !$('msimDestinationMenu').hidden) {
+      $('msimDestinationMenu').hidden = true;
+      $('msimSlotEdit-end').setAttribute('aria-expanded', 'false');
+    }
+    $('msimEvacAction').hidden = !needsEvacSites;
     $('msimShowEvacBtn').disabled = locked || earthquakeEvacSitesLoading;
+    $('msimChooseOwnBtn').disabled = locked;
     $('msimShowEvacLabel').textContent = earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show evacuation sites';
     $('msimDestinationEvacBtn').disabled = locked || earthquakeEvacSitesLoading || (isEarthquakeMode() && !getReadyPin('start'));
     $('msimDestinationEvacBtn').setAttribute('aria-checked', String(isToEvacuationSite() && !routePins.end));
@@ -676,6 +682,12 @@
     $('msimSetupHelp').textContent = buildSetupHelp(role, checking);
   }
 
+  // Start set, sites not on the map yet, no pin being placed: the visitor
+  // picks the sites or a spot of their own with the buttons under the slots.
+  function isDestinationChoicePending() {
+    return isWaitingForEvacSites() && !!getReadyPin('start') && !getPinRole();
+  }
+
   function syncPinSlot(role) {
     const slot = $(`msimSlot-${role}`);
     const value = $(`msimSlotValue-${role}`);
@@ -686,7 +698,9 @@
     const placing = getPinRole() === role;
     // An end point that is the evacuation sites (or the one a run picked).
     const toEvacSite = role === 'end' && !pin && isToEvacuationSite();
-    const set = !!pin || toEvacSite;
+    // Until the choice below is made, the slot is a placeholder pointing to it.
+    const choiceBelow = role === 'end' && isDestinationChoicePending();
+    const set = (!!pin || toEvacSite) && !choiceBelow;
     const waiting = role === 'end' && !set && !getReadyPin('start');
     const pointName = role === 'start' ? 'start point' : 'end point';
 
@@ -705,6 +719,8 @@
       ? pin.label || PIN_ROLE_COPY[role].fallbackLabel
       : placing
       ? `Move the map, then tap “Set ${role} here”`
+      : choiceBelow
+      ? 'Pick a destination below'
       : toEvacSite
       ? getResultEvacSite()?.name || 'Evacuation site'
       : waiting
@@ -713,7 +729,7 @@
 
     // Edit moves a set pin, Cancel stops moving it, Set arms an empty one;
     // Change trades the evacuation sites for a spot of one's own.
-    const label = role === 'end' && placing ? 'Cancel' : set
+    const label = choiceBelow ? '' : role === 'end' && placing ? 'Cancel' : set
       ? (placing ? 'Cancel' : role === 'end' ? 'Change' : 'Edit')
       : (placing || waiting ? '' : 'Set');
     edit.hidden = !label
@@ -737,9 +753,8 @@
     // An empty slot being set already says what to do ("Move the map, then
     // tap ..."; syncPinSlot), so the sheet says it once.
     if (role) return routePins[role] ? `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.` : '';
-    if (isWaitingForEvacSites() && getReadyPin('start')) {
-      return 'Show the evacuation sites, or tap Change to choose your own destination.';
-    }
+    // The two buttons under the slots say it themselves.
+    if (isWaitingForEvacSites() && getReadyPin('start')) return '';
     if (canRunCurrentSimulation()) {
       if (simData) return 'Change the hazard or move a pin to compare routes.';
       return isToEvacuationSite() && !routePins.end

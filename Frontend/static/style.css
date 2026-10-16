@@ -3830,8 +3830,16 @@ body.dark .leaflet-popup-close-button {
   width: 100%;
 }
 
+/* The destination's two choices, until one is made (mobile-sim.js
+   isDestinationChoicePending). */
 .msheet-evac-action {
+  display: grid;
+  gap: 8px;
   margin-top: 10px;
+}
+
+.msheet-evac-action[hidden] {
+  display: none;
 }
 
 .msheet-evac-action .mbtn {
