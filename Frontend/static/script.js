@@ -52,7 +52,6 @@ const EARTHQUAKE_VIEW_META = {
   liquefaction: 'Liquefaction lens',
   ground_shaking: 'Ground shaking lens',
 };
-const EARTHQUAKE_MIN_FOCUS_ZOOM = 13;
 const FLOOD_OVERLAY_VIEWS = {
   all: {
     label: 'All levels',
@@ -318,7 +317,7 @@ const PIN_ROLE_COPY = {
 // Street") rather than beside it ("Near Tramo Street").
 const PIN_ON_STREET_METERS = 15;
 const PIN_HINT_ERROR_MS = 5000;
-// "Choose on Map" zooms to at least street level so a tap lands where meant.
+// Use street level for pin placement, without carrying over a manual close-up.
 const PIN_PLACEMENT_ZOOM = 17;
 const routePins = { start: null, end: null };
 const routePinMarkers = { start: null, end: null };
@@ -1261,7 +1260,9 @@ function initMap() {
     mapResizeDebounceTimer = window.setTimeout(() => {
       keepMapContentInPlace();
       // A phone visitor who moved the map keeps their view (mobile-sim.js).
-      if (!window.mobileSim?.isAutoFitPaused()) refitMapToCurrentRoute({ onlyIfOutOfView: true });
+      if (!window.mobileSim?.isAutoFitPaused() && !pinPlacementRole) {
+        refitMapToCurrentContent({ onlyIfOutOfView: true });
+      }
     }, 150);
   });
   mapResizeObserver.observe(resizedMapEl);
@@ -1270,29 +1271,57 @@ function initMap() {
   startApp();
 }
 
-// Re-fits the map to the route on screen with the same overlay-aware padding
-// as after a run (getMapFitPadding), so a panel opening or closing never
-// leaves the route under a panel or the map's overlays.
-// onlyIfOutOfView: leave the map alone while the route and pins are still in
-// the padded view. flySeconds: glide there (flyToBounds) instead of
-// fitBounds, which jumps on any longer move.
-function refitMapToCurrentRoute({ onlyIfOutOfView = false, flySeconds = 0 } = {}) {
-  if (!gMap || !simData || !Array.isArray(simData.routes) || !simData.routes.length) return false;
-
-  const bestRoute = getBestRoute(simData.routes);
-  const routeCoords = getRoutePoints(bestRoute);
-  if (!routeCoords.length) return false;
-
+// A selected route gets its own view; otherwise frame every route currently
+// shown, including the pins whose street access points may sit off the line.
+function getResultMapBounds() {
+  if (!Array.isArray(simData?.routes) || !simData.routes.length) return null;
+  const focusedRoute = selectedRouteFocus && simData.routes.find(route =>
+    Number(route.display_route_no) === Number(selectedRouteFocus.routeNo));
+  const hiddenRoutes = new Set(getRoutesOffMap(simData.routes));
+  const routes = focusedRoute ? [focusedRoute] : simData.routes.filter(route => !hiddenRoutes.has(route));
+  const routeCoords = routes.flatMap(getRoutePoints);
+  if (!routeCoords.length) return null;
   const pinCoords = normalizePathCoordinates([
     getReadyPin('start'),
     getReadyPin('end'),
-    { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
+    ...routes.map(route => ({ lat: route.destination_lat, lng: route.destination_lng })),
   ].filter(Boolean));
+  return L.latLngBounds([...routeCoords, ...pinCoords]);
+}
 
-  const bounds = L.latLngBounds([...routeCoords, ...pinCoords]);
-  const padding = getMapFitPadding();
-  if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return true;
-  if (flySeconds) {
+function refitMapToCurrentRoute(options = {}) {
+  return fitMapBounds(getResultMapBounds(), options);
+}
+
+function refitMapToCurrentContent(options = {}) {
+  if (activeReplayController && !activeReplayController.isDone()) {
+    if (!activeReplayController.isWalking()) fitReplaySearch(options);
+    return true;
+  }
+  if (simData?.routes?.length) return refitMapToCurrentRoute(options);
+  if (isEarthquakeMode() && earthquakeEvacSitesVisible) return fitEarthquakeMapScope(options);
+  if (areFloodEvacSitesShown()) return fitMapToFloodEvacSites(options);
+  return fitMapToBoundaryPaths(barangayBoundaryRings, 24, {
+    fly: !!options.flySeconds,
+    duration: options.flySeconds,
+    onlyIfOutOfView: options.onlyIfOutOfView,
+  });
+}
+
+// All automatic overviews share the same zoom cap and overlay-aware fit.
+// A full-height sheet leaves no useful map: keep the camera until it closes.
+function fitMapBounds(bounds, { padding = getMapFitPadding(), onlyIfOutOfView = false, flySeconds = 0 } = {}) {
+  if (!gMap || !bounds?.isValid()) return false;
+  padding = { maxZoom: MAP_FIT_MAX_ZOOM, ...padding };
+  const size = gMap.getSize();
+  const topLeft = L.point(padding.paddingTopLeft || padding.padding || [0, 0]);
+  const bottomRight = L.point(padding.paddingBottomRight || padding.padding || [0, 0]);
+  const room = size.subtract(topLeft).subtract(bottomRight);
+  if (room.x < MAP_FIT_MIN_ROUTE_SIZE || room.y < MAP_FIT_MIN_ROUTE_SIZE) return false;
+  const targetZoom = Math.min(padding.maxZoom ?? MAP_FIT_MAX_ZOOM,
+    gMap.getBoundsZoom(bounds, false, topLeft.add(bottomRight)));
+  if (onlyIfOutOfView && boundsFitInView(bounds, padding) && gMap.getZoom() >= targetZoom - 0.25) return true;
+  if (flySeconds && !prefersReducedMotion()) {
     gMap.flyToBounds(bounds, mapMoveOptions({ ...padding, duration: flySeconds }));
   } else {
     gMap.fitBounds(bounds, mapMoveOptions(padding));
@@ -1315,8 +1344,8 @@ function boundsFitInView(bounds, padding) {
 const RECENTER_FLY_SECONDS = 0.8;
 
 // The recenter button: brings back the view the current step started from
-// -- the picked route, else the best route and its pins after a run, and
-// the whole barangay before one. On a phone or tablet it also frames the
+// -- the picked route, else the visible routes and pins after a run, and
+// the evacuation sites or barangay before one. On a phone it also frames the
 // ants' search while a replay plays (or picks the walker up again), gives
 // the camera back to the app after the visitor moved the map
 // (mobile-sim.js), and says what it shows.
@@ -1336,18 +1365,12 @@ function recenterMap() {
         : 'Showing the ants\' search');
       return;
     }
-    window.mobileSim.toast(simData ? 'Showing full route' : 'Showing the whole barangay');
+    window.mobileSim.toast(simData ? 'Showing full route'
+      : areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Showing evacuation sites'
+      : 'Showing the whole barangay');
   }
 
-  const focusedGroup = selectedRouteFocus
-    ? (mapLayers.routeGroups || []).find(group => Number(group.routeNo) === Number(selectedRouteFocus.routeNo))
-    : null;
-  const focusedPath = getRoutePreviewPath(focusedGroup);
-  if (focusedPath.length > 1) {
-    gMap.flyToBounds(L.latLngBounds(focusedPath), mapMoveOptions({ ...getMapFitPadding(), duration: RECENTER_FLY_SECONDS }));
-  } else if (!refitMapToCurrentRoute({ flySeconds: RECENTER_FLY_SECONDS })) {
-    fitMapToBoundaryPaths(barangayBoundaryRings, 42, { fly: true, duration: RECENTER_FLY_SECONDS });
-  }
+  refitMapToCurrentContent({ flySeconds: RECENTER_FLY_SECONDS });
 }
 
 // "My location" (a control under Recenter on desktop; mobile-sim.js calls in
@@ -1408,7 +1431,6 @@ function clearVisitorLocation() {
 function flyToVisitor(latlng) {
   gMap.flyToBounds(latlng.toBounds(120), mapMoveOptions({
     ...getMapFitPadding(),
-    maxZoom: Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM),
     duration: RECENTER_FLY_SECONDS,
   }));
 }
@@ -2671,7 +2693,7 @@ function zoomMapForPinPlacement(role) {
     : isPointInsideBarangay(viewCenter.lat, viewCenter.lng) || !barangayBoundaryRings.length
     ? viewCenter
     : L.latLngBounds(barangayBoundaryRings.flat()).getCenter();
-  const zoom = Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM);
+  const zoom = PIN_PLACEMENT_ZOOM;
 
   if (prefersReducedMotion()) {
     gMap.setView(target, zoom, mapMoveOptions());
@@ -3307,7 +3329,7 @@ function infoPopup(title, rows) {
 // then in on the new one).
 const BARANGAY_FLY_SECONDS = 1.1;
 
-function fitMapToBoundaryPaths(paths, padding = 42, { fly = false, duration = BARANGAY_FLY_SECONDS } = {}) {
+function fitMapToBoundaryPaths(paths, padding = 24, { fly = false, duration = BARANGAY_FLY_SECONDS, onlyIfOutOfView = false } = {}) {
   const bounds = L.latLngBounds();
   let hasPoints = false;
 
@@ -3325,23 +3347,11 @@ function fitMapToBoundaryPaths(paths, padding = 42, { fly = false, duration = BA
 
   if (!hasPoints) return false;
 
-  // Phone/tablet layout: fit into the strip between the top bar and the
-  // sheet, or beside the tablet's docked panel.
-  const covered = window.mobileSim?.getCoveredInsets();
-  const fitOptions = covered
-    ? {
-      paddingTopLeft: [(covered.left || 0) + padding, covered.top + padding],
-      paddingBottomRight: [Math.max(padding, (covered.right || 0) + 12), covered.bottom + padding],
-    }
-    : { padding: [padding, padding] };
-  if (fly) {
-    // fitBounds can only pan short hops; between barangays it jumps
-    // straight there. flyToBounds arcs out and back in instead.
-    gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration }));
-  } else {
-    gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
-  }
-  return true;
+  return fitMapBounds(bounds, {
+    padding: getMapFitPadding(padding, { markers: false }),
+    flySeconds: fly ? duration : 0,
+    onlyIfOutOfView,
+  });
 }
 
 function extendBoundsWithLngLat(bounds, lng, lat) {
@@ -3358,29 +3368,32 @@ function extendBoundsWithLngLat(bounds, lng, lat) {
 
 // Pin and shelter markers stand up to ~60px above the point they mark, so a
 // point fitted right at the top edge needs this much room above it.
-const MAP_FIT_MARKER_HEADROOM = 48;
+const MAP_FIT_MARKER_HEADROOM = 64;
 
-// The least height (px) a fit leaves for the route between the overlays.
-const MAP_FIT_MIN_ROUTE_HEIGHT = 64;
+const MAP_FIT_MAX_ZOOM = 17;
+const MAP_FIT_MIN_ROUTE_SIZE = 64;
 
 // fitBounds options that keep fitted routes and pins out from under the
 // map's own overlays -- the flood filter / earthquake lens card and the
 // sidebar tab (top-left) and the legend (bottom) -- which on a phone cover a
 // large share of the map.
-function getMapFitPadding(base = 36) {
+function getMapFitPadding(base = 24, { markers = true } = {}) {
   const mapEl = document.getElementById('map');
-  if (!mapEl) return { padding: [base, base] };
+  if (!mapEl) return { padding: [base, base], maxZoom: MAP_FIT_MAX_ZOOM };
 
   const mapRect = mapEl.getBoundingClientRect();
   let top = base;
   let bottom = base;
   let left = base;
   let right = base;
+  const floatingOverlays = [];
 
   ['floodFilterControl', 'earthquakeViewSelector', 'sidebarReopenBtn'].forEach(id => {
     const el = document.getElementById(id);
     if (!el || !el.getClientRects().length) return;
-    top = Math.max(top, el.getBoundingClientRect().bottom - mapRect.top + 12);
+    const rect = el.getBoundingClientRect();
+    floatingOverlays.push(rect);
+    top = Math.max(top, rect.bottom - mapRect.top + 12);
   });
 
   // Phone/tablet layout: its top bar, bottom sheet and legend chip, the map
@@ -3391,36 +3404,42 @@ function getMapFitPadding(base = 36) {
   if (covered) {
     top = Math.max(top, covered.top + 12);
     bottom = Math.max(bottom, covered.bottom + 12);
-    left = Math.max(left, (covered.left || 0) + 24);
-    right = Math.max(right, (covered.right || 0) + 12);
+    left = Math.max(left, (covered.left || 0) + (markers && covered.left ? 52 : 24));
+    right = Math.max(right, (covered.right || 0) + (markers && covered.right ? 52 : 12));
   }
-  top += MAP_FIT_MARKER_HEADROOM;
+  if (markers) {
+    top += MAP_FIT_MARKER_HEADROOM;
+    left = Math.max(left, 40);
+    right = Math.max(right, 40);
+  }
 
   const legend = document.getElementById('mapLegend');
   if (legend && legend.getClientRects().length) {
-    bottom = Math.max(bottom, mapRect.bottom - legend.getBoundingClientRect().top + 12);
+    const rect = legend.getBoundingClientRect();
+    floatingOverlays.push(rect);
+    bottom = Math.max(bottom, mapRect.bottom - rect.top + 12);
   }
 
-  // The gap between the overlays is the only place the route and its pins
-  // show, so the padding gives way only when that gap is nearly gone (scaling
-  // it down instead put the start pin under the two-row flood filter on
-  // 320-360px phones).
-  const maxPadding = Math.max(mapRect.height - MAP_FIT_MIN_ROUTE_HEIGHT, mapRect.height / 2);
-  if (top + bottom > maxPadding) {
-    const scale = maxPadding / (top + bottom);
-    top *= scale;
-    bottom *= scale;
+  if (!covered) {
+    document.querySelectorAll('.leaflet-top.leaflet-right .leaflet-control').forEach(control => {
+      if (control.getClientRects().length) {
+        right = Math.max(right, mapRect.right - control.getBoundingClientRect().left + (markers ? 52 : 12));
+      }
+    });
+    // On a landscape phone, stacking the filter and legend leaves no map
+    // between them. Use the clear space beside those floating cards instead.
+    if (mapRect.height - top - bottom < 160 && floatingOverlays.length) {
+      const side = Math.max(...floatingOverlays.map(rect => rect.right - mapRect.left))
+        + (markers ? 40 : base);
+      if (mapRect.width - side - right >= MAP_FIT_MIN_ROUTE_SIZE) {
+        left = Math.max(left, side);
+        top = base + (markers ? MAP_FIT_MARKER_HEADROOM : 0);
+        bottom = base;
+      }
+    }
   }
 
-  return { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom] };
-}
-
-function getDisplayedEarthquakeRoute() {
-  if (!isEarthquakeSimulationResult(simData) || !Array.isArray(simData.routes)) {
-    return null;
-  }
-
-  return getBestRoute(simData.routes);
+  return { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], maxZoom: MAP_FIT_MAX_ZOOM };
 }
 
 function fitEarthquakeMapScope(options = {}) {
@@ -3428,6 +3447,9 @@ function fitEarthquakeMapScope(options = {}) {
 
   if (!gMap || !selectedBarangay || !isEarthquakeMode()) {
     return false;
+  }
+  if (includeHazards && isEarthquakeSimulationResult(simData)) {
+    return refitMapToCurrentRoute({ flySeconds });
   }
 
   const bounds = L.latLngBounds();
@@ -3438,42 +3460,15 @@ function fitEarthquakeMapScope(options = {}) {
     hasPoints = extendBoundsWithLngLat(bounds, startPin.lng, startPin.lat) || hasPoints;
   }
 
-  if (includeHazards && isEarthquakeSimulationResult(simData)) {
-    const activeRoute = getDisplayedEarthquakeRoute();
-    const routePoints = Array.isArray(activeRoute?.render_path) && activeRoute.render_path.length
-      ? activeRoute.render_path
-      : Array.isArray(activeRoute?.path_coordinates)
-      ? activeRoute.path_coordinates
-      : [];
-
-    routePoints.forEach(point => {
-      hasPoints = extendBoundsWithLngLat(bounds, point?.lng, point?.lat) || hasPoints;
-    });
-
-    const activeDestination = getEarthquakeDestination();
-    if (activeDestination) {
-      hasPoints = extendBoundsWithLngLat(bounds, activeDestination.lng, activeDestination.lat) || hasPoints;
-    }
-  } else {
-    earthquakeEvacSites.forEach(site => {
-      hasPoints = extendBoundsWithLngLat(bounds, site.lng, site.lat) || hasPoints;
-    });
-  }
+  earthquakeEvacSites.forEach(site => {
+    hasPoints = extendBoundsWithLngLat(bounds, site.lng, site.lat) || hasPoints;
+  });
 
   if (!hasPoints) {
     return false;
   }
 
-  // One move, with the minimum zoom folded in.
-  const padding = getMapFitPadding(52);
-  const target = gMap._getBoundsCenterZoom(bounds, padding);
-  const zoom = Math.max(target.zoom, EARTHQUAKE_MIN_FOCUS_ZOOM);
-  if (flySeconds) {
-    gMap.flyTo(target.center, zoom, mapMoveOptions({ duration: flySeconds }));
-  } else {
-    gMap.setView(target.center, zoom, mapMoveOptions({ animate: true }));
-  }
-  return true;
+  return fitMapBounds(bounds, options);
 }
 
 // Outline + outside-mask for barangayBoundaryRings, drawing whichever of the
@@ -4170,11 +4165,6 @@ async function renderActiveSimulationRoutes({ fadeIn = true, flySeconds = 0 } = 
     gMap,
     mapLayers,
     drawPins: syncRoutePinMarkers,
-    fitOptions: getMapFitPadding(),
-    fitPoints: [getReadyPin('start'), getReadyPin('end')].filter(Boolean),
-    // Earthquake results fit once below, around the hazard extent too.
-    fit: !isEarthquakeResult,
-    flySeconds,
     fadeIn,
     buildEtaLabel: buildRouteEtaLabel,
     afterDrawPins: isEarthquakeResult
@@ -4195,33 +4185,24 @@ async function renderActiveSimulationRoutes({ fadeIn = true, flySeconds = 0 } = 
       activeView: activeEarthquakeView,
     });
     window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: true, hazardLayers: simData.hazard_layers });
-    fitEarthquakeMapScope({ includeHazards: true, flySeconds });
   } else {
     await syncFloodHazardOverlay(selectedBarangay);
   }
+  refitMapToCurrentRoute({ flySeconds });
 }
 
 // Fits the map to the flood evacuation sites and the pins set so far.
-function fitMapToFloodEvacSites() {
-  if (!gMap || !floodEvacSites.length) return;
+function fitMapToFloodEvacSites(options = {}) {
+  if (!gMap || !floodEvacSites.length) return false;
   const bounds = L.latLngBounds([]);
   floodEvacSites.forEach(site => extendBoundsWithLngLat(bounds, site.lng, site.lat));
   PIN_ROLES.forEach(role => {
     const pin = getReadyPin(role);
     if (pin) extendBoundsWithLngLat(bounds, pin.lng, pin.lat);
   });
-  if (!bounds.isValid()) return;
+  if (!bounds.isValid()) return false;
 
-  const padding = getMapFitPadding(52);
-  // The sites spread to the barangay's edges, where the phone's zoom and
-  // locate buttons would cover one; keep them clear of those too.
-  const controls = document.getElementById('msimMapControls');
-  if (padding.paddingBottomRight && controls?.getClientRects().length && getComputedStyle(controls).visibility !== 'hidden') {
-    const mapRight = document.getElementById('map').getBoundingClientRect().right;
-    const right = mapRight - controls.getBoundingClientRect().left + 32;
-    padding.paddingBottomRight = [Math.max(padding.paddingBottomRight[0], right), padding.paddingBottomRight[1]];
-  }
-  gMap.fitBounds(bounds, mapMoveOptions({ ...padding, maxZoom: PIN_PLACEMENT_ZOOM }));
+  return fitMapBounds(bounds, options);
 }
 
 // The destination menu's "Show the evacuation sites" (flood): the destination
@@ -4633,11 +4614,7 @@ function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
   const controller = activeReplayController;
   if (!gMap || !controller || controller.isDone()) return;
   const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds() : controller.getSearchBounds();
-  const padding = getReplayFitPadding();
-  if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return;
-  const fitOptions = { ...padding, maxZoom: PIN_PLACEMENT_ZOOM };
-  if (flySeconds) gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration: flySeconds }));
-  else gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
+  fitMapBounds(bounds, { padding: getReplayFitPadding(), onlyIfOutOfView, flySeconds });
 }
 
 // The phone sheet snapped to another height (mobile-sim.js): the picked or
@@ -4650,18 +4627,6 @@ function refitMapAfterSheetSnap() {
   if (activeReplayController && !activeReplayController.isDone()) {
     // While walking, the camera eases the walker to its new focus point.
     if (!activeReplayController.isWalking()) fitReplaySearch({ flySeconds: SHEET_REFIT_FLY_SECONDS, onlyIfOutOfView: true });
-    return;
-  }
-  const focusedGroup = selectedRouteFocus
-    ? (mapLayers.routeGroups || []).find(group => Number(group.routeNo) === Number(selectedRouteFocus.routeNo))
-    : null;
-  const focusedPath = getRoutePreviewPath(focusedGroup);
-  if (focusedPath.length > 1) {
-    const bounds = L.latLngBounds(focusedPath);
-    const padding = getMapFitPadding();
-    if (!boundsFitInView(bounds, padding)) {
-      gMap.flyToBounds(bounds, mapMoveOptions({ ...padding, duration: SHEET_REFIT_FLY_SECONDS }));
-    }
     return;
   }
   refitMapToCurrentRoute({ onlyIfOutOfView: true, flySeconds: SHEET_REFIT_FLY_SECONDS });
@@ -5407,7 +5372,7 @@ function closeRouteListModal() {
 
 function focusRouteFromModal(routeNo, category) {
   closeRouteListModal();
-  window.toggleRouteFocus(routeNo, category, false);
+  window.toggleRouteFocus(routeNo, category);
 }
 
 // Delegated so route data-attributes don't need inline handler interpolation;
@@ -5421,7 +5386,7 @@ document.addEventListener('click', event => {
   if (trigger.closest('#routeListModal')) {
     focusRouteFromModal(routeNo, trigger.dataset.focusCategory || '');
   } else {
-    window.toggleRouteFocus(routeNo, trigger.dataset.focusCategory || '', false);
+    window.toggleRouteFocus(routeNo, trigger.dataset.focusCategory || '', !trigger.closest('#msimRouteList'));
   }
 });
 
@@ -6311,10 +6276,14 @@ async function checkBackend() {
 
 // Route focus, shared by the route safety panel, the route list and the map
 // polylines (osm.js). Clicking the focused route again clears the focus.
-window.toggleRouteFocus = function toggleRouteFocus(routeNo, category) {
+window.toggleRouteFocus = function toggleRouteFocus(routeNo, category, fit = true) {
   const shouldClear = selectedRouteFocus && selectedRouteFocus.routeNo === routeNo;
   selectedRouteFocus = shouldClear ? null : { routeNo, category };
   applyRouteFocusState(shouldClear ? null : routeNo);
+  if (fit) {
+    window.mobileSim?.resumeAutoFit();
+    refitMapToCurrentRoute({ flySeconds: SHEET_REFIT_FLY_SECONDS });
+  }
 };
 
 // A click anywhere outside a pin input closes its menu.

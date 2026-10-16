@@ -231,7 +231,13 @@
   function measurePeek() {
     const end = getPeekEnd();
     if (!end || !end.getClientRects().length) return 0;
-    const bottom = end.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top + scroller.scrollTop;
+    // The next block keeps the actions' normal flow position when those
+    // buttons stick above a short phone's scrollable result.
+    const following = state.mode === 'results' ? end.nextElementSibling : null;
+    const endBottom = following
+      ? following.getBoundingClientRect().top - (parseFloat(getComputedStyle(following).marginTop) || 0)
+      : end.getBoundingClientRect().bottom;
+    const bottom = endBottom - sheet.getBoundingClientRect().top + scroller.scrollTop;
     const paddingBottom = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
     return Math.ceil(bottom + PEEK_BOTTOM_GAP + paddingBottom);
   }
@@ -254,6 +260,11 @@
     sheet.dataset.snap = state.snap;
     const full = Math.max(160, Math.round(viewport.height - getTopBarBottom() - FULL_SHEET_TOP_GAP));
     let peek = Math.min(full, measurePeek() || 200);
+    // Long risk guidance on a short phone must leave a usable map. The
+    // result can scroll here or expand with the handle for all its details.
+    if (state.mode === 'results') {
+      peek = Math.min(peek, Math.max(160, viewport.height - getTopBarBottom() - CONTROLS_MIN_ROOM));
+    }
     if (state.mode === 'replay') {
       // Measured folded only, and never shrinking while the replay plays.
       if (state.snap === 'peek' || !state.replayPeek) state.replayPeek = Math.max(state.replayPeek, peek);
@@ -265,6 +276,10 @@
     const target = state.drag ? null : state.snaps[state.snap];
     if (target != null && Math.abs(target - state.height) > 1) {
       applyHeight(target, { animate: state.height > 0 });
+      if (state.mode === 'results' && getMapRoom() >= CONTROLS_MIN_ROOM
+          && mapLayers.routeGroups.some(group => simData?.routes?.includes(group.route))) {
+        window.refitMapAfterSheetSnap?.();
+      }
     } else {
       syncChrome();
     }
@@ -530,6 +545,7 @@
     }
     if (state.mode === 'results' && !simData) state.mode = 'setup';
     if (state.mode === 'replay' && !$('msimReplay').firstElementChild) state.mode = simData ? 'results' : 'setup';
+    sheet.dataset.mode = state.mode;
 
     $('msimSetup').hidden = state.mode !== 'setup';
     $('msimReplay').hidden = state.mode !== 'replay';
@@ -552,7 +568,9 @@
   function syncMapButtons() {
     const held = isMapGestureLocked();
     const fit = $('msimRecenterBtn');
-    const fitLabel = state.mode === 'setup' ? 'Show the whole barangay' : 'Show the whole route';
+    const fitLabel = state.mode === 'setup'
+      ? areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Show evacuation sites' : 'Show the whole barangay'
+      : 'Show the whole route';
     fit.disabled = held;
     fit.setAttribute('aria-label', fitLabel);
     fit.title = fitLabel;
@@ -940,7 +958,10 @@
     $('msimSource').innerHTML = [antNote && escapeHtml(antNote), buildHazardSourceNoteHtml(isEarthquake)]
       .filter(Boolean)
       .join(' ');
-    scheduleSync();
+    // Lens changes fit the map immediately after rendering the result.
+    // Measure its new guidance before that fit reads the sheet's insets.
+    if (state.mode === 'results' && isActive()) syncNow();
+    else scheduleSync();
   }
 
   function clearResults() {
@@ -1094,7 +1115,7 @@
 
     setPinPlacementRole(role);
     snapTo('peek');
-    if (pin) centerUnderPin(L.latLng(pin.lat, pin.lng), Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM));
+    if (pin) centerUnderPin(L.latLng(pin.lat, pin.lng), PIN_PLACEMENT_ZOOM);
   }
 
   // The destination slot's button: Cancel while its pin is being set,
@@ -1173,7 +1194,7 @@
       moveTo: latlng => {
         // The visitor asked for this view; a sheet snap must not undo it.
         pauseAutoFit();
-        centerUnderPin(latlng, Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM), { fly: true });
+        centerUnderPin(latlng, PIN_PLACEMENT_ZOOM, { fly: true });
       },
       onFound: () => showToast('Showing your location'),
     });
@@ -1396,14 +1417,11 @@
   // sheet to half and fit the map to the picked route.
   document.addEventListener('click', event => {
     const row = event.target.closest?.('#msimRouteList .mroute[data-focus-route]');
-    if (!row || !isActive() || !selectedRouteFocus || !gMap) return;
+    if (!row || !isActive() || !gMap) return;
 
     snapTo('half');
-    const group = (mapLayers.routeGroups || []).find(item => Number(item.routeNo) === Number(selectedRouteFocus.routeNo));
-    const path = getRoutePreviewPath(group);
-    if (path.length > 1) {
-      gMap.fitBounds(L.latLngBounds(path), mapMoveOptions(getMapFitPadding()));
-    }
+    window.mobileSim.resumeAutoFit();
+    refitMapToCurrentRoute();
     revealInSheet(row);
   });
 

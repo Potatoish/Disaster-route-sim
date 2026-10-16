@@ -3637,9 +3637,17 @@ body.dark .leaflet-popup-close-button {
   padding: 0 14px 16px;
 }
 
+.msheet[data-mode="results"][data-snap="peek"] .msheet-scroll,
 .msheet[data-snap="half"] .msheet-scroll,
 .msheet[data-snap="full"] .msheet-scroll {
   overflow-y: auto;
+}
+
+.msheet[data-mode="results"][data-snap="peek"] #msimResultActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--surface);
 }
 
 [data-sheet-drag] {

@@ -543,21 +543,12 @@ function getRoutesOffMap(routes) {
 }
 
 // Draws every route (eliminated -> available -> best, so "best" paints on
-// top) and fits the map to the best one. fitOptions are Leaflet fitBounds
-// options -- script.js passes padding that keeps clear of its map overlays.
+// top). The caller fits the view after its overlays and panels are ready.
 async function renderRoutesOnRoads({
   routes,
   gMap,
   mapLayers,
   drawPins,
-  fitOptions = { padding: [36, 36] },
-  fitPoints = [],
-  // false: the caller fits the map itself (earthquake mode fits once, to
-  // the route, the pin and the hazard extent together).
-  fit = true,
-  // A replay already showed the route; glide to the results' new padding
-  // instead of snapping when its panels change size.
-  flySeconds = 0,
   buildEtaLabel = null,
   afterDrawPins = null,
   // false: Route 1 is already on the map (after a replay), so the lines
@@ -609,23 +600,6 @@ async function renderRoutesOnRoads({
     if (poly) {
       mapLayers.routeGroups.push(routeGroup);
       attachRouteClick(poly, route);
-    }
-  }
-
-  const defaultCoords = getRoutePoints(bestRoute);
-
-  if (fit && defaultCoords.length) {
-    // A pin off the street stands apart from the line, so the fit takes in
-    // the pins (fitPoints) and the destination as well as the route.
-    const pinCoords = normalizePathCoordinates([
-      ...fitPoints,
-      { lat: bestRoute?.destination_lat, lng: bestRoute?.destination_lng },
-    ]);
-    const bounds = L.latLngBounds([...defaultCoords, ...pinCoords]);
-    if (flySeconds) {
-      gMap.flyToBounds(bounds, mapMoveOptions({ ...fitOptions, duration: flySeconds }));
-    } else {
-      gMap.fitBounds(bounds, mapMoveOptions(fitOptions));
     }
   }
 
