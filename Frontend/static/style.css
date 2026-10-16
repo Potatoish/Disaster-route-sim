@@ -1,8 +1,4 @@
 :root {
-  --font-body: 'Plus Jakarta Sans', 'Nunito', sans-serif;
-  --font-heading: 'Rajdhani', sans-serif;
-  --font-meta: 'DM Mono', monospace;
-
   --page-top:    #f6f9fd;
   --page-bottom: #d7e2ee;
   --glow-a:      rgba(29, 78, 216, .14);
@@ -3749,10 +3745,8 @@ body.dark .leaflet-popup-close-button {
 }
 
 .mslot--end .mslot-badge { background: #9333ea; }
-.mslot--evac .mslot-badge { background: #d97706; }
 /* Flood evacuation sites are blue on the map (flood.js), also as the End
    slot's default (mobile-sim.js syncPinSlot). */
-.mslot--evac.mslot--flood .mslot-badge,
 .mslot--end.mslot--to-evac .mslot-badge { background: #2563eb; }
 
 .mslot-badge svg {
@@ -4176,6 +4170,14 @@ body.dark .leaflet-popup-close-button {
 }
 
 /* Results details (half / full). */
+.msheet-safety-details {
+  margin-bottom: 16px;
+}
+
+.msheet-safety-details .safety-card-action {
+  min-height: 44px;
+}
+
 .mhotlines {
   display: flex;
   align-items: center;
@@ -5790,6 +5792,6 @@ body.dark .aco-legend-stuck {
 
 /* Except in the phone/tablet sheet: its lines are too short to justify
    without wide gaps between the words. */
-.msheet :is(.msheet-help, .mverdict-sub, .msummary-far, .msheet-source, .maccordion p, .aco-step-detail, .aco-replay-meta) {
+.msheet :is(.msheet-help, .mverdict-sub, .msummary-far, .msheet-source, .safety-action-detail, .maccordion p, .aco-step-detail, .aco-replay-meta) {
   text-align: left;
 }

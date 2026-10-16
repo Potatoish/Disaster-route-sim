@@ -139,8 +139,8 @@ const HAZARD_THEME_PALETTES = {
       '--accent': '#0284c7',
       '--accent2': '#38bdf8',
       '--text': '#153247',
-      '--muted': '#5e778e',
-      '--dim': '#87a3bb',
+      '--muted': '#4e6980',
+      '--dim': '#526d84',
       '--ink-strong': '#14384f',
       '--ink-soft': '#4e6980',
       '--map-ui-bg': '#f4fbff',
@@ -181,7 +181,7 @@ const HAZARD_THEME_PALETTES = {
       '--accent2': '#7dd3fc',
       '--text': '#eaf6fe',
       '--muted': '#94b1c6',
-      '--dim': '#62829d',
+      '--dim': '#90adc4',
       '--ink-strong': '#f0f8ff',
       '--ink-soft': '#c8dceb',
       '--map-ui-bg': '#0c1a28',
@@ -224,7 +224,7 @@ const HAZARD_THEME_PALETTES = {
       '--accent2': '#f59e0b',
       '--text': '#35261c',
       '--muted': '#786559',
-      '--dim': '#a28b7c',
+      '--dim': '#7c6657',
       '--ink-strong': '#3f2b1f',
       '--ink-soft': '#6f5a4d',
       '--map-ui-bg': '#fffaf5',
@@ -265,7 +265,7 @@ const HAZARD_THEME_PALETTES = {
       '--accent2': '#fdba74',
       '--text': '#f7ede2',
       '--muted': '#d6b9a2',
-      '--dim': '#8f6d57',
+      '--dim': '#bc9d86',
       '--ink-strong': '#fff4ea',
       '--ink-soft': '#e5c7b0',
       '--map-ui-bg': '#24160f',
@@ -334,12 +334,13 @@ let barangayBoundaryRings = [];
 // Runs `update` inside a same-page view transition (a quick cross-fade of
 // what it changes) where supported and motion is welcome; otherwise as is.
 function withViewTransition(update) {
-  if (typeof document.startViewTransition !== 'function' || prefersReducedMotion()) {
+  if (typeof document.startViewTransition !== 'function' || prefersReducedMotion()
+      || window.agnasUI?.constrained || window.matchMedia('(pointer: coarse)').matches) {
     update();
     return;
   }
   try {
-    document.startViewTransition(update);
+    document.startViewTransition(update).finished.catch(() => {});
   } catch (err) {
     update();
   }
@@ -489,9 +490,7 @@ function openEmergencyContactModal(event) {
 
   modal.classList.remove('is-closing');
   modal.hidden = false;
-  window.requestAnimationFrame(() => {
-    modal.querySelector('.emergency-modal-close')?.focus({ preventScroll: true });
-  });
+  window.modalFocus?.enter(modal, modal.querySelector('.emergency-modal-close'));
 }
 
 // Hides a dialog after its exit animation (style.css: .is-closing on the
@@ -499,6 +498,7 @@ function openEmergencyContactModal(event) {
 // mid-exit just drops .is-closing.
 function closeModalAnimated(modal, panelSelector) {
   if (!modal || modal.hidden || modal.classList.contains('is-closing')) return;
+  window.modalFocus?.restore(modal);
   const panel = modal.querySelector(panelSelector) || modal;
   const finish = () => {
     if (!modal.classList.contains('is-closing')) return;
@@ -1019,7 +1019,10 @@ function resetLoaderState() {
 
 // Rows of tiles Leaflet keeps loaded past each edge of the view (its default
 // is 2), so panning or a panel closing reveals tiles that are already there.
-const MAP_TILE_KEEP_BUFFER = 4;
+// The coarse underlay already covers a fast pan; a smaller retained tile
+// margin avoids keeping dozens of decoded images alive on phones.
+const MAP_TILE_KEEP_BUFFER = window.agnasUI?.constrained
+  || window.matchMedia('(pointer: coarse)').matches ? 1 : 2;
 const MAP_TILE_MAX_RETRIES = 3;
 
 // Leaflet never re-requests a tile that failed (a dropped connection or the
@@ -1911,10 +1914,7 @@ function describeAreaWideHighRisk(route, barangay = selectedBarangay) {
 }
 
 function describeLeastExposedRoute(route) {
-  const destination = route?.destination_name ? ` to ${route.destination_name}` : '';
-  // A site named for its street ("Sandoval Ave.") already ends the sentence.
-  const end = destination.endsWith('.') ? '' : '.';
-  return `Route ${route?.display_route_no ?? 1} is the least exposed way${destination}${end} Once the shaking stops, watch for falling debris and damaged buildings on the way.`;
+  return `Route ${route?.display_route_no ?? 1} has the least hazard exposure among the routes found.`;
 }
 
 // Past about a 12-minute walk (5 km/h), the open area a run suggests is too
@@ -1965,7 +1965,7 @@ const MEDIUM_FLOOD_WARNING = 'Not safe for children, older adults, PWDs, pregnan
 const NO_SAFE_ROUTE_ACTIONS = {
   flood: {
     title: "Don't walk. Call for rescue.",
-    detail: 'In this flood, every route crosses water over 1.5 m deep. Stay somewhere high and dry, and contact your barangay or the Pasig City DRRMO for rescue.',
+    detail: 'Stay somewhere high and dry, and contact your barangay or the Pasig City DRRMO for rescue.',
   },
   earthquake: {
     title: 'Walk with care once the shaking stops.',
@@ -1992,17 +1992,15 @@ function describeMediumFloodCrossing(route) {
 // meters like the route rows ("485 m unsafe"), not a count of road pieces:
 // one street can be one piece or eight, depending on how OpenStreetMap
 // splits it.
-// A flood route ends there (the "What to do" card says not to walk it); an
-// earthquake one adds how to walk it.
+// Describes exposure only; the "What to do" card holds the instructions.
 function describeUnsafeCrossing(route) {
   const unsafe = Number(route?.unsafe_distance) || 0;
   const total = Number(route?.distance) || 0;
   const name = `Route ${route?.display_route_no ?? 1}`;
-  const advice = isEarthquakeRouteRecord(route) ? ` ${NO_SAFE_ROUTE_ACTIONS.earthquake.title}` : '';
-  if (unsafe <= 0) return `${name} still passes through a high-hazard area.${advice}`;
+  if (unsafe <= 0) return `${name} still passes through a high-hazard area.`;
   return total > 0 && unsafe >= total * 0.98
-    ? `All of ${name} (${formatDistanceCompact(total)}) is in a high-hazard area.${advice}`
-    : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area.${advice}`;
+    ? `All of ${name} (${formatDistanceCompact(total)}) is in a high-hazard area.`
+    : `${name} still crosses about ${formatDistanceCompact(unsafe)} of high-hazard area.`;
 }
 
 const EARTHQUAKE_LAYER_NAMES = {
@@ -5168,6 +5166,31 @@ const SAFETY_DISCLAIMER_TEXT = 'This site offers disaster planning information, 
   + 'always follow the instructions of local authorities. Rely on this content at your own '
   + 'risk; we assume no liability for any loss or damage.';
 
+// Shared by desktop and mobile, so safety content and its styling stay in sync.
+function buildSafetyActionCard(action, routeText = '') {
+  if (!action) return '';
+  return `<div class="safety-result-card danger safety-action-card">
+    <div class="safety-icon-box">${safetyIcon('phone')}</div>
+    <div>
+      <div class="safety-card-label">What to do</div>
+      <div class="safety-card-value">${escapeHtml(action.title)}</div>
+      <p class="safety-card-sub safety-action-detail">${escapeHtml(action.detail)}</p>
+      ${routeText ? `<div class="safety-card-sub">${escapeHtml(routeText)}</div>` : ''}
+      <button class="safety-card-action" type="button" onclick="openEmergencyContactModal(event)">${safetyIcon('phone')}Emergency hotlines</button>
+    </div>
+  </div>`;
+}
+
+function buildSafetyHazardCard(peak, peakScore, isEarthquake) {
+  const peakClass = peakScore >= (isEarthquake ? 4 : 5) ? 'danger' : peakScore >= 3 ? 'warning' : '';
+  return `<div class="safety-result-card ${peakClass}">
+    <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
+    <div><div class="safety-card-label">${escapeHtml(peak.label)}</div>${peak.items
+      ? `<ul class="safety-hazard-list">${peak.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong class="is-${item.level.toLowerCase()}">${escapeHtml([item.level, item.extent].filter(Boolean).join(' · '))}</strong></li>`).join('')}</ul>`
+      : `<div class="safety-card-value">${escapeHtml(peak.value)}</div>${peak.detail ? `<div class="safety-card-sub">${escapeHtml(peak.detail)}</div>` : ''}`}</div>
+  </div>`;
+}
+
 function renderRouteSafetyPanel(result) {
   const routes = Array.isArray(result?.routes) ? result.routes : [];
   const content = document.getElementById('routeSafetyContent');
@@ -5189,10 +5212,6 @@ function renderRouteSafetyPanel(result) {
 
   const peakScore = Number(best?.max_hazard || 0);
   const peak = getPeakRiskRow(best, isEarthquake);
-  // Danger/red once it's actually High; amber/warning for Medium; neutral for
-  // Low. "High" starts at 4 for earthquake (getRiskLevelLabelFromScore) and
-  // at 5 for flood (High water).
-  const peakClass = peakScore >= (isEarthquake ? 4 : 5) ? 'danger' : peakScore >= 3 ? 'warning' : '';
   const bestDistanceText = [best?.display_distance || 'Unavailable', best?.display_duration && `${best.display_duration} walk`]
     .filter(Boolean)
     .join(' · ');
@@ -5203,17 +5222,7 @@ function renderRouteSafetyPanel(result) {
   // earthquake route is still walked, so its distance stays in the card.
   // Its Emergency hotlines button replaces the one under the disclaimer.
   const routeCardMarkup = action
-    ? `
-      <div class="safety-result-card danger safety-action-card">
-        <div class="safety-icon-box">${safetyIcon('phone')}</div>
-        <div>
-          <div class="safety-card-label">What to do</div>
-          <div class="safety-card-value">${escapeHtml(action.title)}</div>
-          <p class="safety-card-sub safety-action-detail">${escapeHtml(action.detail)}</p>
-          ${isEarthquake ? `<div class="safety-card-sub">${escapeHtml(`Route ${bestRouteNo}: ${bestDistanceText}`)}</div>` : ''}
-          <button class="safety-card-action" type="button" onclick="openEmergencyContactModal(event)">${safetyIcon('phone')}Emergency hotlines</button>
-        </div>
-      </div>`
+    ? buildSafetyActionCard(action, isEarthquake ? `Route ${bestRouteNo}: ${bestDistanceText}` : '')
     : `
       <div class="safety-result-card">
         <div class="safety-icon-box">${safetyIcon('ruler')}</div>
@@ -5302,12 +5311,7 @@ function renderRouteSafetyPanel(result) {
         <div><div class="safety-card-label">Overall verdict</div><div class="safety-card-value">${escapeHtml(verdict.title)}</div></div>
       </div>
       ${routeCardMarkup}
-      <div class="safety-result-card ${peakClass}">
-        <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
-        <div><div class="safety-card-label">${escapeHtml(peak.label)}</div>${peak.items
-          ? `<ul class="safety-hazard-list">${peak.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong class="is-${item.level.toLowerCase()}">${escapeHtml([item.level, item.extent].filter(Boolean).join(' · '))}</strong></li>`).join('')}</ul>`
-          : `<div class="safety-card-value">${escapeHtml(peak.value)}</div>${peak.detail ? `<div class="safety-card-sub">${escapeHtml(peak.detail)}</div>` : ''}`}</div>
-      </div>
+      ${buildSafetyHazardCard(peak, peakScore, isEarthquake)}
     </div>
     <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
@@ -5387,7 +5391,7 @@ function openRouteListModal() {
   routeListModalReturnFocus = document.activeElement;
   modal.classList.remove('is-closing');
   modal.hidden = false;
-  modal.querySelector('.modal-close-btn')?.focus({ preventScroll: true });
+  window.modalFocus?.enter(modal, modal.querySelector('.modal-close-btn'));
 }
 
 function closeRouteListModal() {
@@ -5521,7 +5525,7 @@ function syncRoutePreview(group, enabled) {
 }
 
 // Leaflet paths have no zIndex option; bringRouteGroupToFront() (called only
-// for the focused route, below) handles the dynamic re-stacking.
+// for the focused route, below) handles the visual re-stacking.
 function applyRouteGroupVisual(group, visual) {
   if (!group) return;
 
@@ -5562,7 +5566,7 @@ function bringRouteGroupToFront(group) {
   if (group.casingLayer) group.casingLayer.bringToFront();
   if (group.haloLayer) group.haloLayer.bringToFront();
   if (group.mainLayer) group.mainLayer.bringToFront();
-  if (group.hitLayer) group.hitLayer.bringToFront();
+  if (group.previewDotsLayer) group.previewDotsLayer.bringToFront();
 }
 
 function applyRouteFocusState(routeNo) {
@@ -5583,14 +5587,15 @@ function applyRouteFocusState(routeNo) {
     // A picked route shows its whole path, shared roads included.
     showRouteGroupFullPath(group, isFocused);
     applyRouteGroupVisual(group, visual);
-    if (isFocused) {
-      bringRouteGroupToFront(group);
-    }
     syncRoutePreview(group, isFocused);
   });
-  // With nothing picked, the routes go back to their usual stacking, best on
-  // top: a route picked and then let go would otherwise stay over the rest.
-  if (!hasFocus) stackRouteGroups(groups.filter(group => gMap.hasLayer(group.mainLayer)));
+  // Keep shared-road click targets in their usual priority, best first. A
+  // picked alternate's full hit area must not cover Route 1's target. Restore
+  // this order even when a normally hidden route has just been added, then
+  // lift only the focused route's non-interactive lines above the others.
+  const shownGroups = groups.filter(group => gMap.hasLayer(group.mainLayer));
+  stackRouteGroups(shownGroups);
+  bringRouteGroupToFront(shownGroups.find(group => hasFocus && group.routeNo === routeNo));
   window.mobileSim?.syncRouteRows();
 }
 
@@ -5984,9 +5989,38 @@ async function getReportHazardLayer(isEq) {
   }
 }
 
+let reportLibraryPromise = null;
+let reportInProgress = false;
+
+function loadReportLibrary() {
+  if (window.jspdf?.jsPDF) return Promise.resolve();
+  if (reportLibraryPromise) return reportLibraryPromise;
+  reportLibraryPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    script.async = true;
+    const timeout = setTimeout(() => fail(), 15000);
+    const cleanup = () => { clearTimeout(timeout); script.onload = script.onerror = null; };
+    const fail = () => {
+      cleanup();
+      script.remove();
+      reject(new Error('The report generator could not load. Check your connection and try again.'));
+    };
+    script.onload = () => {
+      if (!window.jspdf?.jsPDF) { fail(); return; }
+      cleanup();
+      resolve();
+    };
+    script.onerror = fail;
+    document.head.appendChild(script);
+  }).catch(error => { reportLibraryPromise = null; throw error; });
+  return reportLibraryPromise;
+}
+
 async function downloadSimulationReport() {
   const routes = getCurrentDisplayRoutes();
-  if (!routes.length) return;
+  if (!routes.length || reportInProgress) return;
+  reportInProgress = true;
 
   const btn = document.getElementById('safetyDownloadBtn');
   const originalLabel = btn?.innerHTML;
@@ -5996,9 +6030,7 @@ async function downloadSimulationReport() {
   }
 
   try {
-    if (!window.jspdf) {
-      throw new Error('The report generator failed to load. Check your internet connection and try again.');
-    }
+    await loadReportLibrary();
 
     const best = getBestRoute(routes);
     const countTier = tier => routes.filter(route => getRouteSafetyTier(route) === tier).length;
@@ -6205,6 +6237,7 @@ async function downloadSimulationReport() {
     console.error(err);
     alert('Could not generate the report: ' + err.message);
   } finally {
+    reportInProgress = false;
     if (btn) {
       btn.disabled = false;
       if (originalLabel) btn.innerHTML = originalLabel;

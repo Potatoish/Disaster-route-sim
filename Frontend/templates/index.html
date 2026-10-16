@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <meta name="format-detection" content="telephone=no"/>
-  <title>AGNAS</title>
+  <title>Route simulator · AGNAS</title>
   <meta name="description" content="Plan safer walking evacuation routes for flood and earthquake scenarios in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City.">
   {# The phone browser's toolbar color; the theme script below swaps it. #}
   <meta name="theme-color" content="#f6f9fd">
@@ -19,15 +19,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://tile.openstreetmap.org">
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Nunito:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   {# Leaflet 1.9.4, served locally (unmodified, BSD-2 licence alongside) so
      the map never depends on a CDN. #}
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ui.css') }}">
 </head>
-<body>
+<body class="sim-page">
 {# Same theme pick as site_base.html: the visitor's choice, else the device's. #}
 <script>
   (function () {
@@ -454,8 +455,10 @@
             </div>
 
             <div class="msheet-details">
-              {# First in the details, so starting over or saving the report
-                 needs no scrolling; the hotlines close the sheet instead. #}
+              {# Keep the desktop's action guidance and hazard breakdown in
+                 the mobile results too, before the route list. #}
+              <div class="safety-result-cards msheet-safety-details" id="msimSafetyDetails"></div>
+
               <div class="msheet-actions" id="msimDetailActions">
                 <button class="mbtn" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
                 <button class="mbtn" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download PDF</button>
@@ -469,7 +472,7 @@
               <button class="mroutes-more" id="msimRoutesMore" type="button" onclick="toggleMobileMoreRoutes()" aria-controls="msimRouteList" aria-expanded="false" hidden></button>
               <p class="msheet-source" id="msimSource"></p>
 
-              <details class="maccordion" id="msimDisclaimer">
+              <details class="maccordion" id="msimDisclaimer" open>
                 <summary>
                   Disclaimer
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -633,10 +636,8 @@
 
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 
-{# jsPDF, only for the PDF report (downloadSimulationReport); from a CDN since
-   it fails softly. #}
-<script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
+{# The PDF library downloads only when a report is requested. #}
+<script src="{{ url_for('static', filename='ui.js') }}"></script>
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>

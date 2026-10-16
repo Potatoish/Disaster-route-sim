@@ -3,10 +3,6 @@ html{ scroll-behavior:smooth; }
 @media (prefers-reduced-motion: reduce){ html{ scroll-behavior:auto; } }
 
 :root{
-  --font-heading:'Rajdhani',sans-serif;
-  --font-body:'Plus Jakarta Sans','Nunito',sans-serif;
-  --font-meta:'DM Mono',monospace;
-
   --page-top:#f6f9fd; --page-bottom:#d7e2ee;
   --bg:#d8e2ee; --surface:#eaf0f7; --panel:#f7faff; --panel-strong:#eef3fa;
   --border:#bfcbda; --border2:#a9b8cb;

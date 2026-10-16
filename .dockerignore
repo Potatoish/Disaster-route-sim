@@ -6,4 +6,6 @@
 **/*.py[cod]
 **/*.log
 Backend/cache
-Backend/tools/evaluation_results
+# Research tools and README images are not needed by the running website.
+Backend/tools/
+Frontend/static/assets/screenshots/

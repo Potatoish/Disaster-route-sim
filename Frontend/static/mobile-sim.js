@@ -38,7 +38,6 @@
   // A second tap inside this window is a double-tap zoom, not a pin move.
   const MAP_TAP_DELAY_MS = 260;
   const TOAST_MS = 2200;
-  const DISCLAIMER_SEEN_KEY = 'agnas-disclaimer-seen';
   const SNAP_ORDER = ['peek', 'half', 'full'];
   // The replay only folds and unfolds: its steps fit in half the screen.
   const REPLAY_SNAP_ORDER = ['peek', 'half'];
@@ -869,6 +868,13 @@
     </li>`;
   }
 
+  // Uses the desktop panel's data helpers and card styles so the mobile
+  // layout preserves its full safety guidance and per-hazard distances.
+  function renderSafetyDetails(route, peak, action, isEarthquake) {
+    $('msimSafetyDetails').innerHTML = buildSafetyActionCard(action)
+      + buildSafetyHazardCard(peak, Number(route?.max_hazard || 0), isEarthquake);
+  }
+
   // Called by renderRouteSafetyPanel (script.js) with the same result.
   function renderResults(result) {
     const routes = Array.isArray(result?.routes) ? result.routes : [];
@@ -905,6 +911,7 @@
     // first action; an earthquake route is still walked, with care. Either
     // way the summary row is the same: what the route is, then its risk.
     const action = getNoSafeRouteAction(best);
+    renderSafetyDetails(best, peak, action, isEarthquake);
     const showRescue = !!action && !isEarthquake;
     $('msimSummaryMain').innerHTML = showRescue
       ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong> · not walkable</span>`
@@ -937,6 +944,7 @@
   }
 
   function clearResults() {
+    $('msimSafetyDetails').innerHTML = '';
     $('msimRouteList').innerHTML = '';
     state.routesExpanded = false;
     syncMoreRoutes();
@@ -982,20 +990,6 @@
     syncMoreRoutes();
   }
 
-  function isDisclaimerSeen() {
-    try {
-      return sessionStorage.getItem(DISCLAIMER_SEEN_KEY) === '1';
-    } catch (err) {
-      return false;
-    }
-  }
-
-  function markDisclaimerSeen() {
-    try {
-      sessionStorage.setItem(DISCLAIMER_SEEN_KEY, '1');
-    } catch (err) {}
-  }
-
   // Each step starts at peek, with the legend folded and the camera the
   // app's: the results are fitted once even if the visitor moved the map
   // mid-replay.
@@ -1012,13 +1006,9 @@
   function showResults() {
     if (!simData) return;
     enterMode('results');
-    syncNow();
-
     const disclaimer = $('msimDisclaimer');
-    if (disclaimer && !isDisclaimerSeen()) {
-      disclaimer.open = true;
-      markDisclaimerSeen();
-    }
+    if (disclaimer) disclaimer.open = true;
+    syncNow();
     if (isActive()) $('msimVerdictTitle').focus({ preventScroll: true });
   }
 

@@ -36,7 +36,7 @@
   // than SLOW_FRAME_MS. Kept for the session: a slow device stays slow.
   const SLOW_FRAME_MS = 26;
   const quality = {
-    low: (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3,
+    low: !!window.agnasUI?.constrained || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4,
     frameAvg: 16.7,
     frames: 0,
   };
@@ -676,7 +676,7 @@
       const canvas = field('trace');
       const { w, h } = trace;
       if (!canvas || !w || !h) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, quality.low ? 1 : 1.5);
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
         canvas.width = Math.round(w * dpr);
         canvas.height = Math.round(h * dpr);
@@ -819,6 +819,14 @@
       state.raf = requestAnimationFrame(loop);
     }
 
+    function onVisibilityChange() {
+      cancelAnimationFrame(state.raf);
+      if (state.running && !document.hidden) {
+        state.last = performance.now();
+        state.raf = requestAnimationFrame(loop);
+      }
+    }
+
     function onKeyDown(event) {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (document.querySelector('[aria-modal="true"]:not([hidden])')) return;
@@ -910,6 +918,7 @@
       state.running = false;
       cancelAnimationFrame(state.raf);
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (state.layersOn) {
         state.t = Math.max(state.t, T.hold);
         if (!state.hit) {
@@ -940,6 +949,7 @@
         watchTrace();
         setWideView(true);
         document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('visibilitychange', onVisibilityChange);
         state.running = true;
         state.last = performance.now();
         frame(0);

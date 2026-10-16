@@ -1,6 +1,6 @@
 {% extends "site_base.html" %}
 
-{% block title %}AGNAS{% endblock %}
+{% block title %}About AGNAS · Evacuation route planning{% endblock %}
 
 {% block content %}
 <main id="main" tabindex="-1">
@@ -70,6 +70,7 @@
           <div class="form-row"><label for="cMsg">Message</label><textarea id="cMsg" name="message" rows="4" placeholder="Data request, question, or feedback" maxlength="5000" required></textarea></div>
           <div class="hp-field" aria-hidden="true"><label for="cWebsite">Website</label><input id="cWebsite" type="text" tabindex="-1" autocomplete="off"></div>
           <p class="form-error" id="contactError" role="alert" hidden></p>
+          <p class="form-status" id="contactStatus" role="status" hidden></p>
           <button type="submit" class="cta full" id="cSend">Send message</button>
           <p class="contact-note">We typically reply within 2–3 business days. AGNAS isn't a live service wired directly to real-time hazard feeds, so the site doesn't need round-the-clock monitoring.</p>
         </form>

@@ -50,16 +50,30 @@
   });
 
   const returnFocus = new WeakMap();
+  const inertBackground = new WeakMap();
 
   // Remembers what had focus, then focuses `target` (default: the dialog's
   // first control) once the dialog has rendered.
   function enter(dialog, target) {
     if (!dialog) return;
     if (!dialog.contains(document.activeElement)) returnFocus.set(dialog, document.activeElement);
+    if (dialog.getAttribute('aria-modal') === 'true' && !inertBackground.has(dialog)) {
+      const changed = [];
+      for (let node = dialog; node && node !== document.body; node = node.parentElement) {
+        Array.from(node.parentElement?.children || []).forEach(sibling => {
+          if (sibling === node || sibling.inert || /^(SCRIPT|STYLE|LINK)$/.test(sibling.tagName)) return;
+          sibling.inert = true;
+          changed.push(sibling);
+        });
+      }
+      inertBackground.set(dialog, changed);
+    }
     requestAnimationFrame(() => (target || focusables(dialog)[0])?.focus({ preventScroll: true }));
   }
 
   function restore(dialog) {
+    inertBackground.get(dialog)?.forEach(node => { node.inert = false; });
+    inertBackground.delete(dialog);
     const el = dialog && returnFocus.get(dialog);
     if (!el) return;
     returnFocus.delete(dialog);

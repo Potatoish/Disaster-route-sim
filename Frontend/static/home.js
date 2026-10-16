@@ -30,6 +30,7 @@ function getPreferredHomeTheme() {
 // Set by initAntCanvas() so a theme flip can refresh its cached colors
 // without going back to getComputedStyle() on every animation frame.
 let refreshAntCanvasColors = null;
+let homeThemeTransition = null;
 
 function applyHomeTheme(theme) {
   document.body.classList.toggle('dark', theme === 'dark');
@@ -71,15 +72,23 @@ function setHomeTheme(theme) {
 function switchHomeTheme(theme) {
   const unchanged = document.body.classList.contains('dark') === (theme === 'dark');
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (unchanged || reduced || typeof document.startViewTransition !== 'function') {
+  homeThemeTransition?.skipTransition();
+  if (unchanged || reduced || window.agnasUI?.constrained
+      || window.matchMedia('(pointer: coarse)').matches || typeof document.startViewTransition !== 'function') {
     applyHomeTheme(theme);
     return;
   }
   const root = document.documentElement;
   root.classList.add('theme-transition');
   try {
-    document.startViewTransition(() => applyHomeTheme(theme))
-      .finished.finally(() => root.classList.remove('theme-transition'));
+    const transition = document.startViewTransition(() => applyHomeTheme(theme));
+    homeThemeTransition = transition;
+    transition.finished.catch(() => {}).finally(() => {
+      if (homeThemeTransition === transition) {
+        homeThemeTransition = null;
+        root.classList.remove('theme-transition');
+      }
+    });
   } catch (err) {
     root.classList.remove('theme-transition');
     applyHomeTheme(theme);
@@ -101,12 +110,13 @@ function toggleFab(open = !fabOpen) {
   const button = document.getElementById('fabBtn');
   if (!panel) return;
   fabOpen = open;
+  panel.hidden = !fabOpen;
   panel.classList.toggle('open', fabOpen);
   button?.setAttribute('aria-expanded', String(fabOpen));
   if (fabOpen) {
-    requestAnimationFrame(() => panel.querySelector('button[data-v]')?.focus({ preventScroll: true }));
-  } else if (panel.contains(document.activeElement)) {
-    button?.focus({ preventScroll: true });
+    window.modalFocus?.enter(panel, panel.querySelector('button[data-v]'));
+  } else {
+    window.modalFocus?.restore(panel);
   }
 }
 
@@ -123,6 +133,7 @@ function setSending(button, sending) {
   if (!button) return;
   if (sending) button.dataset.label = button.textContent;
   button.disabled = sending;
+  button.setAttribute('aria-busy', String(sending));
   button.textContent = sending ? 'Sending…' : button.dataset.label;
 }
 
@@ -148,12 +159,20 @@ async function postHomeForm(path, body) {
     for (let attempt = 0; ; attempt += 1) {
       const wait = formTokenAt + FORM_MIN_WAIT_MS - Date.now();
       if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-      const res = await fetch(`${window.BACKEND_BASE}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, form_token: formToken }),
-      });
-      const data = await res.json().catch(() => ({}));
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      let res, data;
+      try {
+        res = await fetch(`${window.BACKEND_BASE}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, form_token: formToken }),
+          signal: controller.signal,
+        });
+        data = await res.json().catch(() => ({}));
+      } finally {
+        clearTimeout(timeout);
+      }
       if (res.ok && data.error === false) return { ok: true, message: data.message };
       if (data.code === 'form_expired' && attempt === 0) {
         await refreshFormToken();
@@ -170,32 +189,39 @@ async function sendFeedback() {
   const msg = document.getElementById('fabMsg');
   const role = document.getElementById('fabRole');
   const button = document.getElementById('fabSend');
+  if (!button || button.disabled) return;
+  const error = document.getElementById('fabError');
+  error.hidden = true;
   const rated = rateRow ? rateRow.querySelector('button[aria-pressed="true"]') : null;
   const comment = msg ? msg.value.trim() : '';
+  const submittedRole = role?.value || '';
   if (!rated && !comment) {
-    showHomeToast('Pick a rating or write a comment first.', 3500);
+    error.textContent = 'Pick a rating or write a comment first.';
+    error.hidden = false;
+    rateRow?.querySelector('button')?.focus();
     return;
   }
 
   setSending(button, true);
   const result = await postHomeForm('/feedback', {
     rating: rated ? Number(rated.dataset.v) : null,
-    role: role ? role.value : '',
+    role: submittedRole,
     comment,
     page: window.location.pathname,
     website: document.getElementById('fabWebsite')?.value || '',
   });
   setSending(button, false);
   if (!result.ok) {
-    showHomeToast(result.message, 4500);
+    error.textContent = result.message;
+    error.hidden = false;
     return;
   }
 
   if (fabOpen) toggleFab(false);
   showHomeToast(result.message || 'Thanks for the feedback!');
-  if (msg) msg.value = '';
-  if (role) role.value = '';
-  setRating(null);
+  if (msg?.value.trim() === comment) msg.value = '';
+  if (role?.value === submittedRole) role.value = '';
+  if (rateRow?.querySelector('button[aria-pressed="true"]') === rated) setRating(null);
 }
 
 const rateRow = document.getElementById('rateRow');
@@ -228,6 +254,8 @@ async function submitContactForm(event) {
   const msg = document.getElementById('cMsg');
   const button = document.getElementById('cSend');
   if (!name || !email || !msg || button?.disabled) return;
+  const status = document.getElementById('contactStatus');
+  if (status) status.hidden = true;
 
   const fields = [name, email, msg];
   fields.forEach((field) => field.removeAttribute('aria-invalid'));
@@ -247,22 +275,27 @@ async function submitContactForm(event) {
 
   setContactError(null);
   setSending(button, true);
-  const result = await postHomeForm('/contact', {
+  const submitted = {
     name: name.value.trim(),
     email: email.value.trim(),
     message: msg.value.trim(),
     website: document.getElementById('cWebsite')?.value || '',
-  });
+  };
+  const result = await postHomeForm('/contact', submitted);
   setSending(button, false);
   if (!result.ok) {
     setContactError(result.message);
     return;
   }
 
-  name.value = '';
-  email.value = '';
-  msg.value = '';
-  showHomeToast(result.message || "Message sent. We'll reply by email.", 3500);
+  // A slow response must not erase edits made after the request began.
+  if (name.value.trim() === submitted.name) name.value = '';
+  if (email.value.trim() === submitted.email) email.value = '';
+  if (msg.value.trim() === submitted.message) msg.value = '';
+  if (status) {
+    status.textContent = result.message || "Message sent. We'll reply by email.";
+    status.hidden = false;
+  }
 }
 
 // A field marked invalid is cleared as soon as the visitor fixes it.
@@ -347,6 +380,7 @@ const LEAFLET_JS_URL = '/static/vendor/leaflet/leaflet.js';
 let scopeMapInstance = null;
 let scopeLeafletPromise = null;
 let scopeBoundariesPromise = null;
+let scopeBoundaryLayer = null;
 
 function loadScopeLeaflet() {
   if (window.L) return Promise.resolve();
@@ -363,9 +397,9 @@ function loadScopeLeaflet() {
     const script = document.createElement('script');
     script.src = LEAFLET_JS_URL;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Could not load the map library.'));
+    script.onerror = () => { script.remove(); reject(new Error('Could not load the map library.')); };
     document.body.appendChild(script);
-  });
+  }).catch(error => { scopeLeafletPromise = null; throw error; });
 
   return scopeLeafletPromise;
 }
@@ -399,13 +433,15 @@ async function loadScopeBoundaries() {
 
   scopeBoundariesPromise = (async () => {
     const allLatLngs = [];
+    const outlines = L.featureGroup();
 
     for (const { name, color } of SCOPE_BARANGAYS) {
       const res = await fetch(`${window.BACKEND_BASE}/barangay-boundary/${encodeURIComponent(name)}`);
-      const data = await res.json();
-      if (!res.ok || data.error) continue;
+      const data = await res.json().catch(() => ({ error: true }));
+      if (!res.ok || data.error) throw new Error('Coverage boundaries could not load. Please try again.');
 
       const paths = Array.isArray(data.boundary?.paths) ? data.boundary.paths : [];
+      if (!paths.length) throw new Error('Coverage boundaries are unavailable. Please try again.');
       paths.forEach((path) => {
         const latlngs = (path || [])
           .filter((p) => p && p.lat != null && p.lng != null)
@@ -413,16 +449,20 @@ async function loadScopeBoundaries() {
         if (latlngs.length < 3) return;
 
         L.polygon(latlngs, { color, weight: 2, fillColor: color, fillOpacity: 0.16 })
-          .addTo(scopeMapInstance)
+          .addTo(outlines)
           .bindTooltip(name, { direction: 'center', className: 'scope-map-tooltip' });
         allLatLngs.push(...latlngs);
       });
     }
 
     if (allLatLngs.length) {
+      scopeBoundaryLayer?.remove();
+      scopeBoundaryLayer = outlines.addTo(scopeMapInstance);
       scopeMapInstance.fitBounds(allLatLngs, { padding: [24, 24], animate: scopeMapMayAnimate() });
+    } else {
+      throw new Error('Coverage boundaries are unavailable. Please try again.');
     }
-  })();
+  })().catch(error => { scopeBoundariesPromise = null; throw error; });
 
   return scopeBoundariesPromise;
 }
@@ -435,14 +475,19 @@ async function openScopeMap() {
   document.body.classList.add('scope-modal-open');
   window.modalFocus?.enter(modal, document.getElementById('scopeModalClose'));
   setScopeMapError(null);
+  const status = document.getElementById('scopeMapStatus');
+  if (status) status.hidden = false;
 
   try {
     await loadScopeLeaflet();
+    if (modal.hidden) return;
     initScopeMap();
     await loadScopeBoundaries();
     setTimeout(() => scopeMapInstance?.invalidateSize(), 60);
   } catch (err) {
     setScopeMapError(err.message || 'Could not load the coverage map.');
+  } finally {
+    if (status) status.hidden = true;
   }
 }
 
@@ -459,6 +504,8 @@ function setScopeMapError(message) {
   if (!el) return;
   el.hidden = !message;
   el.textContent = message || '';
+  const retry = document.getElementById('scopeMapRetry');
+  if (retry) retry.hidden = !message;
 }
 
 // ---- feedback button vs. footer ----
@@ -526,10 +573,15 @@ const PHEROMONE_COLOR = '#00e5ff';
 
 function initAntCanvas() {
   const canvas = document.getElementById('antCanvas');
-  if (!canvas) return;
+  if (!canvas || canvas.dataset.initialized) return;
+  canvas.dataset.initialized = 'true';
 
   const ctx = canvas.getContext('2d');
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let reduced = motionQuery.matches;
+  let animationFrame = 0;
+  let lastPaint = 0;
+  const frameInterval = window.agnasUI?.constrained ? 1000 / 30 : 1000 / 60;
   let width, height, network = { nodes: [], edges: [] }, ants = [], trail = [];
   let cachedAccent = '#1d4ed8';
   let cachedRoad = '#94a3b8';
@@ -545,20 +597,21 @@ function initAntCanvas() {
     cachedAccent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#1d4ed8';
     cachedRoad = getComputedStyle(document.body).getPropertyValue('--border2').trim() || '#94a3b8';
   }
-  refreshAntCanvasColors = refreshColors;
+  refreshAntCanvasColors = () => { refreshColors(); paintNetworkLayer(); paint(); };
 
   function resize() {
     width = canvas.parentElement.clientWidth;
     height = canvas.parentElement.clientHeight;
-    canvas.width = width * devicePixelRatio;
-    canvas.height = height * devicePixelRatio;
+    const ratio = window.agnasUI?.canvasRatio() || Math.min(devicePixelRatio || 1, 1.5);
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
     canvas.style.width = width + 'px';
     canvas.style.height = height + 'px';
-    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     networkLayer.width = canvas.width;
     networkLayer.height = canvas.height;
-    networkCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    networkCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
   }
 
   // A jittered grid reads as an organic little street layout at a glance
@@ -665,7 +718,7 @@ function initAntCanvas() {
     network = buildRoadNetwork();
     paintNetworkLayer();
     ants = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < (window.agnasUI?.constrained ? 8 : 14); i++) {
       const ant = makeAnt();
       if (ant) ants.push(ant);
     }
@@ -727,7 +780,7 @@ function initAntCanvas() {
   // there is never more than one loop.
   let visible = true;
 
-  function step() {
+  function paint() {
     ctx.clearRect(0, 0, width, height);
     ctx.globalAlpha = 1;
     ctx.drawImage(networkLayer, 0, 0, width, height);
@@ -735,23 +788,36 @@ function initAntCanvas() {
     ctx.globalAlpha = 1;
     drawAnts();
 
-    if (!reduced && visible) requestAnimationFrame(step);
+  }
+
+  function step(now) {
+    animationFrame = 0;
+    if (!visible || reduced) return;
+    if (now - lastPaint >= frameInterval - 1) {
+      paint();
+      lastPaint = now;
+    }
+    animationFrame = requestAnimationFrame(step);
+  }
+
+  function syncAnimation() {
+    cancelAnimationFrame(animationFrame);
+    animationFrame = 0;
+    if (visible && !reduced) animationFrame = requestAnimationFrame(step);
   }
 
   if ('IntersectionObserver' in window) {
     const inViewport = { current: true };
     const observer = new IntersectionObserver((entries) => {
       inViewport.current = entries[entries.length - 1].isIntersecting;
-      const wasVisible = visible;
       visible = inViewport.current && !document.hidden;
-      if (visible && !wasVisible && !reduced) requestAnimationFrame(step);
+      syncAnimation();
     }, { threshold: 0 });
     observer.observe(canvas);
 
     document.addEventListener('visibilitychange', () => {
-      const wasVisible = visible;
       visible = inViewport.current && !document.hidden;
-      if (visible && !wasVisible && !reduced) requestAnimationFrame(step);
+      syncAnimation();
     });
   }
 
@@ -765,15 +831,16 @@ function initAntCanvas() {
       if (Math.abs(nextWidth - width) < 40 && Math.abs(nextHeight - height) < 80) return;
       resize();
       rebuildScene();
+      paint();
     }, 150);
   });
 
   init();
-  if (reduced) {
-    step();
-  } else {
-    requestAnimationFrame(step);
-  }
+  paint();
+  syncAnimation();
+  motionQuery.addEventListener?.('change', () => { reduced = motionQuery.matches; syncAnimation(); });
+  window.addEventListener('pagehide', () => { cancelAnimationFrame(animationFrame); clearTimeout(resizeTimer); });
+  window.addEventListener('pageshow', syncAnimation);
 }
 
 window.initHomeTheme = initHomeTheme;
@@ -785,3 +852,7 @@ window.setQuickStartBarangay = setQuickStartBarangay;
 window.handleQuickStartLaunch = handleQuickStartLaunch;
 window.openScopeMap = openScopeMap;
 window.closeScopeMap = closeScopeMap;
+
+// The DOM is ready here. Fonts, map tiles and tutorial images must not hold
+// up theme controls, selection state or the decorative canvas initialization.
+initHomeTheme();

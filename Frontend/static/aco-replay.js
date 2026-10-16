@@ -486,7 +486,7 @@
 
     function sizeCanvases() {
       const size = map.getSize().add([viewPad * 2, viewPad * 2]);
-      pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      pixelRatio = window.agnasUI?.canvasRatio() || Math.min(window.devicePixelRatio || 1, 1.5);
       views.forEach(view => {
         view.canvas.width = Math.round(size.x * pixelRatio);
         view.canvas.height = Math.round(size.y * pixelRatio);

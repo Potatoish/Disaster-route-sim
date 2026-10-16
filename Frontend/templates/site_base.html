@@ -37,8 +37,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='ui.css') }}">
 </head>
-<body onload="initHomeTheme();">
+<body class="site-page">
 {# Before the first paint, so the page never flashes the wrong theme. A
    visitor who never picked one gets their device's setting (home.js keeps
    following it until they do). #}
@@ -110,7 +111,7 @@
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/></svg>
   <span>Feedback</span>
 </button>
-<div class="fab-panel" id="fabPanel" role="dialog" aria-labelledby="fabPanelTitle">
+<div class="fab-panel" id="fabPanel" role="dialog" aria-labelledby="fabPanelTitle" hidden>
   <div class="fab-panel-head">
     <h2 id="fabPanelTitle">How was this page?</h2>
     <button type="button" class="fab-panel-close" onclick="toggleFab()" aria-label="Close feedback">
@@ -138,6 +139,7 @@
     <textarea id="fabMsg" placeholder="Optional" maxlength="2000"></textarea>
   </div>
   <div class="hp-field" aria-hidden="true"><label for="fabWebsite">Website</label><input id="fabWebsite" type="text" tabindex="-1" autocomplete="off"></div>
+  <p class="form-error" id="fabError" role="alert" hidden></p>
   <button type="button" class="fab-send" id="fabSend" onclick="sendFeedback()">Send feedback</button>
   <p class="fab-note">Responses are anonymous and used only to evaluate the system.</p>
 </div>
@@ -153,8 +155,10 @@
       </button>
     </div>
     <p class="scope-modal-sub">A preview of where AGNAS operates, no simulation runs here.</p>
-    <div class="scope-map" id="scopeMapEl"></div>
+    <p class="scope-modal-sub" id="scopeMapStatus" role="status" hidden>Loading coverage map…</p>
+    <div class="scope-map" id="scopeMapEl" role="region" aria-label="Barangay coverage map"></div>
     <p class="scope-modal-error" id="scopeMapError" role="alert" hidden></p>
+    <button type="button" class="cta" id="scopeMapRetry" onclick="openScopeMap()" hidden>Try again</button>
     <div class="scope-modal-legend">
       <span><i class="dot" style="background:#2563eb"></i>Pinagbuhatan</span>
       <span><i class="dot" style="background:#2563eb"></i>Sta. Lucia</span>
@@ -165,6 +169,7 @@
 
 {% include "_tutorial_modal.html" %}
 
+<script src="{{ url_for('static', filename='ui.js') }}"></script>
 <script src="{{ url_for('static', filename='modal-focus.js') }}"></script>
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='home.js') }}"></script>

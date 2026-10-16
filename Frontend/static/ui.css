@@ -1,0 +1,175 @@
+/* Shared foundations for the public pages and simulator. Page palettes keep
+   their own hazard colors; sizing, focus, shape and motion follow one scale. */
+:root {
+  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-heading: 'Rajdhani', system-ui, sans-serif;
+  --font-meta: 'DM Mono', ui-monospace, monospace;
+  --space-2: .5rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --text-xs: .8125rem;
+  --text-sm: .875rem;
+  --text-md: 1rem;
+  --radius-control: .625rem;
+  --radius-card: 1rem;
+  --radius-dialog: 1.25rem;
+  --green-ink: #15803d;
+  --danger-ink: #b91c1c;
+  --visual-height: 100dvh;
+  --keyboard-inset: 0px;
+}
+
+body.dark { --green-ink: #86efac; --danger-ink: #fda4af; }
+[hidden] { display: none !important; }
+body { line-height: 1.5; }
+button, input, select, textarea { font-family: var(--font-body); }
+button, a, summary { -webkit-tap-highlight-color: transparent; }
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+input, textarea, select { scroll-margin-block: 6rem; }
+button, summary { touch-action: manipulation; }
+.form-status { color: var(--green-ink); font-size: var(--text-sm); line-height: 1.5; }
+.form-error { color: var(--danger-ink); }
+
+/* A quieter surface and shorter shadows keep long public pages readable. */
+body.site-page {
+  --page-top: #f8fafc;
+  --page-bottom: #edf3f8;
+  --surface: #f0f5fa;
+  --panel: #ffffff;
+  --panel-strong: #f3f6fb;
+  --border: #cbd7e4;
+  --dim: #5d7287;
+  --shadow: 0 12px 32px rgba(22, 43, 69, .08);
+  --shadow-sm: 0 4px 14px rgba(22, 43, 69, .06);
+}
+body.site-page.dark {
+  --page-top: #0a1420;
+  --page-bottom: #080f19;
+  --surface: #0f1b2a;
+  --panel: #132133;
+  --panel-strong: #17283b;
+  --border: #33485f;
+  --muted: #a8b9cb;
+  --dim: #91a7bd;
+  --shadow: 0 12px 32px rgba(0, 0, 0, .24);
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, .18);
+}
+.site-page :is(.panel, .hero-quickstart, .gtk-card, .hz-module) { border-radius: var(--radius-card); }
+.site-page .panel { padding: var(--space-5); }
+.site-page .panel h2 { font-size: 1.5rem; line-height: 1.2; }
+.site-page .panel p { font-size: var(--text-md); line-height: 1.65; }
+.site-page :is(.block-head p, .gtk-card p, .algo-step p, .panel p,
+  .hz-title p, .hz-scene-note, .hz-street, .hz-note, .tutorial-slide p,
+  .scope-modal-sub, .scope-modal-coverage, .fab-panel p.sub) {
+  text-align: left;
+  text-align-last: auto;
+  -webkit-hyphens: none;
+  hyphens: none;
+}
+.site-page :is(.gtk-card p, .algo-step p, .hz-title p, .hz-scene-note, .hz-street) {
+  font-size: .9375rem;
+  line-height: 1.6;
+}
+.site-page :is(.qs-note, .fab-note, .panel .contact-note, .thesis-note) {
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  text-align: left;
+  text-align-last: auto;
+}
+.site-page :is(.cta, .hero-action, .gtk-link, .fab-send, .rate-row button,
+  .fab-panel-close, .tutorial-btn, .scope-modal-close, .tutorial-modal-close, .hz-sim-btn) {
+  min-height: 44px;
+  border-radius: var(--radius-control);
+}
+.site-page :is(.fab-panel-close, .scope-modal-close, .tutorial-modal-close) { min-width: 44px; }
+.site-page .fab-panel h2 { font-size: 1.125rem; }
+.site-page :is(.fab-field label, .fab-panel p.sub, .rate-row button, .fab-send) { font-size: var(--text-sm); }
+.site-page .credit-row { gap: var(--space-4); flex-wrap: wrap; }
+.site-page .credit-row span { overflow-wrap: anywhere; }
+.site-page .form-row :is(input, textarea) { border-radius: var(--radius-control); padding: .75rem; }
+.site-page .form-row label { font-size: var(--text-sm); }
+.site-page .nav-row { box-shadow: var(--shadow-sm); }
+.site-page .theme-switch-btn { width: 44px; height: 44px; }
+.site-page .theme-switch::before { width: 44px; height: 44px; }
+.site-page.dark .theme-switch::before { transform: translateX(46px); }
+.site-page .fab-panel {
+  max-height: calc(var(--visual-height) - max(100px, calc(var(--fab-lift, 0px) + 90px)));
+  border-radius: var(--radius-dialog);
+}
+html[data-keyboard-open="true"] .fab-panel {
+  bottom: calc(var(--keyboard-inset) + 12px);
+  max-height: calc(var(--visual-height) - 24px);
+}
+.site-page :is(.scope-modal-panel, .tutorial-modal-panel) {
+  max-height: calc(var(--visual-height) - 24px);
+  border-radius: var(--radius-dialog);
+}
+.site-page .hz-wave { animation-duration: 5s; }
+.ui-motion-paused, .ui-motion-paused *, .ui-tab-hidden .route-flow--focus {
+  animation-play-state: paused !important;
+}
+
+/* Keep the map's layout, while giving its small result text room to breathe. */
+.sim-page :is(.safety-card-label, .msheet-label-hint, .msummary-route) { font-size: var(--text-xs); }
+.sim-page :is(.safety-card-sub, .safety-notes, .safety-disclaimer-text,
+  .mverdict-sub, .msummary-dest, .msummary-far, .msheet-source, .maccordion p) {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.sim-page :is(.safety-card-value, .safety-hazard-list strong, .mroute-name) { font-size: .9375rem; }
+.sim-page .safety-hazard-list li { font-size: var(--text-sm); line-height: 1.5; }
+.sim-page .mverdict-title { font-size: var(--text-md); line-height: 1.35; }
+.sim-page .mroute-risk { font-size: var(--text-sm); line-height: 1.4; }
+.sim-page :is(.mroute-dest, .mroute-time) { font-size: var(--text-xs); }
+.sim-page :is(.msummary-dest, .mroute-dest) { white-space: normal; overflow-wrap: anywhere; }
+.sim-page .msummary { flex-wrap: wrap; gap: var(--space-2); }
+.sim-page .msummary-route { white-space: normal; }
+.sim-page :is(.safety-result-card, .mverdict, .mroute, .maccordion) { border-radius: var(--radius-control); }
+.sim-page :is(.safety-result-card.danger .safety-card-value, .safety-hazard-list strong.is-high,
+  .mverdict.is-danger .mverdict-title) { color: var(--danger-ink); }
+.sim-page .safety-card-action { min-height: 44px; color: var(--danger-ink); border-color: var(--danger-ink); }
+.sim-page .safety-card-action:hover { color: var(--panel); background: var(--danger-ink); }
+.sim-page .msheet-handle { height: 44px; }
+.sim-page .mlens button { min-height: 44px; font-size: var(--text-sm); line-height: 1.3; }
+.sim-page .maccordion summary { min-height: 44px; }
+.sim-page :is(.route-list-modal, .about-modal, .tutorial-modal-panel) { max-height: calc(var(--visual-height) - 24px); }
+
+@media (max-width: 639px) {
+  .site-page .wrap { padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right)); }
+  .site-page .site-nav .wrap { padding-inline: 0; }
+  .site-page .hero { padding-top: 24px; }
+  .site-page .hero-quickstart { padding: 18px; }
+  .site-page .block { padding-block: 36px; }
+  .site-page .about-section { padding-bottom: 96px; }
+  .site-page:has(#contactForm :focus) .fab { visibility: hidden; }
+  .site-page .panel { padding: 20px; }
+  .site-page .nav-btn { padding-inline: 8px; }
+  .site-page .theme-switch::before { content: none; }
+  .site-page :is(.scope-modal-panel, .tutorial-modal-panel) { width: calc(100% - 24px); }
+  .sim-page .msheet-scroll { padding-inline: 14px; }
+}
+@media (pointer: coarse), (max-width: 1023px) {
+  @view-transition { navigation: none; }
+  .site-page .nav-row { backdrop-filter: none; }
+  .sim-page .msheet-chip { min-height: 44px; height: auto; }
+  .sim-page .msim-map-btn { min-height: 44px; }
+}
+@media (max-width: 380px) {
+  .site-page .nav-btn { padding-inline: 4px; }
+}
+
+/* Page navigation should not allocate and blur a full-screen snapshot. */
+@keyframes pageFocusOut { to { opacity: 0; } }
+@keyframes pageFocusIn { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

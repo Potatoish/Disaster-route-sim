@@ -102,7 +102,7 @@ def _fill_grid(boundary_geometry, flood):
     fill = np.full((ny, nx), FILL_NEVER, np.uint8)
     if flooded.any():
         # Sources: the deepest points of each patch's deepest level.
-        patches, patch_count = ndimage.label(flooded, structure=np.ones((3, 3)))
+        patches, _ = ndimage.label(flooded, structure=np.ones((3, 3)))
         source_cells, source_delays = [], []
         for index, box in enumerate(ndimage.find_objects(patches), start=1):
             ys, xs = slice(max(0, box[0].start - 1), box[0].stop + 1), slice(max(0, box[1].start - 1), box[1].stop + 1)

@@ -1,6 +1,8 @@
 (function initFloodHazardUI() {
   const state = {
     hazardCache: new Map(),
+    renderer: null,
+    rendererMap: null,
     dataLayer: null,
     highlightVar: null,
     evacuationSitesCache: new Map(),
@@ -95,7 +97,10 @@
     // The promise is what's cached, so a prefetch started during a run (see
     // runSimulation) and the draw after it share one download.
     if (state.hazardCache.has(cacheKey)) {
-      return state.hazardCache.get(cacheKey);
+      const cached = state.hazardCache.get(cacheKey);
+      state.hazardCache.delete(cacheKey);
+      state.hazardCache.set(cacheKey, cached);
+      return cached;
     }
 
     const query = new URLSearchParams();
@@ -116,8 +121,13 @@
       return data?.hazard_layers || { type: 'FeatureCollection', features: [] };
     })();
     state.hazardCache.set(cacheKey, request);
+    // Geometry is the largest retained payload. Keep at most two recent
+    // views; HTTP caching still makes an evicted view inexpensive to revisit.
+    while (state.hazardCache.size > 2) state.hazardCache.delete(state.hazardCache.keys().next().value);
     // A failed download can be tried again next time.
-    request.catch(() => state.hazardCache.delete(cacheKey));
+    request.catch(() => {
+      if (state.hazardCache.get(cacheKey) === request) state.hazardCache.delete(cacheKey);
+    });
     return request;
   }
 
@@ -139,9 +149,13 @@
       (a, b) => Number(a?.properties?.flood_var) - Number(b?.properties?.flood_var)
     );
 
+    if (state.rendererMap !== map) {
+      state.renderer = L.canvas({ pane: ensureHazardPane(map), padding: 0.2 });
+      state.rendererMap = map;
+    }
     state.dataLayer = L.geoJSON(
       { ...hazardLayers, features: sortedFeatures },
-      { style: styleForFeature, pane: ensureHazardPane(map) }
+      { style: styleForFeature, pane: ensureHazardPane(map), renderer: state.renderer }
     ).addTo(map);
     fadeInHazardPane(map);
   }

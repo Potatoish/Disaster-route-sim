@@ -28,7 +28,7 @@
   // Kept for the session: a slow device stays slow.
   const SLOW_FRAME_MS = 26;
   const quality = {
-    low: (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3,
+    low: !!window.agnasUI?.constrained || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4,
     frameAvg: 16.7,
     frames: 0,
   };
@@ -837,6 +837,14 @@
       state.raf = requestAnimationFrame(loop);
     }
 
+    function onVisibilityChange() {
+      cancelAnimationFrame(state.raf);
+      if (state.running && !document.hidden) {
+        state.last = performance.now();
+        state.raf = requestAnimationFrame(loop);
+      }
+    }
+
     function onKeyDown(event) {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (document.querySelector('[aria-modal="true"]:not([hidden])')) return;
@@ -916,6 +924,7 @@
       state.running = false;
       cancelAnimationFrame(state.raf);
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (state.layersOn) {
         state.t = Math.max(state.t, T.hold);
         syncPanel(T.hold);
@@ -940,6 +949,7 @@
         addLayers();
         renderLegend();
         document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('visibilitychange', onVisibilityChange);
         state.running = true;
         state.last = performance.now();
         frame(0);
