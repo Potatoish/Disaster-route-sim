@@ -1105,7 +1105,6 @@ body.dark .pin-input-menu {
   flex-shrink: 0;
   border-radius: 50%;
   background: var(--map-ui-accent);
-  animation: pinHintPulse 1.6s ease-out infinite;
 }
 
 .map-pin-hint.is-error {
@@ -1114,7 +1113,6 @@ body.dark .pin-input-menu {
 
 .map-pin-hint.is-error .map-pin-hint-icon {
   background: #ef4444;
-  animation: none;
 }
 
 .map-pin-hint-close {
@@ -1140,11 +1138,6 @@ body.dark .pin-input-menu {
   color: var(--map-ui-text);
   box-shadow: 0 0 0 2px var(--map-ui-accent);
   outline: none;
-}
-
-@keyframes pinHintPulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--map-ui-accent) 55%, transparent); }
-  100% { box-shadow: 0 0 0 9px transparent; }
 }
 
 /* On a map too narrow for the hint and the bottom-left legend side by side,
@@ -1531,10 +1524,6 @@ body.dark .empty-map {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-pin-hint-icon {
-    animation: none;
-  }
-
   .loader-edge-pulse,
   .loader-node--mid,
   .loader-visual--flood,
