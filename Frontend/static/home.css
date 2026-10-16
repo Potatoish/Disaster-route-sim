@@ -398,9 +398,11 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .source-list li:last-child{ padding-bottom:0; }
 .source-list b{ font-size:13px; color:var(--text); }
 .source-list p{ margin:0; font-size:12.5px; }
-/* A link to a data source, in running text (About, homepage). */
+/* A link to a data source: the About page's Data sources list only. */
 .src-link{ color:var(--accent); text-decoration:underline; text-underline-offset:2px; font-weight:600; }
 .src-link:hover{ text-decoration-thickness:2px; }
+/* A data source named anywhere else: the links' blue, but not a link. */
+.src-name{ color:var(--accent); font-weight:600; }
 
 /* ---------- RESEARCH TEAM ---------- */
 .research-panel{ margin-top:14px; }

@@ -28,7 +28,7 @@
   // it lighter, under the routes).
   const INTENSITY_ALPHA = 0.72;
   const FADE_OUT_MS = 700;
-  const FAULT_CREDIT = 'Fault trace: <a href="https://github.com/GEMScienceTools/gem-global-active-faults" target="_blank" rel="noopener">GEM</a> (PHIVOLCS)';
+  const FAULT_CREDIT = 'Fault trace: GEM (PHIVOLCS)';
 
   // The timeline, in ms.
   const T = {

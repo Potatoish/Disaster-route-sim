@@ -2174,9 +2174,10 @@ const ROUTE_FOUND_BY_TEXT = {
   backup_search: 'Backup search',
 };
 
-// Where a result's hazard levels and roads come from. The results panels link
-// to these; the PDF report also links to the About page's full list
-// (#data-sources in about.html, which lists the same links).
+// Where a result's hazard levels and roads come from. Only the About page's
+// list (#data-sources in about.html) links to them: the results panels name
+// them in blue, and the PDF report prints their addresses and the About
+// page's.
 const DATA_SOURCES_PAGE_PATH = '/about#data-sources';
 const DATA_SOURCES = {
   noah: { name: 'Project NOAH', url: 'https://noah.up.edu.ph/' },
@@ -2186,17 +2187,16 @@ const DATA_SOURCES = {
   osm: { name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/copyright' },
 };
 
-function buildSourceLink(text, url) {
-  return `<a class="src-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`;
+function buildSourceName(text) {
+  return `<span class="src-name">${escapeHtml(text)}</span>`;
 }
 
-// The results' source line, as HTML. New tab for every link: leaving the
-// simulator would drop the simulation.
+// The results' source line, as HTML.
 function buildHazardSourceNoteHtml(isEarthquake) {
   const { noah, phivolcs, hazardHunter } = DATA_SOURCES;
   return isEarthquake
-    ? `Earthquake risk levels come from ${buildSourceLink(phivolcs.name, phivolcs.url)} maps on ${buildSourceLink(hazardHunter.name, hazardHunter.url)}.`
-    : `Flood levels come from the ${buildSourceLink(noah.name, noah.url)} 25-year flood map. They are estimates, not live conditions.`;
+    ? `Earthquake risk levels come from ${buildSourceName(phivolcs.name)} maps on ${buildSourceName(hazardHunter.name)}.`
+    : `Flood levels come from the ${buildSourceName(noah.name)} 25-year flood map. They are estimates, not live conditions.`;
 }
 
 // The PDF report's sources: what this simulation used, each with its link
@@ -6097,9 +6097,13 @@ async function downloadSimulationReport() {
     y += wrappedRanking.length * 12 + 10;
 
     const LINK_RGB = [29, 78, 216];
+    // Bare addresses: PDF viewers turn text starting "https://" or "www."
+    // into links on their own.
+    const bareAddress = url => url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
 
-    // Data sources: what this simulation used, each with a clickable link,
-    // then the About page's full list.
+    // Data sources: what this simulation used, each with its address (blue,
+    // not a link: only the About page links to sources), then the About
+    // page's full list.
     const sources = getReportDataSources(isEq);
     doc.setFontSize(9);
     const sourceRows = sources.map(source => ({ ...source, lines: doc.splitTextToSize(source.text, valueWidth) }));
@@ -6119,7 +6123,7 @@ async function downloadSimulationReport() {
       y += lines.length * 11;
       if (url) {
         doc.setTextColor(...LINK_RGB);
-        doc.textWithLink(url, margin + labelColWidth, y, { url });
+        doc.text(bareAddress(url), margin + labelColWidth, y);
         y += 15;
       } else {
         y += 4;
@@ -6131,7 +6135,7 @@ async function downloadSimulationReport() {
     doc.text('All data sources', margin, y);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...LINK_RGB);
-    doc.textWithLink(allSourcesUrl, margin + labelColWidth, y, { url: allSourcesUrl });
+    doc.text(bareAddress(allSourcesUrl), margin + labelColWidth, y);
     doc.setTextColor(0);
     y += 20;
 
