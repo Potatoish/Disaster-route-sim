@@ -2730,11 +2730,14 @@ function syncRoutePinFields() {
     }
     row.classList.toggle('is-choice-below', choiceBelowField);
     row.classList.toggle('is-placing', pinPlacementRole === role);
-    row.classList.toggle('is-set', !!pin || toEvacSite);
+    // Until the choice below is made, the field is a placeholder pointing to it.
+    row.classList.toggle('is-set', (!!pin || toEvacSite) && !choiceBelowField);
     row.classList.toggle('is-evac', toEvacSite);
 
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
+      : choiceBelowField
+      ? 'Pick a destination below'
       : toEvacSite
       ? resultSite?.name || 'Evacuation site'
       : placingOwn
