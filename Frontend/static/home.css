@@ -315,18 +315,11 @@ body.dark .about-logo .logo-dark{ display:block; }
 }
 .algo-node{ fill:var(--muted); }
 .algo-ant{ fill:var(--accent); opacity:.75; }
-.algo-pheromone{ fill:var(--accent); animation:algo-pulse 1.8s ease-in-out infinite; }
+.algo-pheromone{ fill:var(--accent); }
 .algo-badge-dot{ fill:var(--accent); }
 .algo-badge-label{
   fill:var(--accent-ink); font-family:var(--font-heading); font-size:10px; font-weight:700;
   text-anchor:middle; dominant-baseline:central;
-}
-@keyframes algo-pulse{
-  0%,100%{ opacity:.5; r:2.4px; }
-  50%{ opacity:1; r:3.3px; }
-}
-@media (prefers-reduced-motion: reduce){
-  .algo-pheromone{ animation:none; }
 }
 
 /* ---------- GOOD TO KNOW (walking-only, data sources, plan-ahead caveat) --
