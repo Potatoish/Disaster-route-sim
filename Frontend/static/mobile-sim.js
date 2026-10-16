@@ -698,10 +698,11 @@
     const placing = getPinRole() === role;
     // An end point that is the evacuation sites (or the one a run picked).
     const toEvacSite = role === 'end' && !pin && isToEvacuationSite();
-    // Until the choice below is made, the slot is a placeholder pointing to it.
+    // Until the start is pinned, and until the choice below is made, the
+    // slot is a placeholder saying what to do.
     const choiceBelow = role === 'end' && isDestinationChoicePending();
-    const set = (!!pin || toEvacSite) && !choiceBelow;
-    const waiting = role === 'end' && !set && !getReadyPin('start');
+    const waiting = role === 'end' && !pin && !placing && !getReadyPin('start');
+    const set = (!!pin || toEvacSite) && !choiceBelow && !waiting;
     const pointName = role === 'start' ? 'start point' : 'end point';
 
     slot.classList.toggle('is-active', placing);
@@ -719,12 +720,12 @@
       ? pin.label || PIN_ROLE_COPY[role].fallbackLabel
       : placing
       ? `Move the map, then tap “Set ${role} here”`
+      : waiting
+      ? 'Pick a place first'
       : choiceBelow
       ? 'Pick a destination below'
       : toEvacSite
       ? getResultEvacSite()?.name || 'Evacuation site'
-      : waiting
-      ? 'Set the start point first'
       : 'Not set yet';
 
     // Edit moves a set pin, Cancel stops moving it, Set arms an empty one;

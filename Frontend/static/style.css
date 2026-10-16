@@ -479,18 +479,19 @@ body.dark .workflow-card.active {
   cursor: not-allowed;
 }
 
-/* Meanwhile the destination field only shows the default: no caret, and
-   not faded like a field that cannot be used yet. */
-.pin-input-row.is-choice-below .pin-input:disabled {
+/* A destination field waiting on the start pin or on the panel's choice
+   (syncRoutePinFields) reads as a plain placeholder: no caret, and not
+   faded like a broken control. */
+.pin-input-row.is-placeholder .pin-input:disabled {
   opacity: 1;
   cursor: default;
 }
 
-.pin-input-row.is-choice-below .pin-input-caret {
+.pin-input-row.is-placeholder .pin-input-caret {
   display: none;
 }
 
-.pin-input-row.is-choice-below .pin-input--menu {
+.pin-input-row.is-placeholder .pin-input--menu {
   padding-right: 12px;
 }
 

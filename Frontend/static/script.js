@@ -2723,19 +2723,24 @@ function syncRoutePinFields() {
     const toEvacSite = role === 'end' && !pin && !placingOwn && isToEvacuationSite();
     const resultSite = toEvacSite ? getResultEvacSite() : null;
     const choiceBelowField = role === 'end' && choiceBelow;
-    input.disabled = locked || !canPlaceRoutePins() || choiceBelowField;
+    // The destination waits for the start: until it is pinned, and until the
+    // choice below is made, the field is a placeholder saying what to do.
+    const waitingForStart = role === 'end' && !pin && !placingOwn && !getReadyPin('start');
+    const placeholder = choiceBelowField || waitingForStart;
+    input.disabled = locked || !canPlaceRoutePins() || placeholder;
     if (input.disabled) {
       document.getElementById(`${role}PinMenu`)?.setAttribute('hidden', '');
       input.setAttribute('aria-expanded', 'false');
     }
-    row.classList.toggle('is-choice-below', choiceBelowField);
+    row.classList.toggle('is-placeholder', placeholder);
     row.classList.toggle('is-placing', pinPlacementRole === role);
-    // Until the choice below is made, the field is a placeholder pointing to it.
-    row.classList.toggle('is-set', (!!pin || toEvacSite) && !choiceBelowField);
+    row.classList.toggle('is-set', (!!pin || toEvacSite) && !placeholder);
     row.classList.toggle('is-evac', toEvacSite);
 
     value.textContent = pin?.status === 'checking'
       ? 'Checking this spot…'
+      : waitingForStart
+      ? 'Pick a place first'
       : choiceBelowField
       ? 'Pick a destination below'
       : toEvacSite
