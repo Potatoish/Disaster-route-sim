@@ -3814,12 +3814,6 @@ body.dark .leaflet-popup-close-button {
 }
 
 /* Buttons. */
-.msim-destination-menu {
-  position: static;
-  margin-top: 8px;
-  width: 100%;
-}
-
 /* The destination's two choices, until one is made (mobile-sim.js
    isDestinationChoicePending). */
 .msheet-evac-action {

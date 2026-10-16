@@ -653,19 +653,13 @@
 
     const role = getPinRole();
     const checking = isAnyRoutePinChecking();
+    // The buttons under the slots are the one place for the destination's
+    // choice; the slot's Change brings them back (changeDestination).
     const needsEvacSites = isDestinationChoicePending();
-    // The buttons under the slots are then the one place for the choice, so
-    // the destination menu (and its Change) stays shut.
-    if (needsEvacSites && !$('msimDestinationMenu').hidden) {
-      $('msimDestinationMenu').hidden = true;
-      $('msimSlotEdit-end').setAttribute('aria-expanded', 'false');
-    }
     $('msimEvacAction').hidden = !needsEvacSites;
     $('msimShowEvacBtn').disabled = locked || earthquakeEvacSitesLoading;
     $('msimChooseOwnBtn').disabled = locked;
     $('msimShowEvacLabel').textContent = earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show evacuation sites';
-    $('msimDestinationEvacBtn').disabled = locked || earthquakeEvacSitesLoading || (isEarthquakeMode() && !getReadyPin('start'));
-    $('msimDestinationEvacBtn').setAttribute('aria-checked', String(isToEvacuationSite() && !routePins.end));
     const setPinBtn = $('msimSetPinBtn');
     setPinBtn.hidden = !role;
     if (role) {
@@ -729,7 +723,7 @@
       : 'Not set yet';
 
     // Edit moves a set pin, Cancel stops moving it, Set arms an empty one;
-    // Change trades the evacuation sites for a spot of one's own.
+    // the destination's Change (or Set) starts it over.
     const label = choiceBelow ? '' : role === 'end' && placing ? 'Cancel' : set
       ? (placing ? 'Cancel' : role === 'end' ? 'Change' : 'Edit')
       : (placing || waiting ? '' : 'Set');
@@ -740,8 +734,8 @@
     edit.textContent = label;
     edit.setAttribute('aria-label', !label
       ? ''
-      : toEvacSite && !placing
-      ? 'Choose your own end point instead of the evacuation site'
+      : role === 'end' && !placing
+      ? 'Change destination'
       : `${label} ${pointName}`);
   }
 
@@ -1081,25 +1075,18 @@
     if (pin) centerUnderPin(L.latLng(pin.lat, pin.lng), Math.max(gMap.getZoom(), PIN_PLACEMENT_ZOOM));
   }
 
-  function closeDestinationMenu() {
-    $('msimDestinationMenu').hidden = true;
-    $('msimSlotEdit-end').setAttribute('aria-expanded', 'false');
-    scheduleSync();
-  }
-
-  function toggleDestinationMenu() {
+  // The destination slot's button: Cancel while its pin is being set,
+  // otherwise Change, which starts the destination over so the two buttons
+  // under the slots offer the choice again.
+  function changeDestination() {
     if (getPinRole() === 'end') { editPin('end'); return; }
     if (!canPlaceRoutePins() || isSimulationInteractionLocked()) return;
-    const opening = $('msimDestinationMenu').hidden;
-    closePinMenus();
-    $('msimDestinationMenu').hidden = !opening;
-    $('msimSlotEdit-end').setAttribute('aria-expanded', String(opening));
-    scheduleSync();
-    if (opening) $('msimDestinationMenu').querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
+    resetDestination();
+    syncNow();
+    $('msimShowEvacBtn').focus({ preventScroll: true });
   }
 
   function chooseOwnDestination() {
-    closeDestinationMenu();
     editPin('end');
   }
 
@@ -1352,10 +1339,7 @@
 
   function handleEscape() {
     if (!isActive()) return false;
-    if (!$('msimDestinationMenu').hidden) {
-      closeDestinationMenu();
-      $('msimSlotEdit-end').focus({ preventScroll: true });
-    } else if (state.barangayMenuOpen) closeBarangayMenu();
+    if (state.barangayMenuOpen) closeBarangayMenu();
     else if (state.layersOpen) closeLayers();
     else return false;
     return true;
@@ -1465,7 +1449,6 @@
   window.mobileSim = {
     attachMap,
     clearResults,
-    closeDestinationMenu,
     endReplay,
     getCoveredInsets,
     handleEscape,
@@ -1492,7 +1475,7 @@
     downloadMobileReport: downloadReport,
     editMobilePin: editPin,
     chooseMobileDestination: chooseOwnDestination,
-    toggleMobileDestinationMenu: toggleDestinationMenu,
+    changeMobileDestination: changeDestination,
     locateMobileUser: locate,
     mobileMapZoom: zoomBy,
     openMobileLayers: openLayers,

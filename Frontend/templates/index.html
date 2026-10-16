@@ -88,7 +88,7 @@
             <div class="workflow-card-summary" id="summaryHazard">Choose which hazard scenario to test.</div>
           </div>
           <div class="workflow-card-actions">
-            <button class="card-action-btn" id="changeHazardBtn" type="button" onclick="focusWorkflowSection('hazard')">Select</button>
+            <button class="card-action-btn" id="changeHazardBtn" type="button" onclick="changeWorkflowSection('hazard')">Select</button>
           </div>
         </div>
         <div class="workflow-card-body">
@@ -119,7 +119,7 @@
             <div class="workflow-card-summary" id="summaryRoute"></div>
           </div>
           <div class="workflow-card-actions">
-            <button class="card-action-btn" id="changeRouteBtn" type="button" onclick="focusWorkflowSection('route')">Change</button>
+            <button class="card-action-btn" id="changeRouteBtn" type="button" onclick="changeWorkflowSection('route')">Change</button>
           </div>
         </div>
         <div class="workflow-card-body">
@@ -368,22 +368,13 @@
                   </div>
                   <button class="mslot-edit" id="msimSlotEdit-start" type="button" onclick="editMobilePin('start')" hidden>Edit</button>
                 </div>
-                <div class="mslot-destination" id="msimDestination">
                 <div class="mslot mslot--end" id="msimSlot-end">
                   <span class="mslot-badge" aria-hidden="true">E</span>
                   <div class="mslot-text">
                     <span class="mslot-label">End</span>
                     <span class="mslot-value" id="msimSlotValue-end"></span>
                   </div>
-                  <button class="mslot-edit" id="msimSlotEdit-end" type="button" onclick="toggleMobileDestinationMenu()" aria-haspopup="menu" aria-expanded="false" aria-controls="msimDestinationMenu" hidden>Change</button>
-                </div>
-                  <div class="pin-input-menu msim-destination-menu" id="msimDestinationMenu" role="menu" hidden>
-                    <button type="button" class="evac-btn pin-input-menu-evac" id="msimDestinationEvacBtn" role="menuitemradio" aria-checked="true" onclick="showEvacuationSites()">Show the evacuation sites</button>
-                    <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseMobileDestination()">
-                      <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
-                      Choose my own destination instead
-                    </button>
-                  </div>
+                  <button class="mslot-edit" id="msimSlotEdit-end" type="button" onclick="changeMobileDestination()" hidden>Change</button>
                 </div>
               </div>
 

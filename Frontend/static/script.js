@@ -2633,7 +2633,6 @@ function setPinPlacementRole(role) {
 }
 
 function closePinMenus() {
-  window.mobileSim?.closeDestinationMenu();
   PIN_ROLES.forEach(role => {
     const menu = document.getElementById(`${role}PinMenu`);
     if (menu) menu.hidden = true;
@@ -4010,6 +4009,51 @@ function syncWorkflowCards(activeStep, completed) {
     card.classList.toggle('collapsed', !isActive);
     card.classList.toggle('disabled', !isEnabled);
   });
+}
+
+// A setup card's Change starts that card over. The disaster's goes back to
+// choosing a disaster (the pins and any result go with it); Start / End's
+// drops both pins and the destination, as when the disaster was first
+// picked.
+function changeWorkflowSection(sectionKey) {
+  if (isSimulationInteractionLocked() || !isWorkflowSectionAvailable(sectionKey)) return;
+  if (sectionKey === 'hazard' && selectedHazard) {
+    startNewSimulation();
+    return;
+  }
+  if (sectionKey === 'route' && selectedHazard) {
+    resetRoutePins();
+    selectHazard(selectedHazard, document.getElementById(isEarthquakeMode() ? 'hEarthquake' : 'hFlood'));
+    return;
+  }
+  focusWorkflowSection(sectionKey);
+}
+
+// The destination starts over (the phone's Change): no pin of the
+// visitor's own, the sites off the map, and the choice between them offered
+// again under the start.
+function resetDestination() {
+  if (isSimulationInteractionLocked() || !selectedHazard) return;
+  closePinMenus();
+  clearPinHintError();
+  if (pinPlacementRole === 'end') setPinPlacementRole(null);
+  routePins.end = null;
+  pinCheckSeq.end += 1;
+  if (isEarthquakeMode()) {
+    earthquakeToEvacSite = true;
+    earthquakeEvacSitesVisible = false;
+    earthquakeEvacSitesLoading = false;
+    earthquakeDestinationChoice += 1;
+    window.earthquakeUI?.drawEvacuationSites({ map: gMap, sites: null });
+  } else {
+    floodToEvacSite = true;
+    floodEvacSites = [];
+    window.floodHazardUI?.clearEvacuationSites();
+  }
+  // A result to the sites has the same pins key, so drop it here.
+  clearSimulationOutput();
+  showPinningLegend();
+  onRoutePinsChange();
 }
 
 function focusWorkflowSection(sectionKey) {
@@ -6186,7 +6230,7 @@ window.toggleRouteFocus = function toggleRouteFocus(routeNo, category) {
 
 // A click anywhere outside a pin input closes its menu.
 document.addEventListener('click', event => {
-  if (!event.target.closest?.('.pin-input-combo, #msimDestination')) closePinMenus();
+  if (!event.target.closest?.('.pin-input-combo')) closePinMenus();
 });
 
 // Up/Down move between a pin menu's items, as in any menu.
