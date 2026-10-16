@@ -1,10 +1,10 @@
 {
   "pinagbuhatan": [
     {
-      "id": "sunrise-ville-nagpayong-basketball-court",
-      "name": "Sunrise Ville Nagpayong Basketball Court",
-      "lat": 14.539484,
-      "lng": 121.102068
+      "id": "balsancat-whole-court",
+      "name": "Balsancat Whole Court",
+      "lat": 14.560934,
+      "lng": 121.087339
     },
     {
       "id": "ilugin-elementary-school",
@@ -21,8 +21,8 @@
     {
       "id": "nagpayong-multipurpose-hall",
       "name": "Nagpayong Multipurpose Hall",
-      "lat": 14.544851,
-      "lng": 121.103073
+      "lat": 14.544461,
+      "lng": 121.104846
     }
   ],
   "sta lucia": [

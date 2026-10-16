@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Condition, RLock, Thread
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, url_for
 from flask_cors import CORS
 import contact_service
 from contact_service import (
@@ -580,6 +580,27 @@ def run_simulation():
             "message": str(e)
         }), 500
 
+# A site's photo for its map popup: static/assets/evac-sites/<hazard>/<id>.<ext>,
+# found by the site's id, so adding a photo needs no data change.
+EVAC_SITE_PHOTO_DIR = "assets/evac-sites"
+EVAC_SITE_PHOTO_TYPES = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _with_site_photos(sites, hazard):
+    """The sites, each with photo_url (a versioned static URL) when it has a
+    photo."""
+    shown = []
+    for site in sites:
+        site = dict(site)
+        for extension in EVAC_SITE_PHOTO_TYPES:
+            filename = f"{EVAC_SITE_PHOTO_DIR}/{hazard}/{site['id']}{extension}"
+            if os.path.isfile(os.path.join(app.static_folder, filename)):
+                site["photo_url"] = url_for("static", filename=filename)
+                break
+        shown.append(site)
+    return shown
+
+
 @app.route("/flood/evac-sites", methods=["GET"])
 def flood_evac_sites():
     barangay = (request.args.get("barangay") or "").strip()
@@ -604,7 +625,7 @@ def flood_evac_sites():
 
     return jsonify({
         "error": False,
-        "evacuation_sites": sites,
+        "evacuation_sites": _with_site_photos(sites, "flood"),
     })
 
 @app.route("/earthquake/evac-sites", methods=["GET"])
@@ -612,6 +633,8 @@ def earthquake_evac_sites():
     try:
         barangay = (request.args.get("barangay") or "").strip()
         result = get_earthquake_evacuation_sites(barangay)
+        if not result.get("error"):
+            result = {**result, "evacuation_sites": _with_site_photos(result["evacuation_sites"], "earthquake")}
         status_code = 200 if not result.get("error") else 400
         return jsonify(result), status_code
     except Exception as e:

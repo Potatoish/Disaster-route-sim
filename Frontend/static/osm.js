@@ -224,6 +224,28 @@ function mapMoveOptions(options = {}) {
   return prefersReducedMotion() ? { ...options, animate: false } : options;
 }
 
+// An evacuation site's photo, under the name in its marker's popup (flood.js,
+// earthquake.js); app.py adds photo_url for a site that has one. Its size is
+// set up front (3:2), so the popup does not grow and shift once it loads.
+function buildEvacSitePhotoHtml(site) {
+  if (!site?.photo_url) return '';
+  return `<img class="popup-photo" src="${escapeHtml(site.photo_url)}" alt="Photo of ${escapeHtml(site.name)}" width="240" height="160" decoding="async">`;
+}
+
+// Where a site's popup may auto-pan to: clear of the phone's top bar, sheet
+// and map buttons (mobile-sim.js getCoveredInsets), or on desktop of the
+// controls on the map's top edge, as for the route pins' popups. A popup
+// taller than the gap keeps its top (name and photo) in view.
+function getEvacSitePopupPanOptions() {
+  const covered = window.mobileSim?.getCoveredInsets();
+  return covered
+    ? {
+      autoPanPaddingTopLeft: [(covered.left || 0) + 12, covered.top + 12],
+      autoPanPaddingBottomRight: [(covered.right || 0) + 12, covered.bottom + 12],
+    }
+    : { autoPanPaddingTopLeft: [16, 130] };
+}
+
 // The house pin of an evacuation site, with a name badge under the house:
 // earthquake open areas (earthquake.js) and flood evacuation sites (flood.js).
 // A badge wider than the 66-unit pin overhangs it a little. The icon shows

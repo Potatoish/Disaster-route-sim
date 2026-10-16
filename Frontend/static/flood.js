@@ -240,11 +240,12 @@
       }).addTo(map);
       marker.on('click', () => {
         state.evacuationPopup?.remove();
-        state.evacuationPopup = L.popup({ offset: [0, -52] })
+        state.evacuationPopup = L.popup({ offset: [0, -52], ...getEvacSitePopupPanOptions() })
           .setLatLng(marker.getLatLng())
           .setContent(`
             <div class="popup-shell">
               <div class="popup-title">${escapeHtml(site.name)}</div>
+              ${buildEvacSitePhotoHtml(site)}
               <div class="popup-row"><span>Role</span><span>${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}</span></div>
             </div>`)
           .openOn(map);
