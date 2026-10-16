@@ -2,7 +2,16 @@ import sys
 
 sys.dont_write_bytecode = True
 
+from flood_scenario import describe_flood_start
 from osm_routing import parse_route_pin, simulate_flood_to_evacuation_sites, simulate_osm_routes
+
+
+def with_flood_scenario(result, start_location):
+    """A finished flood run also says how deep the scenario's water is at its
+    start pin, for the flood intro (flood-intro.js)."""
+    if isinstance(result, dict) and not result.get("error"):
+        result["flood_scenario"] = describe_flood_start(start_location["lat"], start_location["lng"])
+    return result
 
 def simulate(start, end, hazard_type="Flood", barangay=None):
     if not start:
@@ -48,7 +57,7 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
             hazard_type=hazard_type,
             barangay_name=barangay,
         )
-        return result
+        return with_flood_scenario(result, start_location)
 
     except Exception as e:
         return {
@@ -74,13 +83,13 @@ def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None):
         }
 
     try:
-        return simulate_flood_to_evacuation_sites(
+        return with_flood_scenario(simulate_flood_to_evacuation_sites(
             start_name=start_location["name"],
             start_lat=start_location["lat"],
             start_lng=start_location["lng"],
             hazard_type=hazard_type,
             barangay_name=barangay,
-        )
+        ), start_location)
     except Exception as e:
         return {
             "error": True,

@@ -52,6 +52,21 @@
   ];
 
   const $ = id => document.getElementById(id);
+  // Text written only when it changes: every sync rewrites the sheet's
+  // words, and an unchanged rewrite still makes the next size reading
+  // (measureSnaps, the legend) lay the page out again.
+  const setText = (element, text) => {
+    if (element && element.textContent !== text) element.textContent = text;
+  };
+  // The window's size, kept from its resize events (a capturing listener, so
+  // it is fresh before any other resize handler runs): reading innerWidth or
+  // innerHeight makes the browser finish any pending layout first, and the
+  // sheet asks for the size on every sync.
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  window.addEventListener('resize', () => {
+    viewport.width = window.innerWidth;
+    viewport.height = window.innerHeight;
+  }, { capture: true });
   const shell = $('appShell');
   const sheet = $('msimSheet');
   const scroller = $('msimSheetScroll');
@@ -101,16 +116,33 @@
   // ---- geometry. #map fills the viewport here, so map-container x/y and
   // viewport x/y differ only by the map's left/top (normally 0). ----
 
+  // The map and the fixed top bar keep their place until the window
+  // resizes, so their edges are read once per window size (and again once
+  // the fonts are in): every sync asks for them, and a size reading after a
+  // change makes the browser lay the whole page out again.
+  const edgeCache = new Map();
+  document.fonts?.ready?.then(() => edgeCache.clear());
+  function readEdge(name, read) {
+    const key = `${name}|${viewport.width}x${viewport.height}|${isSide()}`;
+    if (!edgeCache.has(key)) {
+      const value = read();
+      if (!value && name === 'topBarBottom') return 0; // hidden: not cached
+      if (edgeCache.size > 30) edgeCache.clear();
+      edgeCache.set(key, value);
+    }
+    return edgeCache.get(key);
+  }
+
   function getMapTop() {
-    return $('map')?.getBoundingClientRect().top || 0;
+    return readEdge('mapTop', () => $('map')?.getBoundingClientRect().top || 0);
   }
 
   function getMapLeft() {
-    return $('map')?.getBoundingClientRect().left || 0;
+    return readEdge('mapLeft', () => $('map')?.getBoundingClientRect().left || 0);
   }
 
   function getTopBarBottom() {
-    return $('msimTopbar')?.getBoundingClientRect().bottom || 0;
+    return readEdge('topBarBottom', () => $('msimTopbar')?.getBoundingClientRect().bottom || 0);
   }
 
   // Where the map stops being covered on the left: the docked panel's right
@@ -122,21 +154,21 @@
   // Height of the map still visible: between the top bar and the sheet on a
   // phone, the whole height beside the docked panel on a tablet.
   function getMapRoom(height = state.height) {
-    if (isSide()) return window.innerHeight - getMapTop();
-    return window.innerHeight - height - getTopBarBottom();
+    if (isSide()) return viewport.height - getMapTop();
+    return viewport.height - height - getTopBarBottom();
   }
 
   // Map-container y of the center pin's tip for a given sheet height: the
   // middle of the visible strip, not of the whole map (the sheet covers that).
   function getPinY(height = state.height) {
-    if (isSide()) return window.innerHeight / 2 - getMapTop();
-    return (getTopBarBottom() + window.innerHeight - height) / 2 - getMapTop();
+    if (isSide()) return viewport.height / 2 - getMapTop();
+    return (getTopBarBottom() + viewport.height - height) / 2 - getMapTop();
   }
 
   // Map-container x of the center pin: the middle of the map beside the
   // docked panel on a tablet.
   function getPinX() {
-    const width = window.innerWidth - getMapLeft();
+    const width = viewport.width - getMapLeft();
     const cover = getSideCover();
     return cover + (width - cover) / 2;
   }
@@ -221,14 +253,14 @@
     }
     // Measured in the snap's own layout (the replay shows more when open).
     sheet.dataset.snap = state.snap;
-    const full = Math.max(160, Math.round(window.innerHeight - getTopBarBottom() - FULL_SHEET_TOP_GAP));
+    const full = Math.max(160, Math.round(viewport.height - getTopBarBottom() - FULL_SHEET_TOP_GAP));
     let peek = Math.min(full, measurePeek() || 200);
     if (state.mode === 'replay') {
       // Measured folded only, and never shrinking while the replay plays.
       if (state.snap === 'peek' || !state.replayPeek) state.replayPeek = Math.max(state.replayPeek, peek);
       peek = state.replayPeek;
     }
-    const half = Math.min(full, Math.max(peek, Math.round(window.innerHeight * 0.5)));
+    const half = Math.min(full, Math.max(peek, Math.round(viewport.height * 0.5)));
     state.snaps = { peek, half, full };
 
     const target = state.drag ? null : state.snaps[state.snap];
@@ -349,10 +381,10 @@
     handle.setAttribute('aria-label', state.snap === last ? 'Collapse panel' : 'Expand panel');
     handle.setAttribute('aria-expanded', String(state.snap !== 'peek'));
     const detailsBtn = $('msimDetailsBtn');
-    if (detailsBtn) detailsBtn.textContent = state.snap === 'full' ? 'Show map' : 'See details';
+    setText(detailsBtn, state.snap === 'full' ? 'Show map' : 'See details');
     const more = $('msimReplay').querySelector('.aco-replay-more');
     if (more) {
-      more.textContent = state.snap === 'peek' ? 'More' : 'Less';
+      setText(more, state.snap === 'peek' ? 'More' : 'Less');
       more.setAttribute('aria-expanded', String(state.snap !== 'peek'));
     }
     const room = getMapRoom();
@@ -538,7 +570,7 @@
     const barangay = selectedBarangay
       || new URLSearchParams(window.location.search).get('barangay')
       || 'Simulator';
-    $('msimTitle').textContent = barangay;
+    setText($('msimTitle'), barangay);
     // Which disaster and which step: "Flood · Setup", "Flood · Simulation",
     // "Flood · Results".
     const results = state.mode === 'results' && simData;
@@ -546,9 +578,9 @@
       ? (isEarthquakeSimulationResult(simData) ? 'Earthquake' : 'Flood')
       : selectedHazard;
     const stepName = results ? 'Results' : state.mode === 'replay' ? 'Simulation' : 'Setup';
-    $('msimSubtitle').textContent = hazard
+    setText($('msimSubtitle'), hazard
       ? `${hazard} · ${stepName}`
-      : 'Choose a disaster';
+      : 'Choose a disaster');
 
     // The title opens the barangay switcher, except mid-run.
     const button = $('msimBarangayBtn');
@@ -636,7 +668,7 @@
     chip.hidden = !hazard;
     chip.disabled = locked;
     if (hazard) {
-      $('msimHazardChipLabel').textContent = hazard;
+      setText($('msimHazardChipLabel'), hazard);
       $('msimHazardChipIcon').innerHTML = getHazardIcon(hazard);
     }
 
@@ -659,11 +691,11 @@
     $('msimEvacAction').hidden = !needsEvacSites;
     $('msimShowEvacBtn').disabled = locked || earthquakeEvacSitesLoading;
     $('msimChooseOwnBtn').disabled = locked;
-    $('msimShowEvacLabel').textContent = earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show evacuation sites';
+    setText($('msimShowEvacLabel'), earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show evacuation sites');
     const setPinBtn = $('msimSetPinBtn');
     setPinBtn.hidden = !role;
     if (role) {
-      setPinBtn.textContent = `Set ${role} here`;
+      setText(setPinBtn, `Set ${role} here`);
       setPinBtn.disabled = locked || routePins[role]?.status === 'checking';
     }
     $('msimSeeResultsBtn').hidden = !!role || !simData;
@@ -673,7 +705,7 @@
     runBtn.disabled = locked || checking || !canRunCurrentSimulation();
     runBtn.classList.toggle('mbtn--primary', !role);
 
-    $('msimSetupHelp').textContent = buildSetupHelp(role, checking);
+    setText($('msimSetupHelp'), buildSetupHelp(role, checking));
   }
 
   // Start set, sites not on the map yet, no pin being placed: the visitor
@@ -703,12 +735,12 @@
     slot.classList.toggle('is-empty', !set);
     slot.classList.toggle('is-disabled', waiting && !placing);
     if (role === 'end') {
-      slot.querySelector('.mslot-label').textContent = 'Destination';
+      setText(slot.querySelector('.mslot-label'), 'Destination');
       // A house while the end point is the evacuation sites, like their pins.
       slot.classList.toggle('mslot--to-evac', toEvacSite && !placing);
       slot.querySelector('.mslot-badge').innerHTML = toEvacSite && !placing ? EVAC_BADGE_SVG : 'E';
     }
-    value.textContent = pin?.status === 'checking'
+    setText(value, pin?.status === 'checking'
       ? 'Checking this spot…'
       : pin
       ? pin.label || PIN_ROLE_COPY[role].fallbackLabel
@@ -720,7 +752,7 @@
       ? 'Pick a destination below'
       : toEvacSite
       ? getResultEvacSite()?.name || 'Evacuation site'
-      : 'Not set yet';
+      : 'Not set yet');
 
     // Edit moves a set pin, Cancel stops moving it, Set arms an empty one;
     // the destination's Change (or Set) starts it over.
@@ -731,7 +763,7 @@
       || pin?.status === 'checking'
       || !canPlaceRoutePins()
       || isSimulationInteractionLocked();
-    edit.textContent = label;
+    setText(edit, label);
     edit.setAttribute('aria-label', !label
       ? ''
       : role === 'end' && !placing
@@ -855,7 +887,7 @@
     verdict.classList.toggle('is-safe', tier === 'safe');
     verdict.classList.toggle('is-caution', tier === 'caution');
     verdict.classList.toggle('is-danger', tier === 'unsafe');
-    $('msimVerdictTitle').textContent = getRouteVerdictTitle(best);
+    setText($('msimVerdictTitle'), getRouteVerdictTitle(best));
     const VERDICT_SUBS = {
       safe: formatPeakRiskSentence(peak),
       caution: `${describeMediumFloodCrossing(best)} ${MEDIUM_FLOOD_WARNING}`,
@@ -863,7 +895,7 @@
         ? `${describeAreaWideHighRisk(best, result.barangay || selectedBarangay)} ${describeLeastExposedRoute(best)}`
         : `${formatPeakRiskSentence(peak)} ${describeUnsafeCrossing(best)}`,
     };
-    $('msimVerdictSub').textContent = VERDICT_SUBS[tier];
+    setText($('msimVerdictSub'), VERDICT_SUBS[tier]);
 
     const duration = best?.display_duration || formatRouteWalkingDuration(best);
     const distance = best?.display_distance || formatDistanceCompact(best?.distance);
@@ -880,17 +912,17 @@
     $('msimSummaryMain').classList.toggle('is-danger', showRescue);
     const rescue = $('msimRescue');
     rescue.hidden = !showRescue;
-    $('msimRescueText').textContent = showRescue ? action.title : '';
+    setText($('msimRescueText'), showRescue ? action.title : '');
     // One primary action at a time: rescue, else the details.
     $('msimDetailsBtn').classList.toggle('mbtn--primary', !showRescue);
-    $('msimSummaryRoute').textContent = `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`;
+    setText($('msimSummaryRoute'), `Route ${best?.display_route_no ?? 1} · ${getTopRouteName(best).toLowerCase()}`);
 
     const destination = $('msimSummaryDest');
     destination.hidden = !best?.destination_name;
-    destination.textContent = best?.destination_name ? `To ${best.destination_name}` : '';
+    setText(destination, best?.destination_name ? `To ${best.destination_name}` : '');
     const farNote = $('msimFarNote');
     farNote.hidden = !isFarFromOpenArea(best);
-    farNote.textContent = farNote.hidden ? '' : FAR_FROM_OPEN_AREA_NOTE;
+    setText(farNote, farNote.hidden ? '' : FAR_FROM_OPEN_AREA_NOTE);
 
     const ordered = [...routes].sort((left, right) => (left.display_route_no ?? 99) - (right.display_route_no ?? 99));
     state.routesExpanded = false;
@@ -938,7 +970,7 @@
 
     const extra = list.children.length - ROUTES_SHOWN;
     more.hidden = extra <= 0;
-    more.textContent = state.routesExpanded ? 'Show fewer routes' : `+ ${extra} more route${extra === 1 ? '' : 's'}`;
+    setText(more, state.routesExpanded ? 'Show fewer routes' : `+ ${extra} more route${extra === 1 ? '' : 's'}`);
     more.setAttribute('aria-expanded', String(state.routesExpanded));
     list.querySelectorAll('[data-extra]').forEach(item => {
       item.hidden = !state.routesExpanded && !item.querySelector('.mroute.is-active');
@@ -1246,16 +1278,26 @@
 
   // Folded to its chip or open above it (scrolling inside the map left in
   // view), and out of the way when the map strip is too short for the chip.
+  // Called on every sync, so it writes only what changed and reads the
+  // chip's height once: a size reading after a change makes the browser lay
+  // the whole page out again, which a slow phone feels as a stutter.
   function syncMapLegendChrome() {
     const card = $('msimMapLegend');
     if (!card) return;
+    const body = $('msimMapLegendBody');
+    const toggle = $('msimMapLegendToggle');
+    const expanded = String(!state.legendFolded);
     card.classList.toggle('is-folded', state.legendFolded);
-    $('msimMapLegendBody').hidden = state.legendFolded;
-    $('msimMapLegendToggle').setAttribute('aria-expanded', String(!state.legendFolded));
-    if (state.legendFolded && card.offsetHeight) state.legendChipH = card.offsetHeight;
+    if (body.hidden !== state.legendFolded) body.hidden = state.legendFolded;
+    if (toggle.getAttribute('aria-expanded') !== expanded) toggle.setAttribute('aria-expanded', expanded);
+    if (state.legendFolded && !state.legendChipH && card.offsetHeight) state.legendChipH = card.offsetHeight;
     const room = getMapRoom();
     const offset = parseFloat(getComputedStyle(card).bottom) || 0;
-    card.style.setProperty('--msim-legend-max-h', `${Math.max(0, Math.round(room - offset - (state.legendChipH || LEGEND_CHIP_FALLBACK_H) - LEGEND_ROOM_MARGIN))}px`);
+    const maxHeight = `${Math.max(0, Math.round(room - offset - (state.legendChipH || LEGEND_CHIP_FALLBACK_H) - LEGEND_ROOM_MARGIN))}px`;
+    if (maxHeight !== state.legendMaxH) {
+      state.legendMaxH = maxHeight;
+      card.style.setProperty('--msim-legend-max-h', maxHeight);
+    }
     const fits = room >= (state.legendChipH || LEGEND_CHIP_FALLBACK_H) + LEGEND_ROOM_MARGIN;
     shell.classList.toggle('msim-legend-hidden', isActive() && (card.hidden || !fits));
   }

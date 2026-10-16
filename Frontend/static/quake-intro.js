@@ -29,6 +29,17 @@
   const INTENSITY_ALPHA = 0.72;
   const FADE_OUT_MS = 700;
   const FAULT_CREDIT = 'Fault trace: GEM (PHIVOLCS)';
+  // The shaking map's paths are projected once, at this zoom.
+  const REF_ZOOM = 18;
+  // Phones with few cores or little memory start on the light setting (1x
+  // canvases), and so does any device whose intro frames average slower
+  // than SLOW_FRAME_MS. Kept for the session: a slow device stays slow.
+  const SLOW_FRAME_MS = 26;
+  const quality = {
+    low: (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3,
+    frameAvg: 16.7,
+    frames: 0,
+  };
 
   // The timeline, in ms.
   const T = {
@@ -279,7 +290,12 @@
       ? `Slowed down · ${source} map`
       : `Slowed down · ${startClass.level} shaking`;
     panel.querySelector('.aco-replay-skip').addEventListener('click', () => skip());
-    const field = name => panel.querySelector(`[data-quake="${name}"]`);
+    // Looked up once: the meter is redrawn every frame.
+    const fields = {};
+    const field = name => {
+      if (!fields[name]) fields[name] = panel.querySelector(`[data-quake="${name}"]`);
+      return fields[name];
+    };
 
     // One line for the replay's panel once the intro is over.
     function buildSummary() {
@@ -388,14 +404,15 @@
     // ---- canvases over the map, redrawn each frame ----
     function makeView(paneName, className) {
       const canvas = L.DomUtil.create('canvas', `${className} leaflet-zoom-hide`, map.getPane(paneName));
-      return { canvas, g: canvas.getContext('2d'), w: 0, h: 0, dpr: 1 };
+      return { canvas, g: canvas.getContext('2d'), w: 0, h: 0, dpr: 1, key: '' };
     }
     const intensityView = makeView(INTENSITY_PANE, 'quake-intensity-canvas');
     const fxView = makeView(FX_PANE, 'quake-fx-canvas');
     const views = [intensityView, fxView];
     function sizeViews() {
       const size = map.getSize();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Soft fills and thin rings need no 2x canvas; a slow phone gets 1x.
+      const dpr = Math.min(window.devicePixelRatio || 1, quality.low ? 1 : 1.5);
       views.forEach(view => {
         view.w = size.x + VIEW_PAD * 2;
         view.h = size.y + VIEW_PAD * 2;
@@ -404,7 +421,51 @@
         view.canvas.height = Math.round(view.h * dpr);
         view.canvas.style.width = `${view.w}px`;
         view.canvas.style.height = `${view.h}px`;
+        view.key = '';
       });
+    }
+    // Drops to the light setting if the intro runs slow on this device.
+    function noteFrame(dt) {
+      quality.frames += 1;
+      quality.frameAvg += (dt - quality.frameAvg) * 0.1;
+      if (!quality.low && quality.frames > 20 && quality.frameAvg > SLOW_FRAME_MS) {
+        quality.low = true;
+        sizeViews();
+      }
+    }
+
+    // The barangay and the shaking zones as paths, projected once at
+    // REF_ZOOM around the epicenter: any view is the same picture scaled and
+    // moved (Web Mercator), so a frame reprojects nothing.
+    const refPx = map.project(EPI, REF_ZOOM);
+    function addRings(path, rings) {
+      rings.forEach(ring => {
+        ring.forEach((point, index) => {
+          const p = map.project(point, REF_ZOOM);
+          if (index) path.lineTo(p.x - refPx.x, p.y - refPx.y);
+          else path.moveTo(p.x - refPx.x, p.y - refPx.y);
+        });
+        path.closePath();
+      });
+      return path;
+    }
+    const boundaryPath = addRings(new Path2D(), BOUNDARY);
+    const classPaths = classes.map(cls => {
+      const path = new Path2D();
+      cls.rings.forEach(polygon => addRings(path, polygon));
+      return path;
+    });
+    function worldTransform(g, view) {
+      const s = Math.pow(2, map.getZoom() - REF_ZOOM);
+      const ref = cp(EPI);
+      g.setTransform(view.dpr * s, 0, 0, view.dpr * s, view.dpr * (VIEW_PAD + ref.x), view.dpr * (VIEW_PAD + ref.y));
+    }
+    function screenTransform(g, view) {
+      g.setTransform(view.dpr, 0, 0, view.dpr, VIEW_PAD * view.dpr, VIEW_PAD * view.dpr);
+    }
+    function viewKey(view) {
+      const ref = cp(EPI);
+      return `${map.getZoom()}|${ref.x.toFixed(1)}|${ref.y.toFixed(1)}|${view.w}x${view.h}@${view.dpr}`;
     }
     function beginView(view) {
       L.DomUtil.setPosition(view.canvas, map.containerPointToLayerPoint([-VIEW_PAD, -VIEW_PAD]));
@@ -420,16 +481,6 @@
       const b = cp([EPI[0], EPI[1] + 1000 / KX]);
       return (b.x - a.x) / 1000;
     }
-    function traceRings(g, rings) {
-      rings.forEach(ring => {
-        ring.forEach((point, index) => {
-          const p = cp(point);
-          if (index) g.lineTo(p.x, p.y);
-          else g.moveTo(p.x, p.y);
-        });
-        g.closePath();
-      });
-    }
     function tracePath(g, points) {
       g.beginPath();
       points.forEach((point, index) => {
@@ -443,37 +494,41 @@
     // stops there), revealed inside the wave front. Intensity zones tile
     // the barangay, so the weakest is laid over all of it and the others on
     // top: one set of edges, no seams between neighbouring zones. The
-    // canvas's own opacity sets how strong the map looks.
+    // canvas's own opacity sets how strong the map looks. Redrawn only when
+    // the front moves or the map does: once the wave has crossed the
+    // barangay the picture holds still.
     function drawIntensity(front) {
+      const revealing = front < farthestM + 60;
+      const key = `${revealing ? Math.max(0, front).toFixed(1) : 'all'}|${viewKey(intensityView)}`;
+      if (key === intensityView.key) return;
+      intensityView.key = key;
       const g = beginView(intensityView);
       if (front <= 0) return;
       const ppm = pxPerMeter();
       const epi = cp(EPI);
       g.save();
       if (BOUNDARY.length) {
-        g.beginPath();
-        traceRings(g, BOUNDARY);
-        g.clip('evenodd');
+        worldTransform(g, intensityView);
+        g.clip(boundaryPath, 'evenodd');
       }
-      const revealing = front < farthestM + 60;
       if (revealing) {
+        screenTransform(g, intensityView);
         g.beginPath();
         g.arc(epi.x, epi.y, Math.max(0, front * ppm), 0, Math.PI * 2);
         g.clip();
       }
+      worldTransform(g, intensityView);
       const layered = isIntensity && classes.length > 1 && BOUNDARY.length;
       if (layered) {
-        g.beginPath();
-        traceRings(g, BOUNDARY);
         g.fillStyle = rgb(classes[classes.length - 1].color);
-        g.fill('evenodd');
+        g.fill(boundaryPath, 'evenodd');
       }
-      (layered ? classes.slice(0, -1) : classes).slice().reverse().forEach(cls => {
-        g.beginPath();
-        cls.rings.forEach(polygon => traceRings(g, polygon));
-        g.fillStyle = rgb(cls.color);
-        g.fill('evenodd');
-      });
+      const drawn = layered ? classes.length - 1 : classes.length;
+      for (let index = drawn - 1; index >= 0; index -= 1) {
+        g.fillStyle = rgb(classes[index].color);
+        g.fill(classPaths[index], 'evenodd');
+      }
+      screenTransform(g, intensityView);
       // Where the wave is crossing the barangay right now: a lit edge.
       if (revealing && BOUNDARY.length) {
         const radius = front * ppm;
@@ -596,11 +651,31 @@
         + 0.32 * (hash(Math.floor(tau / 11) + 5) - 0.5);
       return noise + startAmp * envelope * wave;
     }
+    // The trace's size comes from a ResizeObserver and its colors are read
+    // once per run (and on a resize or theme change), so a frame never makes
+    // the browser lay out or restyle the page to draw it.
+    const trace = { w: 0, h: 0, quiet: '#64748b', loud: '#c2410c', observer: null };
+    function readTraceColors() {
+      const styles = getComputedStyle(panel);
+      trace.quiet = styles.getPropertyValue('--muted').trim() || '#64748b';
+      trace.loud = styles.getPropertyValue('--shake-ink').trim() || '#c2410c';
+    }
+    function watchTrace() {
+      const canvas = field('trace');
+      if (!canvas || trace.observer || !window.ResizeObserver) return;
+      trace.observer = new ResizeObserver(entries => {
+        const box = entries[entries.length - 1].contentRect;
+        trace.w = box.width;
+        trace.h = box.height;
+        readTraceColors();
+        drawTrace(state.t);
+      });
+      trace.observer.observe(canvas);
+    }
     function drawTrace(t) {
       const canvas = field('trace');
-      const w = canvas?.clientWidth;
-      const h = canvas?.clientHeight;
-      if (!w || !h) return;
+      const { w, h } = trace;
+      if (!canvas || !w || !h) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
         canvas.width = Math.round(w * dpr);
@@ -614,15 +689,13 @@
       const until = Math.min(t, T.hold);
       const penX = (until / T.hold) * w;
       const arriveX = (ARRIVE_START / T.hold) * w;
-      const styles = getComputedStyle(panel);
-      const quiet = styles.getPropertyValue('--muted').trim() || '#64748b';
-      const loud = styles.getPropertyValue('--shake-ink').trim() || '#c2410c';
+      const { quiet, loud } = trace;
       g.lineJoin = 'round';
       g.lineCap = 'round';
       const stroke = (fromX, toX, color, width) => {
         if (toX <= fromX) return;
         g.beginPath();
-        for (let x = fromX; x <= toX; x += 0.5) {
+        for (let x = fromX; x <= toX; x += 1) {
           const y = mid - motion((x / w) * T.hold) * amp;
           if (x === fromX) g.moveTo(x, y);
           else g.lineTo(x, y);
@@ -655,10 +728,11 @@
         options.onPanelChange?.();
       }
       const hit = t >= ARRIVE_START;
-      field('meter').classList.toggle('is-hit', hit);
-      const value = field('value');
-      const text = hit ? startShakingText : 'Not yet';
-      if (value.textContent !== text) value.textContent = text;
+      if (hit !== state.meterHit) {
+        state.meterHit = hit;
+        field('meter').classList.toggle('is-hit', hit);
+        field('value').textContent = hit ? startShakingText : 'Not yet';
+      }
       drawTrace(t);
     }
 
@@ -696,13 +770,24 @@
       map.getContainer().classList.toggle('quake-intro-wide', wide);
     }
 
+    // A class or a style written only when it changes: restyling the SVG
+    // fault, or toggling a label, repaints part of the map.
+    function setHidden(marker, hidden) {
+      if (marker.hiddenNow === hidden) return;
+      marker.hiddenNow = hidden;
+      marker.getElement()?.classList.toggle('is-hidden', hidden);
+    }
+
     function frame(t) {
       const fadeIn = ease((t - T.faultIn[0]) / (T.faultIn[1] - T.faultIn[0]));
-      faultLine.setStyle({ opacity: fadeIn });
-      faultCasing.setStyle({ opacity: 0.85 * fadeIn });
+      if (fadeIn !== state.faultFade) {
+        state.faultFade = fadeIn;
+        faultLine.setStyle({ opacity: fadeIn });
+        faultCasing.setStyle({ opacity: 0.85 * fadeIn });
+      }
       if (t >= T.rupture[0] && !map.hasLayer(epiMarker)) epiMarker.addTo(map);
-      faultLabel.getElement()?.classList.toggle('is-hidden', t < T.faultIn[1] || state.zoomed);
-      placeLabel.getElement()?.classList.toggle('is-hidden', t < 200 || state.hit || state.zoomed);
+      setHidden(faultLabel, t < T.faultIn[1] || state.zoomed);
+      setHidden(placeLabel, t < 200 || state.hit || state.zoomed);
 
       drawIntensity((t - T.ring0) * T.speed);
       drawFx(t);
@@ -722,7 +807,9 @@
 
     function loop(now) {
       if (!state.running) return;
-      state.t += Math.min(64, now - state.last);
+      const dt = Math.min(64, now - state.last);
+      noteFrame(dt);
+      state.t += dt;
       state.last = now;
       frame(state.t);
       if (state.t >= T.hold) {
@@ -762,6 +849,8 @@
     }
 
     function removeLayers() {
+      trace.observer?.disconnect();
+      trace.observer = null;
       if (!state.layersOn) return;
       state.layersOn = false;
       map.off(mapHandlers);
@@ -847,6 +936,8 @@
         }
         addLayers();
         renderLegend();
+        readTraceColors();
+        watchTrace();
         setWideView(true);
         document.addEventListener('keydown', onKeyDown);
         state.running = true;
@@ -867,6 +958,7 @@
     syncPanel(0);
 
     return {
+      kind: 'earthquake',
       panel,
       start,
       skip,

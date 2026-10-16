@@ -26,6 +26,18 @@
   --red:     #dc2626;
   /* Ground shaking text and traces: the map's ground-shaking orange. */
   --shake-ink: #c2410c;
+  /* Flood levels as text, in the map's Low / Medium / High colors. */
+  --flood-low-ink: #854d0e;
+  --flood-medium-ink: #c2410c;
+  --flood-high-ink: #be123c;
+  /* The flood intro's depth gauge: the homepage's flood scene. */
+  --gauge-sky-top: #dfeaf7;
+  --gauge-sky-bottom: #f5f8fc;
+  --gauge-figure: #334155;
+  --gauge-water: rgba(40, 104, 170, .42);
+  --gauge-water-soft: rgba(40, 104, 170, .18);
+  --gauge-line: #1e5fa8;
+  --gauge-street: #8d99a8;
 
   --text:    #0f172a;
   --muted:   #516579;
@@ -91,6 +103,16 @@ body.dark {
   --yellow-ink: #eab308;
   --red:     #ef4444;
   --shake-ink: #fb923c;
+  --flood-low-ink: #facc15;
+  --flood-medium-ink: #fb923c;
+  --flood-high-ink: #fb7185;
+  --gauge-sky-top: #0c1726;
+  --gauge-sky-bottom: #14223a;
+  --gauge-figure: #cbd5e1;
+  --gauge-water: rgba(56, 140, 220, .36);
+  --gauge-water-soft: rgba(56, 140, 220, .16);
+  --gauge-line: #60a5fa;
+  --gauge-street: #334155;
 
   --text:    #e6edf5;
   --muted:   #8ca1b6;
@@ -5555,6 +5577,187 @@ body.dark .aco-legend-stuck {
 @media (prefers-reduced-motion: reduce) {
   .quake-callout-in {
     animation: none;
+  }
+}
+
+/* ---------- FLOOD INTRO ----------
+   flood-intro.js: the 25-year flood rising over the barangay before a flood
+   run's ant replay, in the replay's own panel plus a depth gauge. It shares
+   the earthquake intro's place name, callout, legend rows and summary line
+   (above). */
+.flood-meter {
+  --lvl-ink: var(--dim);
+  margin: 0 0 8px;
+  padding: 10px 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  transition: border-color .3s ease;
+}
+
+.flood-meter[data-level="0"] { --lvl-ink: var(--green-ink); }
+.flood-meter[data-level="1"] { --lvl-ink: var(--flood-low-ink); }
+.flood-meter[data-level="2"] { --lvl-ink: var(--flood-medium-ink); }
+.flood-meter[data-level="3"] { --lvl-ink: var(--flood-high-ink); }
+
+.flood-meter.is-hit {
+  border-color: color-mix(in srgb, var(--lvl-ink) 55%, var(--border));
+}
+
+/* The adult in the water, then the level in words. */
+.flood-meter-main {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.flood-scene {
+  display: block;
+  width: 92px;
+  height: 84px;
+  border-radius: 7px;
+}
+
+.flood-scene .fs-sky { fill: var(--gauge-sky-bottom); }
+.flood-scene .fs-figure { fill: var(--gauge-figure); }
+.flood-scene .fs-limb { fill: none; stroke: var(--gauge-figure); stroke-linecap: round; }
+.flood-scene .fs-street { fill: var(--gauge-street); }
+.flood-scene .fs-solid { fill: var(--gauge-water); }
+.flood-scene .fs-band { fill: var(--gauge-water-soft); }
+.flood-scene .fs-line { fill: none; stroke: var(--gauge-line); stroke-width: 1.4; stroke-linejoin: round; }
+.flood-scene .fs-bar { transition: opacity .3s ease; }
+
+.flood-meter-text {
+  min-width: 0;
+}
+
+.flood-meter-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .77rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.flood-meter-value {
+  margin-top: 3px;
+  color: var(--dim);
+  font-size: .95rem;
+  font-weight: 800;
+  line-height: 1.2;
+  transition: color .3s ease;
+}
+
+.flood-meter.is-hit .flood-meter-value,
+.flood-meter.is-hit .flood-meter-walk {
+  color: var(--lvl-ink);
+  font-weight: 800;
+}
+
+.flood-meter-sub {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.flood-meter-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.3;
+}
+
+.flood-meter-foot b {
+  color: var(--ink-strong);
+  font-weight: 800;
+}
+
+/* The flood depth classes in the legend. */
+.flood-depth-legend {
+  display: grid;
+  gap: 3px;
+  color: var(--map-ui-muted);
+  font: 500 .72rem var(--font-meta);
+  white-space: nowrap;
+}
+
+.flood-depth-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  margin: 0 6px 0 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .22);
+}
+
+.flood-depth-name {
+  display: inline-block;
+  min-width: 4.4em;
+  color: var(--map-ui-text);
+}
+
+/* The flood layer and the sites the ants route on are on the map, unseen,
+   while the intro plays (script.js holdReplayMapContext), and fade in as
+   the ants take over. */
+#map.scenario-intro-hold .leaflet-pane.leaflet-hazard-pane,
+#map.scenario-intro-hold .leaflet-marker-icon.evac-site-marker {
+  opacity: 0 !important;
+}
+
+#map.scenario-intro-reveal .leaflet-pane.leaflet-hazard-pane,
+#map.scenario-intro-reveal .leaflet-marker-icon.evac-site-marker {
+  transition: opacity .7s ease;
+}
+
+/* Text or a gauge change in the panels lays out the panels, not the map
+   under them (and a map change, not the panels). */
+.flood-meter,
+.quake-meter {
+  contain: layout paint;
+}
+
+@media (max-width: 639px) {
+  /* One row in the sheet: the small scene, the level and its depth. */
+  .msheet .flood-meter {
+    margin-bottom: 0;
+    padding: 7px 10px 6px;
+  }
+
+  .msheet .flood-meter-main {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .msheet .flood-scene {
+    width: 52px;
+    height: 48px;
+    border-radius: 6px;
+  }
+
+  .msheet .flood-meter-value {
+    margin-top: 1px;
+    font-size: .86rem;
+  }
+
+  .msheet .flood-meter-sub {
+    margin-top: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .msheet[data-snap="peek"] .flood-meter-foot {
+    display: none;
   }
 }
 

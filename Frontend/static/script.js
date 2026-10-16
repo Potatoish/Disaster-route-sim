@@ -1324,10 +1324,13 @@ function recenterMap() {
     window.mobileSim.resumeAutoFit();
     if (activeReplayController && !activeReplayController.isDone()) {
       const walking = activeReplayController.isWalking();
-      const quake = isQuakeIntroPlaying();
+      const intro = isScenarioIntroPlaying() ? activeScenarioIntro.kind : null;
       // Walking: the follow eases the walker back to its focus point.
       if (!walking) fitReplaySearch({ flySeconds: RECENTER_FLY_SECONDS });
-      window.mobileSim.toast(walking ? 'Following the walk on Route 1' : quake ? 'Showing the earthquake' : 'Showing the ants\' search');
+      window.mobileSim.toast(walking ? 'Following the walk on Route 1'
+        : intro === 'flood' ? 'Showing the flood'
+        : intro ? 'Showing the earthquake'
+        : 'Showing the ants\' search');
       return;
     }
     window.mobileSim.toast(simData ? 'Showing full route' : 'Showing the whole barangay');
@@ -2141,8 +2144,10 @@ function getAcoStats(result = simData) {
   return result?.aco && Number(result.aco.ants_sent) > 0 ? result.aco : null;
 }
 
+// Thousands separators by hand: a first toLocaleString call loads the number
+// formatter, a noticeable pause on a slow phone as the results open.
 function formatCount(value) {
-  return Number(value || 0).toLocaleString('en-US');
+  return String(Math.round(Number(value) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 // Plain-language line for the results (residents read it, so no "ACO"):
@@ -4404,6 +4409,8 @@ async function runSimulation() {
       barangay: selectedBarangay,
       vars: getFloodOverlayConfig().vars,
     }).catch(() => {});
+    // And the flood intro's scenario (flood-intro.js caches it too).
+    if (!prefersReducedMotion()) window.floodIntro?.load(selectedBarangay).catch(() => {});
   }
   const [endpoint, payload, label] = isEarthquakeRun
     ? ['/earthquake/simulate', {
@@ -4589,11 +4596,32 @@ function mountReplayPanel(panel) {
 // draw theirs (aco-replay.js removeLayers).
 let activeReplayController = null;
 let replayRouteOnMap = null;
-// An earthquake run's intro (quake-intro.js), while it plays before the ants.
-let activeQuakeIntro = null;
+// A run's scenario intro (quake-intro.js, flood-intro.js), while it plays
+// before the ants.
+let activeScenarioIntro = null;
 
-function isQuakeIntroPlaying() {
-  return !!activeQuakeIntro && !activeQuakeIntro.isDone();
+function isScenarioIntroPlaying() {
+  return !!activeScenarioIntro && !activeScenarioIntro.isDone();
+}
+
+// While a scenario intro plays, the hazards and the evacuation sites the
+// ants route on are already on the map, unseen (style.css), so taking over
+// redraws nothing; they fade in as the intro's layers fade out.
+const SCENARIO_REVEAL_MS = 800;
+
+function holdReplayMapContext(hold) {
+  const mapEl = document.getElementById('map');
+  if (!mapEl) return;
+  window.clearTimeout(holdReplayMapContext.timer);
+  if (hold) {
+    mapEl.classList.remove('scenario-intro-reveal');
+    mapEl.classList.add('scenario-intro-hold');
+    return;
+  }
+  if (!mapEl.classList.contains('scenario-intro-hold')) return;
+  mapEl.classList.add('scenario-intro-reveal');
+  mapEl.classList.remove('scenario-intro-hold');
+  holdReplayMapContext.timer = window.setTimeout(() => mapEl.classList.remove('scenario-intro-reveal'), SCENARIO_REVEAL_MS);
 }
 
 function clearReplayRoute() {
@@ -4606,7 +4634,7 @@ function clearReplayRoute() {
 function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
   const controller = activeReplayController;
   if (!gMap || !controller || controller.isDone()) return;
-  const bounds = isQuakeIntroPlaying() ? activeQuakeIntro.getViewBounds() : controller.getSearchBounds();
+  const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds() : controller.getSearchBounds();
   const padding = getReplayFitPadding();
   if (onlyIfOutOfView && boundsFitInView(bounds, padding)) return;
   const fitOptions = { ...padding, maxZoom: PIN_PLACEMENT_ZOOM };
@@ -4733,17 +4761,27 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     const startName = result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel;
     const startPoint = getReadyPin('start') || { lat: replayData.start?.[0], lng: replayData.start?.[1] };
 
-    // An earthquake run opens with its scenario (quake-intro.js): the fault,
-    // the waves and the shaking map. The hazards and sites the ants route
-    // on come in when they take over.
-    const withIntro = isEarthquakeRun && !!window.quakeIntro?.canPlay(result) && barangayBoundaryRings.length > 0
+    // A run opens with its scenario: an earthquake's fault, waves and
+    // shaking map (quake-intro.js), a flood's rain and rising water
+    // (flood-intro.js). The hazards and sites the ants route on are drawn
+    // now, behind the loader, unseen, and shown as the ants take over.
+    const canIntro = barangayBoundaryRings.length > 0
       && Number.isFinite(Number(startPoint.lat)) && Number.isFinite(Number(startPoint.lng));
-    if (withIntro) {
-      window.earthquakeUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
-      window.earthquakeUI?.drawEvacuationSites({ map: gMap, sites: [] });
-    } else {
-      await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+    const withQuakeIntro = canIntro && isEarthquakeRun && !!window.quakeIntro?.canPlay(result);
+    let floodIntroData = null;
+    if (canIntro && !isEarthquakeRun && result.flood_scenario && window.floodIntro) {
+      try {
+        const [scenario, floodLayers] = await Promise.all([
+          window.floodIntro.load(selectedBarangay),
+          window.floodHazardUI.loadHazardLayers({ scope: 'barangay_buffer', barangay: selectedBarangay, vars: [1, 2, 3] }),
+        ]);
+        if (window.floodIntro.canPlay(result, scenario)) floodIntroData = { scenario, floodLayers };
+      } catch (err) {
+        console.warn('No flood intro for this run:', err);
+      }
     }
+    if (withQuakeIntro || floodIntroData) holdReplayMapContext(true);
+    await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
     controller = window.acoReplay.create({
       map: gMap,
       replay: replayData,
@@ -4778,26 +4816,39 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       isCameraPaused: () => !!window.mobileSim?.isAutoFitPaused(),
     });
     activeReplayController = controller;
-    if (withIntro) {
-      activeQuakeIntro = window.quakeIntro.create({
-        map: gMap,
+    const introStart = { lat: Number(startPoint.lat), lng: Number(startPoint.lng), label: startName };
+    const introCommon = {
+      map: gMap,
+      boundaryRings: barangayBoundaryRings,
+      start: introStart,
+      legendBody: document.getElementById('mapLegendBody'),
+      legendPins: buildPinLegendRow('start') + buildBoundaryLegendRow(),
+      getPadding: getReplayFitPadding,
+      onPanelChange: () => window.mobileSim?.scheduleSync(),
+      showCredit: !window.mobileSim?.isActive(),
+    };
+    if (withQuakeIntro) {
+      activeScenarioIntro = window.quakeIntro.create({
+        ...introCommon,
         scenario: result.earthquake_scenario,
         hazardLayers: result.hazard_layers,
-        boundaryRings: barangayBoundaryRings,
         barangay: result.barangay || selectedBarangay,
-        start: { lat: Number(startPoint.lat), lng: Number(startPoint.lng), label: startName },
-        legendBody: document.getElementById('mapLegendBody'),
-        legendPins: buildPinLegendRow('start') + buildBoundaryLegendRow(),
-        getPadding: getReplayFitPadding,
-        onPanelChange: () => window.mobileSim?.scheduleSync(),
-        showCredit: !window.mobileSim?.isActive(),
+      });
+    } else if (floodIntroData) {
+      activeScenarioIntro = window.floodIntro.create({
+        ...introCommon,
+        scenario: floodIntroData.scenario,
+        floodLayers: floodIntroData.floodLayers,
+        barangay: selectedBarangay,
+        startLevel: result.flood_scenario.start_level,
+        toEvacuationSite: !!result.to_evacuation_site,
       });
     }
 
     const shell = document.getElementById('appShell');
     const layoutBefore = shell?.className;
     shell?.classList.add('aco-replaying');
-    mountReplayPanel(activeQuakeIntro ? activeQuakeIntro.panel : controller.panel);
+    mountReplayPanel(activeScenarioIntro ? activeScenarioIntro.panel : controller.panel);
     applySetupSidebarState(true);
     setMapLegendVisible(true);
     // The panels finish sliding first, and initMap's resize handling (which
@@ -4805,7 +4856,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     // view is fitted once, to the map's final size.
     if (shell && shell.className !== layoutBefore) await waitMs(PANEL_SLIDE_MS + REPLAY_RESIZE_SETTLE_MS);
     gMap.invalidateSize({ pan: false });
-    const firstView = activeQuakeIntro ? activeQuakeIntro.getBounds() : controller.getSearchBounds();
+    const firstView = activeScenarioIntro ? activeScenarioIntro.getBounds() : controller.getSearchBounds();
     gMap.fitBounds(firstView, mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, animate: false }));
   } catch (err) {
     console.error('Could not set up the replay:', err);
@@ -4813,7 +4864,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     return null;
   }
 
-  const intro = activeQuakeIntro;
+  const intro = activeScenarioIntro;
   return {
     async play() {
       let panel = intro ? intro.panel : controller.panel;
@@ -4832,9 +4883,9 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
           // The ants take over: the hazards and sites they route on come in
           // as the intro's layers fade, the intro folds to one line over
           // the ants' panel, and the camera flies to their search.
-          await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+          holdReplayMapContext(false);
           intro.destroy({ fade: true });
-          activeQuakeIntro = null;
+          activeScenarioIntro = null;
           intro.panel.remove();
           controller.panel.prepend(intro.buildSummary());
           panel = controller.panel;
@@ -4863,11 +4914,12 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
 
 // keepRoute: the results are next, and draw their routes over Route 1.
 function endSimulationReplay(controller, { keepRoute = false } = {}) {
-  if (activeQuakeIntro) {
-    activeQuakeIntro.destroy();
-    activeQuakeIntro.panel.remove();
-    activeQuakeIntro = null;
+  if (activeScenarioIntro) {
+    activeScenarioIntro.destroy();
+    activeScenarioIntro.panel.remove();
+    activeScenarioIntro = null;
   }
+  holdReplayMapContext(false);
   controller?.skip();
   controller?.panel.remove();
   if (activeReplayController === controller) activeReplayController = null;

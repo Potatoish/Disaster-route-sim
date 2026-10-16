@@ -26,6 +26,7 @@ from earthquake_service import (
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
+from flood_scenario import get_flood_scenario_payload
 from main import simulate, simulate_to_evacuation_site
 import osm_routing
 from osm_routing import (
@@ -87,7 +88,7 @@ def _cache_versioned_static(response):
 # A finished run's JSON carries the replay's ant walks (a few hundred kB for
 # a long route); gzipped it is about a fifth of that, which matters on phone
 # data. Only these endpoints: the rest are small, static or ETag-cached.
-GZIP_ENDPOINTS = {"simulation_job", "run_simulation", "run_earthquake"}
+GZIP_ENDPOINTS = {"simulation_job", "run_simulation", "run_earthquake", "flood_scenario"}
 GZIP_MIN_BYTES = 16 * 1024
 
 @app.after_request
@@ -607,6 +608,34 @@ def flood_evac_sites():
         "evacuation_sites": sites,
     })
 
+@app.route("/flood/scenario", methods=["GET"])
+def flood_scenario():
+    """The 25-year flood the flood intro plays over the barangay
+    (flood_scenario.py): the same for every visitor, so the browser keeps it
+    and asks with its ETag."""
+    barangay = (request.args.get("barangay") or "").strip()
+    if not barangay:
+        return jsonify({
+            "error": True,
+            "message": "Barangay name is required"
+        }), 400
+    try:
+        payload = get_flood_scenario_payload(barangay)
+    except Exception as e:
+        return jsonify({
+            "error": True,
+            "message": str(e)
+        }), 500
+    if payload is None:
+        return jsonify({
+            "error": True,
+            "message": f"No flood scenario for '{barangay}'"
+        }), 404
+    response = jsonify({"error": False, **payload})
+    response.headers["Cache-Control"] = "no-cache"
+    response.add_etag()
+    return response.make_conditional(request)
+
 @app.route("/earthquake/evac-sites", methods=["GET"])
 def earthquake_evac_sites():
     try:
@@ -726,6 +755,7 @@ def _warm_caches():
         point = boundary["geometry"].representative_point()
         steps = (
             lambda: build_flood_hazard_layer_payload(name, clip_scope="barangay_buffer"),
+            lambda: get_flood_scenario_payload(name),
             lambda: check_flood_pin(name, point.y, point.x),
             lambda: check_earthquake_pin(name, point.y, point.x),
         )

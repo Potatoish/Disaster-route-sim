@@ -285,6 +285,9 @@ function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labe
     iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     iconSize: [Math.round(width * scale), Math.round(height * (70 / 110))],
     iconAnchor: [Math.round((46 + shift) * scale), 63],
+    // The flood intro keeps the sites unseen until the ants take over
+    // (style.css .scenario-intro-hold).
+    className: 'evac-site-marker',
   });
 }
 

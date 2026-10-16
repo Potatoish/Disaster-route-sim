@@ -267,6 +267,7 @@
     drawEvacuationSites,
     clearEvacuationSites,
     evacMarkerStyles: EVAC_MARKER_STYLES,
+    layerStyles: FLOOD_LAYER_STYLES,
     reset,
   };
 })();

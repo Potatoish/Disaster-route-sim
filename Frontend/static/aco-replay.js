@@ -111,7 +111,9 @@
     return x - Math.floor(x);
   };
   const formatKm = meters => (meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`);
-  const formatCountText = value => Number(value || 0).toLocaleString('en-US');
+  // Thousands separators by hand: a first toLocaleString call loads the
+  // number formatter, a noticeable pause on a slow phone as the replay opens.
+  const formatCountText = value => String(Math.round(Number(value) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
   function decodeEdges(replay) {
     const [lat0, lng0] = replay.origin;
@@ -328,7 +330,12 @@
         <button type="button" class="aco-replay-skip">Skip to results</button>
       </div>
       <p class="sr-only" aria-live="polite" data-aco="caption"></p>`;
-    const field = name => panel.querySelector(`[data-aco="${name}"]`);
+    // Looked up once: the panel's numbers are rewritten every frame.
+    const fields = {};
+    const field = name => {
+      if (!fields[name]) fields[name] = panel.querySelector(`[data-aco="${name}"]`);
+      return fields[name];
+    };
     const setText = (name, text) => {
       const el = field(name);
       if (el && el.textContent !== text) el.textContent = text;
