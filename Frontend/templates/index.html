@@ -429,6 +429,7 @@
           <div class="msheet-mode" id="msimReplay" hidden></div>
 
           <div class="msheet-mode" id="msimResults" hidden>
+            {% include "_result_brand.html" %}
             <div class="mlens" id="msimLens" role="group" aria-label="Earthquake lens" hidden>
               <button type="button" data-msim-eq-view="overall" aria-pressed="true" onclick="switchEarthquakeView('overall')">Overall</button>
               <button type="button" data-msim-eq-view="liquefaction" aria-pressed="false" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
@@ -572,10 +573,7 @@
   </main>
 
   <aside class="route-safety-panel" id="routeSafetyPanel" aria-label="Route safety results" aria-live="polite">
-    <div class="safety-brand">
-      <div class="safety-eyebrow">AGNAS</div>
-      <h2>Ant guided navigation and safety system</h2>
-    </div>
+    {% include "_result_brand.html" %}
     {# Short viewports only (style.css): results is a full-screen panel there,
        so this goes back to setup. #}
     <button class="safety-edit-setup-btn" type="button" onclick="openSetupDrawerFromResults()">Edit setup</button>
@@ -630,6 +628,7 @@
 
 {# The PDF library downloads only when a report is requested. #}
 <script src="{{ url_for('static', filename='ui.js') }}"></script>
+<script src="{{ url_for('static', filename='location-photos.js') }}"></script>
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>

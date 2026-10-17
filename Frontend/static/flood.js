@@ -258,6 +258,7 @@
           .setLatLng(marker.getLatLng())
           .setContent(`
             <div class="popup-shell">
+              ${buildLocationPhoto({ ...site, label: site.name })}
               <div class="popup-title">${escapeHtml(site.name)}</div>
               <div class="popup-row"><span>Role</span><span>${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}</span></div>
             </div>`)

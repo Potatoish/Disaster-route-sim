@@ -829,6 +829,9 @@ function syncSimulationConfigLock() {
     const el = document.getElementById(id);
     if (el) el.disabled = simulationInProgress;
   });
+  document.querySelectorAll('[data-result-refresh]').forEach(button => {
+    button.disabled = simulationInProgress;
+  });
 }
 
 function setSimulationInProgress(running) {
@@ -1303,8 +1306,10 @@ function initMap() {
     clearTimeout(mapResizeDebounceTimer);
     mapResizeDebounceTimer = window.setTimeout(() => {
       keepMapContentInPlace();
-      // A phone visitor who moved the map keeps their view (mobile-sim.js).
-      if (!window.mobileSim?.isAutoFitPaused() && !pinPlacementRole) {
+      // Keep the visitor's camera, including a popup's auto-pan: a delayed
+      // resize fit must not put its larger photo back outside the map.
+      if (!window.mobileSim?.isAutoFitPaused() && !pinPlacementRole
+        && !resizedMapEl.querySelector('.leaflet-popup')) {
         refitMapToCurrentContent({ onlyIfOutOfView: true });
       }
     }, 150);
@@ -1796,11 +1801,15 @@ function buildRouteEtaLabel(route) {
     ? `Route ${route.display_route_no}${tag ? ` · ${tag}` : ''}`
     : tag;
   const caution = isBest && getRouteSafetyTier(route) === 'caution' ? ' route-eta--caution' : '';
+  const floodDepth = selectedHazard === 'Flood'
+    ? getFloodPeakVar(route) === 0 ? 'No flooding shown' : getFloodPeakDepthRange(route)
+    : null;
   return `<div class="route-eta route-eta--${category}${caution}">
     ${safetyIcon('walk')}
     <div class="route-eta-text">
       ${name ? `<em class="route-eta-name">${escapeHtml(name)}</em>` : ''}
       <strong>${escapeHtml(duration)}</strong><span>${escapeHtml(route?.display_distance || '')}</span>
+      ${floodDepth !== null ? `<span class="route-eta-depth">Peak flood depth: <b>${escapeHtml(floodDepth)}</b></span>` : ''}
     </div>
   </div>`;
 }
@@ -2894,7 +2903,8 @@ function buildPinPopupContent(role) {
   if (Number.isFinite(pin.roadDistance)) {
     rows.push(['Nearest road', formatDistanceCompact(pin.roadDistance)]);
   }
-  return infoPopup(pin.label || PIN_ROLE_COPY[role].fallbackLabel, rows);
+  return infoPopup(pin.label || PIN_ROLE_COPY[role].fallbackLabel, rows,
+    buildLocationPhoto({ ...pin, label: pin.label || PIN_ROLE_COPY[role].fallbackLabel, role }));
 }
 
 // Creates, moves, or removes each role's map marker to match routePins.
@@ -3008,7 +3018,7 @@ function syncRoutePinMarkers() {
         activeInfoWindow?.remove();
         // Top padding keeps the popup clear of the flood filter/lens chip
         // and zoom controls overlaid on the map's top edge.
-        activeInfoWindow = L.popup({ offset: [0, -44], autoPanPaddingTopLeft: [16, 130] })
+        activeInfoWindow = L.popup({ offset: [0, -44], ...getEvacSitePopupPanOptions() })
           .setLatLng(marker.getLatLng())
           .setContent(buildPinPopupContent(role))
           .openOn(gMap);
@@ -3386,8 +3396,9 @@ function clearBarangaySelections({ keepBoundary = false } = {}) {
   syncSimulationConfigLock();
 }
 
-function infoPopup(title, rows) {
+function infoPopup(title, rows, photo = '') {
   return `<div class="popup-shell">
+    ${photo}
     <div class="popup-title">${escapeHtml(title)}</div>
     ${rows.map(([k, v, c]) => `<div class="popup-row"><span>${escapeHtml(k)}</span><span style="${c ? 'color:' + c : ''}">${escapeHtml(v)}</span></div>`).join('')}
   </div>`;
@@ -5063,9 +5074,32 @@ async function restoreSimulationSession(session) {
   if (session.result) {
     saveSimulationSession(session);
     await showSimulationResult(session.result, context);
+    const route = simData.routes?.find(item => Number(item.display_route_no) === Number(session.routeFocus?.routeNo));
+    if (route) {
+      selectedRouteFocus = { routeNo: route.display_route_no, category: route.category, animate: session.routeFocus.animate !== false };
+      applyRouteFocusState(route.display_route_no);
+      refitMapToCurrentRoute();
+    }
   } else if (session.jobId) {
     await followSimulationJob(() => fetchSimulationJob(session.jobId), context);
   }
+}
+
+// Refresh from the logo without discarding the run or the selected route.
+function refreshSimulationResults() {
+  if (simulationInProgress || !simData) return;
+  const session = {
+    ...buildSimulationSessionBase(isEarthquakeSimulationResult(simData)),
+    result: simData,
+    routeFocus: selectedRouteFocus,
+  };
+  if (saveSimulationSession(session)) {
+    window.location.reload();
+    return;
+  }
+  // If browser storage is unavailable, refresh the panel in place.
+  renderRouteSafetyPanel(simData);
+  gMap?.invalidateSize();
 }
 
 // "New simulation": back to choosing the disaster on the same barangay, as on

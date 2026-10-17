@@ -230,12 +230,41 @@ function mapMoveOptions(options = {}) {
 // taller than the gap keeps its top (the site's name) in view.
 function getEvacSitePopupPanOptions() {
   const covered = window.mobileSim?.getCoveredInsets();
+  const room = gMap.getSize().y - (covered?.top || 130) - (covered?.bottom || 16);
   return covered
     ? {
+      className: 'location-photo-popup',
       autoPanPaddingTopLeft: [(covered.left || 0) + 12, covered.top + 12],
       autoPanPaddingBottomRight: [(covered.right || 0) + 12, covered.bottom + 12],
+      maxHeight: Math.max(140, Math.min(320, room - 92)),
     }
-    : { autoPanPaddingTopLeft: [16, 130] };
+    : { className: 'location-photo-popup', autoPanPaddingTopLeft: [16, 130], maxHeight: 320 };
+}
+
+// Static place photos from reviewed Google Maps overviews. An arbitrary pin
+// only gets a nearby place's photo when it is within 25 m, labeled as such.
+function buildLocationPhoto({ lat, lng, id, label = 'Location', role = 'site' }) {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+    || Math.abs(latitude) > 85 || Math.abs(longitude) > 180) return '';
+  const photos = window.agnasLocationPhotos || [];
+  let photo = id ? photos.find(item => item.id === id) : null;
+  if (!photo && role !== 'site') {
+    const point = L.latLng(latitude, longitude);
+    photo = photos.find(item => !item.nearbyOnly && point.distanceTo([item.lat, item.lng]) <= 25);
+  }
+  const query = role === 'site' ? `${label}, Pasig City` : `${latitude},${longitude}`;
+  const source = photo?.source || `https://www.google.com/maps/search/?${new URLSearchParams({ api: '1', query })}`;
+  return `<figure class="location-photo${photo ? '' : ' is-missing'}">
+    <div class="location-photo-frame">
+      ${photo ? `<span class="location-photo-loading">Loading photo…</span>
+      <span class="location-photo-unavailable">Photo currently unavailable</span>
+      <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.name)} — location photo" width="480" height="300" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onload="this.closest('figure').classList.add('is-loaded')" onerror="this.hidden=true;this.closest('figure').classList.add('is-unavailable')">`
+      : `<span class="location-photo-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></svg>Photo not available yet</span>`}
+    </div>
+    <figcaption>${photo?.context ? `<span>${escapeHtml(photo.context)}</span>` : photo && role !== 'site' ? `<span>Nearby: ${escapeHtml(photo.name)}</span>` : ''}<a href="${escapeHtml(source)}" target="_blank" rel="noopener noreferrer">${photo ? 'Photo via Google Maps' : 'View on Google Maps'} ↗</a></figcaption>
+  </figure>`;
 }
 
 // The house pin of an evacuation site, with a name badge under the house:

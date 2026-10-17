@@ -107,6 +107,7 @@
   function buildEvacInfoContent(site, isHighlighted) {
     return `
       <div class="popup-shell">
+        ${buildLocationPhoto({ ...site, label: site.name })}
         <div class="popup-title">${escapeHtml(site.name)}</div>
         <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Target evacuation site' : 'Evacuation site'}</span></div>
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pasig City')}</span></div>
