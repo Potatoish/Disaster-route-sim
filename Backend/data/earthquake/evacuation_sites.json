@@ -5,79 +5,90 @@
       "name": "Urbano Velasco Ave.",
       "lat": 14.555551,
       "lng": 121.090004,
-      "address": "Urbano Velasco Ave., Pinagbuhatan, Pasig City"
+      "address": "Urbano Velasco Ave., Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "near-greenwood-ave",
       "name": "Near GreenWood Ave.",
       "lat": 14.561501,
       "lng": 121.095986,
-      "address": "Near GreenWood Ave., Pinagbuhatan, Pasig City"
+      "address": "Near GreenWood Ave., Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "sandoval-ave",
       "name": "Sandoval Ave.",
       "lat": 14.55033,
       "lng": 121.1014,
-      "address": "Sandoval Ave., Pinagbuhatan, Pasig City"
+      "address": "Sandoval Ave., Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "near-pasig-city-jail",
       "name": "Near Pasig City Jail",
       "lat": 14.541525,
       "lng": 121.101975,
-      "address": "Near Pasig City Jail, Pinagbuhatan, Pasig City"
+      "address": "Near Pasig City Jail, Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "near-ilugin-elementary-school",
       "name": "Near Ilugin Elementary School",
       "lat": 14.552092,
       "lng": 121.098781,
-      "address": "Near Ilugin Elementary School, Pinagbuhatan, Pasig City"
+      "address": "Near Ilugin Elementary School, Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "santos-alipinin-basketball-court",
       "name": "Santos Alipinin Basketball Court",
       "lat": 14.541974,
       "lng": 121.103773,
-      "address": "Santos Alipinin Basketball Court, Pinagbuhatan, Pasig City"
+      "address": "Santos Alipinin Basketball Court, Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "pinagbuhatan-elementary-school",
       "name": "Pinagbuhatan Elementary School",
       "lat": 14.557699,
       "lng": 121.091356,
-      "address": "Pinagbuhatan Elementary School, Pinagbuhatan, Pasig City"
+      "address": "Pinagbuhatan Elementary School, Pinagbuhatan, Pasig City",
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     }
   ],
   "sta lucia": [
     {
       "id": "1-east-bank-road",
-      "name": "1 East Bank Road",
+      "name": "East Bank Road",
       "lat": 14.588797662452732,
       "lng": 121.09389844474939,
-      "address": "1 East Bank Road, Sta. Lucia, Pasig City"
+      "address": "1 East Bank Road, Sta. Lucia, Pasig City",
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "super-8-grocery-warehouse-ortigas-ext",
       "name": "Super 8 Grocery Warehouse Ortigas Ext.",
       "lat": 14.588195452187648,
       "lng": 121.10273900580614,
-      "address": "Super 8 Grocery Warehouse, Ortigas Ext., Sta. Lucia, Pasig City"
+      "address": "Super 8 Grocery Warehouse, Ortigas Ext., Sta. Lucia, Pasig City",
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "sm-city-east-ortigas",
       "name": "SM City East Ortigas",
       "lat": 14.588343,
       "lng": 121.104561,
-      "address": "SM City East Ortigas, Sta. Lucia, Pasig City"
+      "address": "SM City East Ortigas, Sta. Lucia, Pasig City",
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "1-east-bank-road-2",
-      "name": "1 East Bank Road",
+      "name": "East Bank Road (near Javier Bridge)",
       "lat": 14.577273,
       "lng": 121.100802,
-      "address": "East Bank Road, Sta. Lucia, Pasig City"
+      "address": "East Bank Road, Sta. Lucia, Pasig City",
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     }
   ]
 }
