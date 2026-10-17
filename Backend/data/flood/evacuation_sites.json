@@ -4,25 +4,29 @@
       "id": "balsancat-whole-court",
       "name": "Balsancat Whole Court",
       "lat": 14.560934,
-      "lng": 121.087339
+      "lng": 121.087339,
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "ilugin-elementary-school",
       "name": "Ilugin Elementary School",
       "lat": 14.552776,
-      "lng": 121.099927
+      "lng": 121.099927,
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "pinagbuhatan-multi-purpose-hall-damayan",
       "name": "Pinagbuhatan Multi Purpose Hall Damayan",
       "lat": 14.554896,
-      "lng": 121.091416
+      "lng": 121.091416,
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "nagpayong-multipurpose-hall",
       "name": "Nagpayong Multipurpose Hall",
       "lat": 14.544421,
-      "lng": 121.104673
+      "lng": 121.104673,
+      "source": "Barangay Pinagbuhatan officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     }
   ],
   "sta lucia": [
@@ -30,19 +34,22 @@
       "id": "de-castro-elementary-school",
       "name": "De Castro Elementary School",
       "lat": 14.587088,
-      "lng": 121.098459
+      "lng": 121.098459,
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "sta-lucia-bliss-covered-basketball-court",
       "name": "Sta. Lucia Bliss Covered Basketball Court",
       "lat": 14.578784,
-      "lng": 121.101173
+      "lng": 121.101173,
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     },
     {
       "id": "countryside-multipurpose-center",
       "name": "Countryside Multipurpose Center",
       "lat": 14.587375,
-      "lng": 121.101185
+      "lng": 121.101185,
+      "source": "Barangay Sta. Lucia officials (kagawad and BDRRMC personnel), face-to-face interview, October 2026"
     }
   ]
 }
