@@ -35,6 +35,7 @@
   // canvases), and so does any device whose intro frames average slower
   // than SLOW_FRAME_MS. Kept for the session: a slow device stays slow.
   const SLOW_FRAME_MS = 26;
+  const FRAME_INTERVAL = 1000 / 60;
   const quality = {
     low: !!window.agnasUI?.constrained || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4,
     frameAvg: 16.7,
@@ -246,6 +247,7 @@
     const state = {
       t: 0,
       last: 0,
+      lastPaint: 0,
       raf: 0,
       running: false,
       done: false,
@@ -811,7 +813,11 @@
       noteFrame(dt);
       state.t += dt;
       state.last = now;
-      frame(state.t);
+      const paintElapsed = now - state.lastPaint;
+      if (paintElapsed >= FRAME_INTERVAL - 0.1 || state.t >= T.hold) {
+        state.lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / FRAME_INTERVAL)) * FRAME_INTERVAL;
+        frame(state.t);
+      }
       if (state.t >= T.hold) {
         end();
         return;
@@ -823,6 +829,7 @@
       cancelAnimationFrame(state.raf);
       if (state.running && !document.hidden) {
         state.last = performance.now();
+        state.lastPaint = state.last;
         state.raf = requestAnimationFrame(loop);
       }
     }
@@ -952,6 +959,7 @@
         document.addEventListener('visibilitychange', onVisibilityChange);
         state.running = true;
         state.last = performance.now();
+        state.lastPaint = state.last;
         frame(0);
         state.raf = requestAnimationFrame(loop);
       });

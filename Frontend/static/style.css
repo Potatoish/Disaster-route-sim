@@ -1035,6 +1035,26 @@ body.dark .pin-input-menu {
   pointer-events: none;
 }
 
+.map-legend.is-collapsed { min-width: 0; width: max-content; }
+.map-legend.is-collapsed .legend-head { margin-bottom: 0; }
+.legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--map-ui-muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.legend-toggle .legend-title { flex: 1; text-align: left; }
+.legend-toggle-action { font: 600 .7rem var(--font-body); }
+.legend-toggle svg { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+.legend-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
+
 .legend-title {
   font-family: 'DM Mono', monospace;
   font-size: .76rem;
@@ -1950,6 +1970,7 @@ body.dark .safety-card-action:hover { color: #1c0606; }
 .safety-disclaimer-text { margin: 0; color: var(--text); font-size: .76rem; font-weight: 500; line-height: 1.55; }
 .safety-disclaimer-link { display: inline-block; margin-top: 6px; padding: 0; border: none; background: none; color: var(--red); font-size: .76rem; font-weight: 800; text-decoration: underline; cursor: pointer; }
 .safety-disclaimer-link:hover, .safety-disclaimer-link:focus-visible { opacity: .8; }
+[data-result-hotlines][hidden] { display: none; }
 .safety-all-routes-btn { width: 100%; margin-top: 11px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft-bg); color: var(--accent); font: 700 .76rem var(--font-body); cursor: pointer; transition: background-color .16s ease, color .16s ease, scale .12s ease; }
 .safety-all-routes-btn:hover { background: var(--accent); color: var(--accent-ink); }
 
@@ -2660,6 +2681,7 @@ body.dark .leaflet-popup-close-button {
     bottom: calc(32px + env(safe-area-inset-bottom, 0px));
     max-width: min(220px, calc(100% - 24px));
   }
+  .legend-toggle { min-height: 44px; }
 
   /* 44px tap targets for the controls on the map and the navigation. */
   .sidebar-toggle {
@@ -2973,10 +2995,6 @@ body.dark .leaflet-popup-close-button {
     min-width: 0;
     max-width: none;
     padding: 6px 10px;
-  }
-
-  .map-legend .legend-head {
-    display: none;
   }
 
   .map-legend .legend-body {
@@ -3344,6 +3362,12 @@ body.dark .leaflet-popup-close-button {
    scroll or zoom the page instead. */
 #map.map-gestures-locked {
   touch-action: none;
+  overscroll-behavior: none;
+}
+
+#map.map-gestures-locked :is(.leaflet-control-zoom, .map-recenter-control, .leaflet-control-layers) {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .msim-map-group {
@@ -5050,7 +5074,6 @@ body.dark .aco-legend-stuck {
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
-#appShell.aco-replay-card .map-legend .legend-head,
 #appShell.aco-replay-card .map-legend .aco-legend-pins,
 #appShell.aco-replay-card .map-legend .quake-legend-keys {
   display: none;

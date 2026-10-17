@@ -581,7 +581,11 @@ function initAntCanvas() {
   let reduced = motionQuery.matches;
   let animationFrame = 0;
   let lastPaint = 0;
-  const frameInterval = window.agnasUI?.constrained ? 1000 / 30 : 1000 / 60;
+  let lastUpdate = 0;
+  const frameInterval = 1000 / 60;
+  // Preserve the gentler ambient motion on constrained devices while
+  // drawing at 60 FPS. Movement and trail aging follow elapsed time.
+  const motionScale = window.agnasUI?.constrained ? 0.5 : 1;
   let width, height, network = { nodes: [], edges: [] }, ants = [], trail = [];
   let cachedAccent = '#1d4ed8';
   let cachedRoad = '#94a3b8';
@@ -665,8 +669,8 @@ function initAntCanvas() {
     };
   }
 
-  function advanceAnt(ant) {
-    ant.t += ant.speed;
+  function advanceAnt(ant, frameStep) {
+    ant.t += ant.speed * frameStep;
     if (ant.t < 1) return;
 
     const arrived = network.nodes[ant.toIdx];
@@ -676,7 +680,7 @@ function initAntCanvas() {
 
     ant.fromIdx = ant.toIdx;
     ant.toIdx = nextIdx;
-    ant.t = 0;
+    ant.t -= 1;
   }
 
   function antPose(ant) {
@@ -731,9 +735,9 @@ function initAntCanvas() {
     rebuildScene();
   }
 
-  function drawTrail() {
+  function drawTrail(frameStep) {
     for (let i = trail.length - 1; i >= 0; i--) {
-      trail[i].life -= 1;
+      trail[i].life -= frameStep;
       if (trail[i].life <= 0) trail.splice(i, 1);
     }
 
@@ -753,12 +757,12 @@ function initAntCanvas() {
     });
   }
 
-  function drawAnts() {
+  function drawAnts(frameStep) {
     ctx.fillStyle = cachedAccent;
     ants.forEach((ant) => {
-      advanceAnt(ant);
+      advanceAnt(ant, frameStep);
       const pose = antPose(ant);
-      if (Math.random() < 0.45) trail.push({ x: pose.x, y: pose.y, life: 70 });
+      if (Math.random() < Math.min(1, 0.45 * frameStep)) trail.push({ x: pose.x, y: pose.y, life: 70 });
 
       ctx.save();
       ctx.translate(pose.x, pose.y);
@@ -780,22 +784,25 @@ function initAntCanvas() {
   // there is never more than one loop.
   let visible = true;
 
-  function paint() {
+  function paint(frameStep = 0) {
     ctx.clearRect(0, 0, width, height);
     ctx.globalAlpha = 1;
     ctx.drawImage(networkLayer, 0, 0, width, height);
-    drawTrail();
+    drawTrail(frameStep);
     ctx.globalAlpha = 1;
-    drawAnts();
+    drawAnts(frameStep);
 
   }
 
   function step(now) {
     animationFrame = 0;
     if (!visible || reduced) return;
-    if (now - lastPaint >= frameInterval - 1) {
-      paint();
-      lastPaint = now;
+    const paintElapsed = now - lastPaint;
+    if (paintElapsed >= frameInterval - 0.1) {
+      const frameStep = lastUpdate ? Math.min(100, now - lastUpdate) / frameInterval * motionScale : 0;
+      paint(frameStep);
+      lastUpdate = now;
+      lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / frameInterval)) * frameInterval;
     }
     animationFrame = requestAnimationFrame(step);
   }
@@ -803,6 +810,8 @@ function initAntCanvas() {
   function syncAnimation() {
     cancelAnimationFrame(animationFrame);
     animationFrame = 0;
+    lastPaint = performance.now();
+    lastUpdate = 0;
     if (visible && !reduced) animationFrame = requestAnimationFrame(step);
   }
 

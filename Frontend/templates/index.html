@@ -268,7 +268,11 @@
 
       <div class="map-badge map-legend" id="mapLegend" style="display:none;">
         <div class="legend-head">
-          <div class="legend-title">Legend</div>
+          <button class="legend-toggle" id="mapLegendToggle" type="button" onclick="toggleDesktopMapLegend()" aria-expanded="true" aria-controls="mapLegendBody" aria-label="Hide map legend">
+            <span class="legend-title">Legend</span>
+            <span class="legend-toggle-action" id="mapLegendToggleAction">Hide</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
         </div>
 
         <div class="legend-body" id="mapLegendBody"></div>
@@ -425,7 +429,6 @@
           <div class="msheet-mode" id="msimReplay" hidden></div>
 
           <div class="msheet-mode" id="msimResults" hidden>
-            <p class="result-simulation-note" id="msimPreparednessNote"></p>
             <div class="mlens" id="msimLens" role="group" aria-label="Earthquake lens" hidden>
               <button type="button" data-msim-eq-view="overall" aria-pressed="true" onclick="switchEarthquakeView('overall')">Overall</button>
               <button type="button" data-msim-eq-view="liquefaction" aria-pressed="false" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
@@ -467,10 +470,6 @@
                 <button class="mbtn" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download PDF</button>
               </div>
 
-              <details class="maccordion" id="msimDirections" hidden>
-                <summary>Turn-by-turn directions<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                <div id="msimSelectedDirections"></div>
-              </details>
               <p class="msheet-source" id="msimSource"></p>
 
               <details class="maccordion" id="msimDisclaimer" open>
@@ -481,7 +480,7 @@
                 <p id="msimDisclaimerText"></p>
               </details>
 
-              <button class="mhotlines" id="msimHotlines" type="button" onclick="openEmergencyContactModal(event)">
+              <button class="mhotlines" id="msimHotlines" data-result-hotlines type="button" onclick="openEmergencyContactModal(event)">
                 <svg class="mhotlines-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
                 <span>Emergency hotlines</span>
                 <svg class="mhotlines-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
@@ -589,7 +588,7 @@
        so this goes back to setup. #}
     <button class="safety-edit-setup-btn" type="button" onclick="openSetupDrawerFromResults()">Edit setup</button>
     {# At the top, so starting over or saving the report needs no scrolling
-       past the results; the emergency numbers stay in the disclaimer below. #}
+       past the results. #}
     <div class="safety-actions">
       <button class="reset-btn" id="resetBtn" type="button" onclick="startNewSimulation()">
         New simulation

@@ -25,6 +25,9 @@
   // pin, and for the zoom/recenter/locate buttons, to stay on screen.
   const PIN_MIN_ROOM = 90;
   const CONTROLS_MIN_ROOM = 220;
+  // Results open over less than half of the usable screen; long guidance
+  // stays scrollable and the handle can expand it to the full panel.
+  const RESULTS_PEEK_MAX_FRACTION = 0.45;
   // The on-map legend's gap above the sheet (style.css) plus a little air
   // under the top bar; it needs its own height on top of this.
   const LEGEND_ROOM_MARGIN = 32;
@@ -262,7 +265,9 @@
     // Long risk guidance on a short phone must leave a usable map. The
     // result can scroll here or expand with the handle for all its details.
     if (state.mode === 'results') {
-      peek = Math.min(peek, Math.max(160, viewport.height - getTopBarBottom() - CONTROLS_MIN_ROOM));
+      const available = viewport.height - getTopBarBottom();
+      const maxPeek = Math.max(160, Math.min(available * RESULTS_PEEK_MAX_FRACTION, available - CONTROLS_MIN_ROOM));
+      peek = Math.min(peek, Math.round(maxPeek));
     }
     if (state.mode === 'replay') {
       // Measured folded only, and never shrinking while the replay plays.
@@ -567,6 +572,8 @@
   // My location also waits out a replay, whose camera it would fight.
   function syncMapButtons() {
     const held = isMapGestureLocked();
+    $('msimLayersBtn').disabled = held;
+    if (held) closeLayers({ restoreFocus: false });
     const fit = $('msimRecenterBtn');
     const fitLabel = state.mode === 'setup'
       ? areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Show evacuation sites' : 'Show the whole barangay'
@@ -890,8 +897,6 @@
     $('msimSafetyDetails').innerHTML = '';
     $('msimRouteComparison').textContent = '';
     $('msimRouteComparison').hidden = true;
-    $('msimSelectedDirections').innerHTML = '';
-    $('msimDirections').hidden = true;
     state.describedRoute = null;
     if (state.mode === 'results') {
       state.mode = 'setup';
@@ -907,9 +912,6 @@
     if (route && route !== state.describedRoute) {
       state.describedRoute = route;
       renderCurrentRoute(getResultRouteDetails(route));
-      $('msimSelectedDirections').innerHTML = buildRouteDirectionsMarkup(route);
-      $('msimDirections').hidden = !getRouteTurnSteps(route).length;
-      $('msimDirections').open = false;
     }
     // A picked route past the first few is on the map only while picked.
     renderMapLegend();
@@ -1249,7 +1251,7 @@
   }
 
   function openLayers() {
-    if (!isActive() || state.layersOpen) return;
+    if (!isActive() || state.layersOpen || isMapGestureLocked()) return;
     state.layersOpen = true;
     window.clearTimeout(state.layersCloseTimer);
     syncLayersPanel();
@@ -1286,6 +1288,7 @@
   // Swaps the base tiles directly; Leaflet's own Map/Satellite control
   // (hidden here) follows along through the layers' add/remove events.
   function setBaseLayer(key) {
+    if (isMapGestureLocked()) return;
     const layers = state.baseLayers;
     if (!layers || !gMap || !layers[key]) return;
     if (!gMap.hasLayer(layers[key])) layers[key].addTo(gMap);
@@ -1389,7 +1392,6 @@
   document.fonts?.ready?.then(scheduleSync);
 
   $('msimDisclaimerText').textContent = SAFETY_DISCLAIMER_TEXT;
-  $('msimPreparednessNote').textContent = PREPAREDNESS_NOTE;
 
   window.mobileSim = {
     attachMap,

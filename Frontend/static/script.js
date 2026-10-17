@@ -582,6 +582,22 @@ function setMapLegendVisible(visible) {
   syncMapOverlayLayout();
 }
 
+function toggleDesktopMapLegend() {
+  const legend = document.getElementById('mapLegend');
+  const body = document.getElementById('mapLegendBody');
+  const toggle = document.getElementById('mapLegendToggle');
+  const action = document.getElementById('mapLegendToggleAction');
+  if (!legend || !body || !toggle || !action) return;
+
+  const collapsed = toggle.getAttribute('aria-expanded') !== 'false';
+  legend.classList.toggle('is-collapsed', collapsed);
+  body.hidden = collapsed;
+  toggle.setAttribute('aria-expanded', String(!collapsed));
+  toggle.setAttribute('aria-label', collapsed ? 'Show map legend' : 'Hide map legend');
+  action.textContent = collapsed ? 'Show' : 'Hide';
+  syncMapOverlayLayout();
+}
+
 // Short viewports (style.css: phone landscape, any width) -- setup and
 // results are each a full-screen panel here instead of docking side by side
 // in a grid column (desktop). Phones and tablets have their own bottom
@@ -732,6 +748,7 @@ document.addEventListener('keydown', event => {
   }
 
   if (key !== 'Escape') return;
+  const routePicker = event.target.closest?.('[data-result-route-picker][open]');
 
   // Topmost first: dialogs, the "Choose on Map" menu, pinning, then the mobile
   // setup/results panel.
@@ -741,6 +758,10 @@ document.addEventListener('keydown', event => {
   } else if (document.getElementById('routeListModal')?.hidden === false) {
     event.preventDefault();
     closeRouteListModal();
+  } else if (routePicker) {
+    event.preventDefault();
+    routePicker.open = false;
+    routePicker.querySelector('summary').focus({ preventScroll: true });
   } else if (window.mobileSim?.handleEscape()) {
     // Closed the phone layout's Map layers sheet.
     event.preventDefault();
@@ -759,9 +780,8 @@ document.addEventListener('keydown', event => {
   }
 });
 
-// Fields are only ever locked while the ACO is actually crunching a run --
-// once results come back, everything above (hazard/start/end) stays live so
-// the visitor can tweak the setup and rerun without leaving the page.
+// Keep setup and pins locked from Run through the scenario, ant replay and
+// result drawing. They become editable again once the run has finished.
 function isSimulationInteractionLocked() {
   return simulationInProgress;
 }
@@ -814,21 +834,21 @@ function syncSimulationConfigLock() {
 function setSimulationInProgress(running) {
   simulationInProgress = !!running;
   if (simulationInProgress) cancelPinPlacement();
-  // Phones and tablets: the map holds still from Run until the results are
-  // on it. The replay's camera frames the ants itself, and a stray drag or
-  // pinch there would leave the search off screen.
-  setMapGestureLock('simulation', simulationInProgress && !!window.mobileSim?.isActive());
+  // The simulation owns the camera on every layout until results are on
+  // the map. User gestures must not interrupt its programmed movements.
+  setMapGestureLock('simulation', simulationInProgress);
   advanceStep(getMaxReachableStep());
   syncSimulationConfigLock();
 }
 
 // The visitor's map gestures (drag, pinch, wheel, double-tap, keys) are off
-// while any reason holds: a run on a phone or tablet ('simulation'), or the
+// while any reason holds: a run on any layout ('simulation'), or the
 // replay's camera following the walk (aco-replay.js). Only the gestures
 // that were on before the first lock come back.
 const MAP_GESTURE_HANDLERS = ['dragging', 'touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard'];
 const mapGestureLocks = new Set();
 let mapGesturesBeforeLock = null;
+let mapElementsBeforeLock = [];
 
 function isMapGestureLocked() {
   return mapGestureLocks.size > 0;
@@ -841,16 +861,37 @@ function setMapGestureLock(reason, locked) {
   const isLocked = isMapGestureLocked();
   if (!gMap || isLocked === wasLocked) return;
   if (isLocked) {
+    gMap.stop();
+    gMap.closePopup();
     mapGesturesBeforeLock = MAP_GESTURE_HANDLERS.filter(name => gMap[name]?.enabled());
     mapGesturesBeforeLock.forEach(name => gMap[name].disable());
+    // Toolbar actions and marker popups can move the map even with gesture
+    // handlers disabled. Inert also prevents their keyboard activation,
+    // including markers added later by the replay.
+    mapElementsBeforeLock = [...gMap.getContainer().querySelectorAll(
+      '.leaflet-control-zoom, .map-recenter-control, .leaflet-control-layers, .leaflet-marker-pane, .leaflet-popup-pane'
+    )].map(control => ({ control, inert: control.hasAttribute('inert') }));
+    mapElementsBeforeLock.forEach(({ control }) => control.setAttribute('inert', ''));
+    // A location request started before Run must not move the map later,
+    // including after the run has ended and gestures are unlocked again.
+    locateRequestId += 1;
+    document.querySelectorAll('.map-locate-btn, #msimLocateBtn').forEach(button => setLocateBusy(button, false));
   } else {
     (mapGesturesBeforeLock || []).forEach(name => gMap[name]?.enable());
     mapGesturesBeforeLock = null;
+    mapElementsBeforeLock.forEach(({ control, inert }) => control.toggleAttribute('inert', inert));
+    mapElementsBeforeLock = [];
   }
   // With Leaflet's handlers off, the browser would take a pinch or drag on
   // the map for the page itself (style.css .map-gestures-locked).
   gMap.getContainer().classList.toggle('map-gestures-locked', isLocked);
   window.mobileSim?.scheduleSync();
+}
+
+function preventLockedMapMovement(event) {
+  if (!isMapGestureLocked()) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }
 
 function setLoaderProgress(percent) {
@@ -1147,9 +1188,9 @@ function initMap() {
     center: [14.5590, 121.0955],
     zoom: 15,
     zoomControl: false,
-    // Raster labels stay at their native scale after a pinch or button zoom.
-    // Leaflet still animates the movement between these whole zoom levels.
-    zoomSnap: 1,
+    // Quarter steps let automatic fits fill the available map without
+    // dropping a whole zoom level. The zoom buttons still move one level.
+    zoomSnap: 0.25,
     zoomDelta: 1,
     wheelPxPerZoomLevel: 100,
     // Leaflet's own zoom/fade animations; programmatic moves opt out
@@ -1158,6 +1199,11 @@ function initMap() {
     zoomAnimation: !prefersReducedMotion(),
     fadeAnimation: !prefersReducedMotion(),
     markerZoomAnimation: !prefersReducedMotion(),
+  });
+  // Consume wheel/touch input instead of scrolling the page, and prevent
+  // marker clicks from opening popups that auto-pan the simulation.
+  ['wheel', 'touchmove', 'click', 'dblclick', 'contextmenu'].forEach(type => {
+    gMap.getContainer().addEventListener(type, preventLockedMapMovement, { capture: true, passive: false });
   });
 
   const streetLayer = makeBaseMapLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1269,14 +1315,19 @@ function initMap() {
   startApp();
 }
 
-// A selected route gets its own view; otherwise frame every route currently
-// shown, including the pins whose street access points may sit off the line.
+// Start on Route 1, follow a picked route while it animates, and restore
+// the visible-route overview when its animation is stopped.
 function getResultMapBounds() {
   if (!Array.isArray(simData?.routes) || !simData.routes.length) return null;
   const focusedRoute = selectedRouteFocus && simData.routes.find(route =>
     Number(route.display_route_no) === Number(selectedRouteFocus.routeNo));
-  const hiddenRoutes = new Set(getRoutesOffMap(simData.routes));
-  const routes = focusedRoute ? [focusedRoute] : simData.routes.filter(route => !hiddenRoutes.has(route));
+  // Match the initial camera to the Route 1 summary and later selections.
+  const currentRoute = focusedRoute || getBestRoute(simData.routes);
+  const showOverview = selectedRouteFocus?.animate === false;
+  const hiddenRoutes = new Set(showOverview ? getRoutesOffMap(simData.routes) : []);
+  const routes = showOverview
+    ? simData.routes.filter(route => route === currentRoute || !hiddenRoutes.has(route))
+    : currentRoute ? [currentRoute] : [];
   const routeCoords = routes.flatMap(getRoutePoints);
   if (!routeCoords.length) return null;
   const pinCoords = normalizePathCoordinates([
@@ -1308,9 +1359,9 @@ function refitMapToCurrentContent(options = {}) {
 
 // All automatic overviews share the same zoom cap and overlay-aware fit.
 // A full-height sheet leaves no useful map: keep the camera until it closes.
-function fitMapBounds(bounds, { padding = getMapFitPadding(), onlyIfOutOfView = false, flySeconds = 0 } = {}) {
+function fitMapBounds(bounds, { padding = null, onlyIfOutOfView = false, flySeconds = 0 } = {}) {
   if (!gMap || !bounds?.isValid()) return false;
-  padding = { maxZoom: MAP_FIT_MAX_ZOOM, ...padding };
+  padding = { maxZoom: MAP_FIT_MAX_ZOOM, ...(padding || getMapFitPadding(24, { bounds })) };
   const size = gMap.getSize();
   const topLeft = L.point(padding.paddingTopLeft || padding.padding || [0, 0]);
   const bottomRight = L.point(padding.paddingBottomRight || padding.padding || [0, 0]);
@@ -1348,7 +1399,7 @@ const RECENTER_FLY_SECONDS = 0.8;
 // the camera back to the app after the visitor moved the map
 // (mobile-sim.js), and says what it shows.
 function recenterMap() {
-  if (!gMap) return;
+  if (!gMap || isMapGestureLocked()) return;
 
   if (window.mobileSim?.isActive()) {
     window.mobileSim.resumeAutoFit();
@@ -1455,7 +1506,7 @@ function getLocateErrorMessage(error) {
 }
 
 function locateVisitor({ button = null, moveTo = flyToVisitor, onFound = null } = {}) {
-  if (!gMap) return;
+  if (!gMap || isMapGestureLocked()) return;
   if (!navigator.geolocation) {
     showLocateNotice('This browser cannot share your location.');
     return;
@@ -2700,6 +2751,24 @@ function zoomMapForPinPlacement(role) {
   }
 }
 
+function zoomToConfirmedStartPin(pin) {
+  // Let the setup panel update first, so its new height is included in
+  // the fit. A newer pin or reset invalidates this camera adjustment.
+  window.requestAnimationFrame(() => {
+    if (!gMap || routePins.start !== pin || !canPlaceRoutePins()) return;
+    const zoom = gMap.getZoom();
+    if (zoom >= PIN_PLACEMENT_ZOOM) return;
+    const bounds = L.latLngBounds([pin]);
+    fitMapBounds(bounds, {
+      padding: {
+        ...getMapFitPadding(24, { bounds }),
+        maxZoom: Math.min(PIN_PLACEMENT_ZOOM, zoom + 1),
+      },
+      flySeconds: 0.6,
+    });
+  });
+}
+
 // Menu's "Choose on Map": the next map tap places this pin.
 function chooseOnMap(role) {
   closePinMenus();
@@ -3070,6 +3139,7 @@ async function placeRoutePin(role, lat, lng) {
     setPinPlacementRole(getNextUnpinnedRole());
   }
   onRoutePinsChange();
+  if (role === 'start' && !previous) zoomToConfirmedStartPin(routePins.start);
 }
 
 function onMapClickForPin(event) {
@@ -3346,7 +3416,7 @@ function fitMapToBoundaryPaths(paths, padding = 24, { fly = false, duration = BA
   if (!hasPoints) return false;
 
   return fitMapBounds(bounds, {
-    padding: getMapFitPadding(padding, { markers: false }),
+    padding: getMapFitPadding(padding, { markers: false, bounds }),
     flySeconds: fly ? duration : 0,
     onlyIfOutOfView,
   });
@@ -3375,7 +3445,7 @@ const MAP_FIT_MIN_ROUTE_SIZE = 64;
 // map's own overlays -- the flood filter / earthquake lens card and the
 // sidebar tab (top-left) and the legend (bottom) -- which on a phone cover a
 // large share of the map.
-function getMapFitPadding(base = 24, { markers = true } = {}) {
+function getMapFitPadding(base = 24, { markers = true, bounds = null } = {}) {
   const mapEl = document.getElementById('map');
   if (!mapEl) return { padding: [base, base], maxZoom: MAP_FIT_MAX_ZOOM };
 
@@ -3424,15 +3494,20 @@ function getMapFitPadding(base = 24, { markers = true } = {}) {
         right = Math.max(right, mapRect.right - control.getBoundingClientRect().left + (markers ? 52 : 12));
       }
     });
-    // On a landscape phone, stacking the filter and legend leaves no map
-    // between them. Use the clear space beside those floating cards instead.
-    if (mapRect.height - top - bottom < 160 && floatingOverlays.length) {
+    // Corner cards leave usable map beside them. Prefer that space when it
+    // fits the content more closely than the strip between filter and legend.
+    if (floatingOverlays.length) {
       const side = Math.max(...floatingOverlays.map(rect => rect.right - mapRect.left))
         + (markers ? 40 : base);
       if (mapRect.width - side - right >= MAP_FIT_MIN_ROUTE_SIZE) {
-        left = Math.max(left, side);
-        top = base + (markers ? MAP_FIT_MARKER_HEADROOM : 0);
-        bottom = base;
+        const besideTop = base + (markers ? MAP_FIT_MARKER_HEADROOM : 0);
+        const betweenZoom = bounds && gMap?.getBoundsZoom(bounds, false, L.point(left + right, top + bottom));
+        const besideZoom = bounds && gMap?.getBoundsZoom(bounds, false, L.point(side + right, besideTop + base));
+        if (mapRect.height - top - bottom < 160 || (bounds && besideZoom > betweenZoom)) {
+          left = Math.max(left, side);
+          top = besideTop;
+          bottom = base;
+        }
       }
     }
   }
@@ -4612,7 +4687,7 @@ function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
   const controller = activeReplayController;
   if (!gMap || !controller || controller.isDone()) return;
   const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds() : controller.getSearchBounds();
-  fitMapBounds(bounds, { padding: getReplayFitPadding(), onlyIfOutOfView, flySeconds });
+  fitMapBounds(bounds, { padding: getReplayFitPadding(bounds), onlyIfOutOfView, flySeconds });
 }
 
 // The phone sheet snapped to another height (mobile-sim.js): the picked or
@@ -4632,8 +4707,10 @@ function refitMapAfterSheetSnap() {
 
 // The map's fit padding (getMapFitPadding) plus the replay's card, which on
 // a short screen covers the map's left side.
-function getReplayFitPadding() {
-  const padding = getMapFitPadding();
+function getReplayFitPadding(bounds = null) {
+  const intro = isScenarioIntroPlaying();
+  bounds ||= intro ? activeScenarioIntro.getViewBounds() : activeReplayController?.getSearchBounds();
+  const padding = getMapFitPadding(16, { markers: !intro, bounds });
   const card = document.querySelector('.aco-replay--card');
   const mapEl = document.getElementById('map');
   if (card && mapEl && padding.paddingTopLeft && card.getClientRects().length) {
@@ -4818,7 +4895,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     if (shell && shell.className !== layoutBefore) await waitMs(PANEL_SLIDE_MS + REPLAY_RESIZE_SETTLE_MS);
     gMap.invalidateSize({ pan: false });
     const firstView = activeScenarioIntro ? activeScenarioIntro.getBounds() : controller.getSearchBounds();
-    gMap.fitBounds(firstView, mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, animate: false }));
+    fitMapBounds(firstView, { padding: { ...getReplayFitPadding(firstView), animate: false } });
   } catch (err) {
     console.error('Could not set up the replay:', err);
     endSimulationReplay(controller);
@@ -4853,7 +4930,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
           host = mountReplayPanel(panel);
           window.mobileSim?.scheduleSync();
           if (!controller.isDone()) {
-            gMap.flyToBounds(controller.getSearchBounds(), mapMoveOptions({ ...getReplayFitPadding(), maxZoom: PIN_PLACEMENT_ZOOM, duration: QUAKE_HANDOFF_FLY_SECONDS }));
+            fitMapBounds(controller.getSearchBounds(), { padding: getReplayFitPadding(controller.getSearchBounds()), flySeconds: QUAKE_HANDOFF_FLY_SECONDS });
             await waitMs(QUAKE_HANDOFF_FLY_SECONDS * 1000 + 100);
           }
         }
@@ -5135,8 +5212,6 @@ const SAFETY_DISCLAIMER_TEXT = 'This site offers disaster planning information, 
   + 'always follow the instructions of local authorities. Rely on this content at your own '
   + 'risk; we assume no liability for any loss or damage.';
 
-const PREPAREDNESS_NOTE = 'For disaster preparedness. Based on stored hazard maps, not live conditions.';
-
 // Presentation only: the map, summary and directions share the selected route.
 function getResultRouteDetails(route, result = simData) {
   const best = getBestRoute(result?.routes || []);
@@ -5148,7 +5223,7 @@ function getResultRouteDetails(route, result = simData) {
     ? `${describeMediumFloodCrossing(route)} ${MEDIUM_FLOOD_WARNING}`
     : tier === 'unsafe'
       ? isAreaWideHighRisk(route)
-        ? `${describeAreaWideHighRisk(route, result?.barangay || selectedBarangay)} ${describeLeastExposedRoute(route)}`
+        ? describeAreaWideHighRisk(route, result?.barangay || selectedBarangay)
         : describeUnsafeCrossing(route)
       : '';
   return {
@@ -5243,18 +5318,13 @@ function renderRouteSafetyPanel(result) {
   setRouteSafetyPanelVisible(true);
   content.hidden = false;
   content.innerHTML = `
-    <p class="result-simulation-note">${escapeHtml(PREPAREDNESS_NOTE)}</p>
     ${buildResultRouteNavigation(routes)}
     <section data-current-route-summary></section>
-    <details class="maccordion result-desktop-directions" id="selectedRouteDirections" hidden>
-      <summary><span data-selected-directions-label>Directions</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-      <div id="selectedRouteDirectionsBody"></div>
-    </details>
-    <div class="safety-notes"><em>Search summary:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
+    <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
         <em class="safety-disclaimer-label">Disclaimer:</em>
         <p class="safety-disclaimer-text">${escapeHtml(SAFETY_DISCLAIMER_TEXT)}</p>
-        <button class="safety-disclaimer-link" type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
+        <button class="safety-disclaimer-link" data-result-hotlines type="button" onclick="openEmergencyContactModal(event)">Emergency hotlines</button>
       </div>
     </div>`;
   window.mobileSim?.renderResults(result);
@@ -5264,20 +5334,25 @@ function renderRouteSafetyPanel(result) {
 // Both layouts use the existing ranked routes and map focus; no new ranking.
 function buildResultRouteNavigation(routes) {
   const best = getBestRoute(routes);
-  const bestNo = best?.display_route_no ?? 1;
   return `<section class="result-route-nav" aria-label="Choose a route on the map">
-    <label class="result-route-label">Route on map
-      <select data-result-route-picker>
+    <details class="maccordion result-route-directions" data-result-directions hidden>
+      <summary>Turn-by-turn directions<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div data-result-directions-body></div>
+    </details>
+    <div class="result-route-label">Route on map
+      <details class="result-route-picker" data-result-route-picker>
+        <summary><span data-result-route-label></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <div class="result-route-options" role="group" aria-label="Routes">
         ${routes.map((route, index) => {
           const number = route.display_route_no ?? index + 1;
           const tag = route === best ? ' · Best' : route.category === 'eliminated' ? ' · Eliminated' : '';
-          return `<option value="${escapeHtml(number)}">Route ${escapeHtml(number)}${tag}</option>`;
+          return `<button type="button" data-result-route-option="${escapeHtml(number)}" aria-current="false" aria-pressed="false">Route ${escapeHtml(number)}${tag}</button>`;
         }).join('')}
-      </select>
-    </label>
+        </div>
+      </details>
+    </div>
     <button class="result-route-reset" type="button" onclick="returnToBestRankedRoute()" data-return-best hidden>Back to best-ranked</button>
     <span class="sr-only" role="status" data-result-route-status></span>
-    <p class="result-route-help">Details follow your selected route. PDF reports best-ranked Route ${escapeHtml(bestNo)}.</p>
   </section>`;
 }
 
@@ -5287,11 +5362,23 @@ function syncResultRouteNavigation() {
   if (!best) return;
   const current = routes.find(route => Number(route.display_route_no) === Number(selectedRouteFocus?.routeNo)) || best;
   const isBest = current === best;
-  document.querySelectorAll('[data-result-route-picker]').forEach(select => {
-    select.value = String(current.display_route_no);
+  const hasSafetyAction = !!getResultRouteDetails(current, simData).action;
+  // The "What to do" card already provides the hotline action.
+  document.querySelectorAll('[data-result-hotlines]').forEach(button => {
+    button.hidden = hasSafetyAction;
+  });
+  const animationOn = !!selectedRouteFocus && selectedRouteFocus.animate !== false;
+  const tag = isBest ? ' · Best' : current.category === 'eliminated' ? ' · Eliminated' : '';
+  document.querySelectorAll('[data-result-route-label]').forEach(label => {
+    label.textContent = `Route ${current.display_route_no}${tag}`;
+  });
+  document.querySelectorAll('[data-result-route-option]').forEach(button => {
+    const isCurrent = Number(button.dataset.resultRouteOption) === Number(current.display_route_no);
+    button.setAttribute('aria-current', String(isCurrent));
+    button.setAttribute('aria-pressed', String(isCurrent && animationOn));
   });
   document.querySelectorAll('[data-return-best]').forEach(button => { button.hidden = isBest; });
-  const text = isBest ? 'Top-ranked route selected' : `Viewing Route ${current.display_route_no} · ${current.category === 'eliminated' ? 'eliminated' : 'alternative'}`;
+  const text = `Viewing Route ${current.display_route_no}. Route animation ${animationOn ? 'on' : 'off'}.`;
   document.querySelectorAll('[data-result-route-status]').forEach(status => {
     if (status.textContent !== text) status.textContent = text;
   });
@@ -5301,32 +5388,44 @@ function syncResultRouteNavigation() {
     summary.innerHTML = buildCurrentRouteSummary(current, simData);
   });
   const hasDirections = getRouteTurnSteps(current).length > 0;
-  const directions = document.getElementById('selectedRouteDirections');
-  if (directions && directions._routeRecord !== current) {
+  document.querySelectorAll('[data-result-directions]').forEach(directions => {
+    if (directions._routeRecord === current) return;
     directions._routeRecord = current;
     directions.hidden = !hasDirections;
     directions.open = false;
-    directions.querySelector('[data-selected-directions-label]').textContent = `Directions · Route ${current.display_route_no}`;
-    document.getElementById('selectedRouteDirectionsBody').innerHTML = buildRouteDirectionsMarkup(current);
-  }
+    directions.querySelector('[data-result-directions-body]').innerHTML = buildRouteDirectionsMarkup(current);
+  });
 }
 
 function selectResultRoute(routeNo) {
   const route = simData?.routes?.find(item => Number(item.display_route_no) === Number(routeNo));
   if (!route) return;
-  selectedRouteFocus = { routeNo: Number(route.display_route_no), category: route.category || '' };
-  applyRouteFocusState(selectedRouteFocus.routeNo);
-  window.mobileSim?.resumeAutoFit();
-  refitMapToCurrentRoute({ flySeconds: SHEET_REFIT_FLY_SECONDS });
+  window.toggleRouteFocus(route.display_route_no, route.category || '');
 }
 
 function returnToBestRankedRoute() {
   const best = getBestRoute(simData?.routes || []);
-  if (best) selectResultRoute(best.display_route_no);
+  if (!best) return;
+  selectedRouteFocus = null;
+  applyRouteFocusState(null);
+  window.mobileSim?.resumeAutoFit();
+  refitMapToCurrentRoute({ flySeconds: SHEET_REFIT_FLY_SECONDS });
 }
 
-document.addEventListener('change', event => {
-  if (event.target.matches?.('[data-result-route-picker]')) selectResultRoute(event.target.value);
+// Buttons receive repeat selections on touch and desktop, unlike a native
+// select whose change event only fires when its value changes.
+document.addEventListener('click', event => {
+  const option = event.target.closest?.('[data-result-route-option]');
+  if (option) {
+    const picker = option.closest('[data-result-route-picker]');
+    picker.open = false;
+    selectResultRoute(option.dataset.resultRouteOption);
+    picker.querySelector('summary').focus({ preventScroll: true });
+    return;
+  }
+  document.querySelectorAll('[data-result-route-picker][open]').forEach(picker => {
+    if (!picker.contains(event.target)) picker.open = false;
+  });
 });
 
 let routeListModalReturnFocus = null;
@@ -5416,7 +5515,7 @@ function focusRouteFromModal(routeNo, category) {
 }
 
 // Delegated so route data-attributes don't need inline handler interpolation;
-// uses toggleRouteFocus so re-clicking an active route clears the focus.
+// uses toggleRouteFocus so re-clicking a route toggles its marching dash.
 document.addEventListener('click', event => {
   const trigger = event.target?.closest?.('[data-focus-route]');
   if (!trigger) return;
@@ -5576,10 +5675,11 @@ function bringRouteGroupToFront(group) {
 
 function applyRouteFocusState(routeNo) {
   const groups = Array.isArray(mapLayers.routeGroups) ? mapLayers.routeGroups : [];
-  const hasFocus = routeNo != null;
+  const hasFocus = routeNo != null && selectedRouteFocus?.animate !== false;
 
   groups.forEach(group => {
-    const isFocused = hasFocus && group.routeNo === routeNo;
+    const isSelected = routeNo != null && group.routeNo === routeNo;
+    const isFocused = hasFocus && isSelected;
     const visual = !hasFocus
       ? getDefaultRouteVisual(group)
       : isFocused
@@ -5588,9 +5688,9 @@ function applyRouteFocusState(routeNo) {
 
     // Routes past the first few (MAP_ROUTES_SHOWN) are on the map only
     // while picked.
-    if (group.hiddenByDefault) setRouteGroupShown(group, gMap, isFocused);
+    if (group.hiddenByDefault) setRouteGroupShown(group, gMap, isSelected);
     // A picked route shows its whole path, shared roads included.
-    showRouteGroupFullPath(group, isFocused);
+    showRouteGroupFullPath(group, isSelected);
     applyRouteGroupVisual(group, visual);
     syncRoutePreview(group, isFocused);
   });
@@ -6316,11 +6416,14 @@ async function checkBackend() {
 }
 
 // Route focus, shared by the route safety panel, the route list and the map
-// polylines (osm.js). Clicking the focused route again clears the focus.
+// polylines (osm.js). Re-clicking stops the dash and restores the other
+// routes, while retaining the selected route's summary and directions.
 window.toggleRouteFocus = function toggleRouteFocus(routeNo, category, fit = true) {
-  const shouldClear = selectedRouteFocus && selectedRouteFocus.routeNo === routeNo;
-  selectedRouteFocus = shouldClear ? null : { routeNo, category };
-  applyRouteFocusState(shouldClear ? null : routeNo);
+  routeNo = Number(routeNo);
+  const sameRoute = Number(selectedRouteFocus?.routeNo) === routeNo;
+  const animate = !sameRoute || selectedRouteFocus.animate === false;
+  selectedRouteFocus = { routeNo, category, animate };
+  applyRouteFocusState(routeNo);
   if (fit) {
     window.mobileSim?.resumeAutoFit();
     refitMapToCurrentRoute({ flySeconds: SHEET_REFIT_FLY_SECONDS });

@@ -12,10 +12,11 @@
 (function initFloodIntro() {
   const WATER_PANE = 'floodIntroPane';
   const FX_PANE = 'floodIntroFxPane';
-  // Over the hazard fills (350), under the ants' trails (380), the barangay
-  // outline and its mask (overlayPane, 400) and the pins (markerPane, 600).
+  // Water stays over the hazard fills (350), under the barangay outline
+  // and mask (400). Rain stays above that mask so its streaks remain
+  // visible, but below the start/end pins (600).
   const WATER_PANE_Z = 352;
-  const FX_PANE_Z = 360;
+  const FX_PANE_Z = 410;
   // The canvases reach this far past each edge of the map.
   const VIEW_PAD = 40;
   // The flood map's paths are projected once, at this zoom.
@@ -23,10 +24,11 @@
   const FADE_OUT_MS = 700;
   const NOAH = 'Project NOAH';
   // Phones with few cores or little memory start on the light setting (1x
-  // canvases, half the rain, the water repainted every other frame), and so
+  // canvases and half the rain), and so
   // does any device whose intro frames average slower than SLOW_FRAME_MS.
   // Kept for the session: a slow device stays slow.
   const SLOW_FRAME_MS = 26;
+  const FRAME_INTERVAL = 1000 / 60;
   const quality = {
     low: !!window.agnasUI?.constrained || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4,
     frameAvg: 16.7,
@@ -237,6 +239,7 @@
     const state = {
       t: 0,
       last: 0,
+      lastPaint: 0,
       raf: 0,
       running: false,
       done: false,
@@ -247,7 +250,6 @@
       gaugeKey: '',
       labelHidden: null,
       calloutLevel: -1,
-      frame: 0,
     };
 
     // The depth gauge's scale: 32 units a metre, the street at y 78 (0.5 m
@@ -505,7 +507,7 @@
     const views = [waterView, fxView];
     function sizeViews() {
       const size = map.getSize();
-      // Soft fills and thin rain need no 2x canvas; a slow phone gets 1x.
+      // Soft fills and rain need no 2x canvas; a slow phone gets 1x.
       const dpr = Math.min(window.devicePixelRatio || 1, quality.low ? 1 : 1.5);
       views.forEach(view => {
         view.w = size.x + VIEW_PAD * 2;
@@ -705,7 +707,7 @@
       x: hash(i * 3 + 1),
       y: hash(i * 7 + 2),
       v: 0.8 + 0.5 * hash(i * 11 + 3),
-      len: 11 + 12 * hash(i * 13 + 4),
+      len: 20 + 18 * hash(i * 13 + 4),
     }));
     const WIND = 0.24;
     function rainAmount(t) {
@@ -727,7 +729,9 @@
       const g = beginView(fxView);
       const w = fxView.w;
       const h = fxView.h;
-      const share = (quality.low ? 0.5 : 1) * Math.min(1, (w * h) / 1100000);
+      // Keep rain visible on a small phone map without exceeding the
+      // existing 280-drop budget (140 on constrained devices).
+      const share = (quality.low ? 0.5 : 1) * Math.min(1, Math.max(0.35, (w * h) / 1100000));
       g.save();
       g.translate(-VIEW_PAD, -VIEW_PAD);
       if (k > 0.001) {
@@ -740,18 +744,18 @@
           g.beginPath();
           for (let i = group; i < count; i += 3) {
             const drop = DROPS[i];
-            const fall = t * drop.v * 0.95;
+            const fall = t * drop.v * 0.65;
             const y = ((drop.y * (h + 80) + fall) % (h + 80)) - 40;
             const x = ((drop.x * (w + 120) + fall * WIND) % (w + 120)) - 60;
             g.moveTo(x, y);
             g.lineTo(x - drop.len * WIND, y - drop.len);
           }
           const strength = 0.6 + 0.2 * group;
-          g.strokeStyle = `rgba(255,255,255,${(0.42 * strength).toFixed(3)})`;
-          g.lineWidth = 2.4;
+          g.strokeStyle = `rgba(255,255,255,${(0.85 * strength).toFixed(3)})`;
+          g.lineWidth = 3.6;
           g.stroke();
-          g.strokeStyle = `rgba(30,64,120,${(0.5 * strength).toFixed(3)})`;
-          g.lineWidth = 1.1;
+          g.strokeStyle = `rgba(30,64,120,${(0.85 * strength).toFixed(3)})`;
+          g.lineWidth = 1.8;
           g.stroke();
         }
         // Drops landing: small rings that open and fade.
@@ -814,9 +818,7 @@
         state.labelHidden = labelHidden;
         placeLabel.getElement()?.classList.toggle('is-hidden', labelHidden);
       }
-      // A slow device repaints the water every other frame.
-      state.frame += 1;
-      if (!quality.low || state.frame % 2 === 0 || t >= T.riseEnd) drawWater(waterLevel(t));
+      drawWater(waterLevel(t));
       drawFx(t);
       const level = syncPanel(t);
       if (START_LEVEL && level > 0) showCallout(level);
@@ -829,7 +831,13 @@
       noteFrame(dt);
       state.t += dt;
       state.last = now;
-      frame(state.t);
+      // Advance the scenario on every callback, but limit canvas and gauge
+      // work to 60 FPS. Frame capping must not stretch the intro's timing.
+      const paintElapsed = now - state.lastPaint;
+      if (paintElapsed >= FRAME_INTERVAL - 0.1 || state.t >= T.hold) {
+        state.lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / FRAME_INTERVAL)) * FRAME_INTERVAL;
+        frame(state.t);
+      }
       if (state.t >= T.hold) {
         end();
         return;
@@ -841,6 +849,7 @@
       cancelAnimationFrame(state.raf);
       if (state.running && !document.hidden) {
         state.last = performance.now();
+        state.lastPaint = state.last;
         state.raf = requestAnimationFrame(loop);
       }
     }
@@ -952,6 +961,7 @@
         document.addEventListener('visibilitychange', onVisibilityChange);
         state.running = true;
         state.last = performance.now();
+        state.lastPaint = state.last;
         frame(0);
         state.raf = requestAnimationFrame(loop);
       });

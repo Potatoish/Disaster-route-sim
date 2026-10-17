@@ -1,8 +1,8 @@
 // The ant colony's search, replayed on the map between the loader and the
 // results: the colony's ants leave the start round by round, their trails
 // grow on the streets it comes to prefer, then Route 1 is drawn along the
-// strongest trail and walked to its end with the camera following (slower
-// through flood water) -- by an ant, or by an arrow when a regular map search
+// strongest trail and previewed to its end with the camera following -- by
+// an ant, or by an arrow when a regular map search
 // found Route 1 instead of the ants. It is drawn from what the backend
 // recorded of this very run (build_colony_replay in osm_routing.py), sped up.
 //
@@ -49,28 +49,34 @@
   const METERS_PER_DEGREE_LAT = 110574;
   const METERS_PER_DEGREE_LNG = 111320;
 
-  // The timeline, in ms. Round 1 walks slowly so the spreading out can be
-  // followed; later walked rounds go faster, and the rounds after them only
-  // grow the trails.
+  // The timeline, in ms. All walked rounds share the first round's pace
+  // so the spreading out stays easy to follow. Rounds after the recorded
+  // walks only grow the trails.
   const NEST_MS = 800;
-  const FIRST_WALK_MS = 3400;
+  const FIRST_WALK_MS = 6000;
   const FIRST_TRAIL_MS = 700;
-  const WALK_MS = 1000;
+  const WALK_MS = FIRST_WALK_MS;
   const TRAIL_MS = 320;
   const QUICK_ROUNDS_MS = 3000;
   const QUICK_ROUND_MS = [120, 250];
   const DRAW_ROUTE_MS = 1000;
-  // The walk along Route 1: the camera flies in, the ant walks it at about
-  // this pace (dry roads; slower in water), then the camera flies out.
+  // Walk all of Route 1 at one virtual travel speed, regardless of route
+  // length or hazard severity. There is no route duration limit: finish
+  // only when the marker reaches the destination.
   const NAV_ZOOM = 17;
   const NAV_FLY_SECONDS = 1.1;
-  const NAV_MS = 6500;
-  const ARRIVE_MS = 950;
-  const WALKER_FADE_MS = 650;
-  const ZOOM_OUT_SECONDS = 1.45;
+  const NAV_METERS_PER_SECOND = 104.544;
+  const NAV_GAIT_PER_MS = 0.0064;
+  const ARRIVE_MS = 650;
+  const WALKER_FADE_MS = 450;
+  // Covers the disc, ant, arrival ring and expanding hazard ripples.
+  const WALKER_CLEAR_RADIUS = 64;
+  const ZOOM_OUT_SECONDS = 1;
   // Leaflet's renderers and tiles catch up on 'moveend'; while the camera
-  // follows the ant, one goes out every this many pixels of panning.
+  // follows the ant, refresh after this much panning, at most four times
+  // a second while the camera follows the walker.
   const NAV_REFRESH_PX = 160;
+  const NAV_REFRESH_MS = 250;
 
   // Phones and tablets (options.mobileLayout): the map is small and the
   // hazard fills sit right under the lines, so Route 1 and the converged
@@ -92,14 +98,23 @@
   // them a few times a second, not every frame.
   const FOCUS_REFRESH_MS = 250;
   const CARDS_REFRESH_MS = 100;
-  // Keep the full replay on modest devices without painting at 60/120 Hz.
-  const FRAME_INTERVAL = 1000 / (window.agnasUI?.constrained ? 30 : 60);
+  // Bound canvas and map work even when device hints miss a slow phone.
+  // Movement uses elapsed time, so this does not change the replay's pace.
+  const FRAME_INTERVAL = 1000 / 60;
 
   // Flood: the water the ant walks through, in the map's own fill colors.
   const WATER_RIPPLE = { 1: '#ca8a04', 2: '#ea580c', 3: '#be123c' };
   const WATER_POOL = { 1: '250, 204, 21', 2: '249, 115, 22', 3: '225, 29, 72' };
-  // Earthquake: rings under the ant on Moderate (3) and High (4+) roads.
-  const QUAKE_RING = { 3: '#d97706', 4: '#c2410c' };
+  // Earthquake: Low (1-2), Moderate (3) and High (4+) roads.
+  const QUAKE_RING = { 1: '#ca8a04', 2: '#ca8a04', 3: '#d97706', 4: '#c2410c' };
+  // Stronger hazards make larger, bolder, more frequent signal rings.
+  // Rings fit inside the walker clear box; cap their count to bound work.
+  const HAZARD_SIGNAL_STYLES = {
+    1: { spread: 14, alpha: 0.45, width: 1.4, interval: 650 },
+    2: { spread: 22, alpha: 0.65, width: 2.1, interval: 500 },
+    3: { spread: 30, alpha: 0.9, width: 2.8, interval: 350 },
+  };
+  const HAZARD_SIGNAL_MAX_RINGS = 3;
 
   const STEP_TITLES = ['Ants spread out', 'Trails grow on safer streets', 'Ants agree on one route', 'Route ready'];
 
@@ -141,11 +156,22 @@
     return { points, cum, len: cum[cum.length - 1] || 0 };
   }
 
+  // Locate a segment without scanning the entire walked path every frame.
+  function findLineSegment(cumulative, distance) {
+    let low = 1;
+    let high = cumulative.length - 1;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (cumulative[middle] < distance) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  }
+
   function pointAlong(line, distance) {
     const { points, cum } = line;
     const d = Math.max(0, Math.min(line.len, distance));
-    let index = 1;
-    while (index < cum.length - 1 && cum[index] < d) index += 1;
+    const index = findLineSegment(cum, d);
     const share = (d - cum[index - 1]) / ((cum[index] - cum[index - 1]) || 1);
     const a = points[index - 1];
     const b = points[index] || a;
@@ -154,8 +180,7 @@
 
   function cutLine(line, distance) {
     if (distance >= line.len) return line.points;
-    let index = 1;
-    while (index < line.cum.length && line.cum[index] < distance) index += 1;
+    const index = findLineSegment(line.cum, distance);
     const share = (distance - line.cum[index - 1]) / ((line.cum[index] - line.cum[index - 1]) || 1);
     const a = line.points[index - 1];
     const b = line.points[index] || a;
@@ -388,10 +413,7 @@
           ? `${found} It still crosses water over 1.5 m deep, so it is not one to walk.`
           : found;
       }
-      if (isFlood && route1Info.wading) {
-        return `${found} Walking it now to ${endName}: slower through flood water, normal pace on dry roads.`;
-      }
-      return `${found} Walking it now to ${endName}.`;
+      return `${found} Previewing the route toward ${endName}.`;
     }
 
     function describeBest(best) {
@@ -496,6 +518,7 @@
         view.canvas.style.height = `${size.y}px`;
         view.drawn = null;
         view.blank = true;
+        view.walkerBox = null;
       });
       walked.canvas.width = trailView.canvas.width;
       walked.canvas.height = trailView.canvas.height;
@@ -522,14 +545,19 @@
 
     // Clears a canvas and lines it up with the map (VIEW_PAD past it). While
     // a zoom animates it keeps the place and scale onZoomAnim gave it.
-    function beginView(view) {
-      const size = map.getSize().add([viewPad * 2, viewPad * 2]);
+    function beginView(view, dirtyBox = null) {
       if (!state.zoomAnim) {
         view.at = map.containerPointToLayerPoint([-viewPad, -viewPad]);
         L.DomUtil.setPosition(view.canvas, view.at);
       }
       view.g.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      view.g.clearRect(0, 0, size.x, size.y);
+      if (dirtyBox) {
+        view.g.clearRect(dirtyBox.x, dirtyBox.y, dirtyBox.size, dirtyBox.size);
+      } else {
+        const size = map.getSize().add([viewPad * 2, viewPad * 2]);
+        view.g.clearRect(0, 0, size.x, size.y);
+      }
+      view.walkerBox = null;
     }
 
     // From REF_ZOOM pixels to the canvas: x * k - ox. While a zoom animates,
@@ -675,8 +703,7 @@
     function pointOn(walk, f, distance) {
       const ref = refPoints(walk);
       const d = Math.max(0, Math.min(walk.len, distance));
-      let index = 1;
-      while (index < walk.cum.length - 1 && walk.cum[index] < d) index += 1;
+      const index = findLineSegment(walk.cum, d);
       const a = ref[index - 1];
       const b = ref[index] || a;
       const share = (d - walk.cum[index - 1]) / ((walk.cum[index] - walk.cum[index - 1]) || 1);
@@ -960,11 +987,9 @@
 
     // ---- the walk along Route 1 ----
     const PER_MINUTE = WALKING_SPEED_METERS_PER_MINUTE;
-    // An unsafe flood preview uses a virtual pace, not an estimate of how
-    // fast a person could walk through High water.
-    const paceShare = levels => (!previewOnly && isFlood && levels[0] ? FLOOD_WALKING_PACE_SHARE_BY_VAR[levels[0]] || 1 : 1);
-    const dryEquivalent = spans.reduce((sum, span, index) => sum + (span.to - (index ? spans[index - 1].to : 0)) / paceShare(span.levels), 0) || route1.len;
-    const drySpeed = dryEquivalent / NAV_MS;
+    // This affects the real walking estimate only. Animation speed never
+    // changes with hazard severity, including unsafe virtual previews.
+    const walkingEtaPaceShare = levels => (!previewOnly && isFlood && levels[0] ? FLOOD_WALKING_PACE_SHARE_BY_VAR[levels[0]] || 1 : 1);
 
     function minutesLeft(distance) {
       if (!spans.length) return (route1.len - distance) / PER_MINUTE;
@@ -972,7 +997,7 @@
       let minutes = 0;
       spans.forEach(span => {
         const start = Math.max(from, distance);
-        if (span.to > start) minutes += (span.to - start) / PER_MINUTE / paceShare(span.levels);
+        if (span.to > start) minutes += (span.to - start) / PER_MINUTE / walkingEtaPaceShare(span.levels);
         from = span.to;
       });
       return minutes;
@@ -1011,8 +1036,7 @@
         if (previewOnly) {
           return [name, water === 3 ? 'Not walkable' : water ? FLOOD_DEPTH_ON_ADULT_BY_VAR[water] : 'Dry road'];
         }
-        if (mobileLayout) return [name, water ? 'Slower pace' : 'Normal pace'];
-        return [`${name} · ${water ? 'slower' : 'normal'} pace`, water ? FLOOD_DEPTH_ON_ADULT_BY_VAR[water] : 'Dry road'];
+        return [name, water ? FLOOD_DEPTH_ON_ADULT_BY_VAR[water] : 'Dry road'];
       }
       const [liquefaction = 1, shaking = 1] = levels;
       const level = getRiskLevelLabelFromScore(Math.max(liquefaction, shaking));
@@ -1031,32 +1055,47 @@
 
     function syncWalkCards(distance) {
       const left = Math.max(0, route1.len - distance);
+      const reachedEnd = distance >= route1.len;
       const endText = previewOnly ? 'Preview complete' : 'Arrived';
-      setText('left', left < 5 ? endText : formatKm(left));
+      setText('left', reachedEnd ? endText : formatKm(left));
       if (previewOnly) {
         setText('leftSub', 'Unsafe route preview');
       } else {
         const minutes = minutesLeft(distance);
-        setText('leftSub', left < 5 ? endName : minutes < 1 ? 'Under a minute to go' : `About ${formatWalkingMinutes(minutes)} walk`);
+        setText('leftSub', reachedEnd ? endName : minutes < 1 ? 'Under a minute to go' : `About ${formatWalkingMinutes(minutes)} walk`);
       }
       const [value, sub] = hereText(distance);
       setText('here', value);
       setText('hereSub', sub);
     }
 
+    function hazardSignalStyle(level) {
+      const severity = isFlood ? Math.min(3, level) : level >= 4 ? 3 : level >= 3 ? 2 : level > 0 ? 1 : 0;
+      return HAZARD_SIGNAL_STYLES[severity];
+    }
+
     // The walker is a white disc ringed in Route 1's color, so it stands out
     // on the line, carrying one of the colony's ants (larger; its legs keep
-    // time with the distance it covers) when the ants found Route 1, or a
+    // a steady rhythm) when the ants found Route 1, or a
     // navigation arrow in Route 1's color pointing the way when a regular
     // map search did. opts: arrived (0-1 at the end), gait, ripples ({ t,
     // level }), wet (0-1, easing in and out of flood water), level (the
     // water or road level under it).
     function drawWalker(latlng, heading, opts = {}) {
       const { arrived = 0, gait = 0, ripples = [], wet = 0, level = 0 } = opts;
-      drawAnts({ kind: 'none' });
+      state.scene = { kind: 'none' };
+      // Search ants need the full canvas; a single walker only needs its
+      // old drawing cleared. Resize/zoom redraws reset this to a full clear.
+      beginView(antView, antView.walkerBox);
+      antView.blank = false;
       const f = frameOf(antView);
       const ref = map.project(latlng, REF_ZOOM);
       const p = { x: ref.x * f.k - f.ox, y: ref.y * f.k - f.oy };
+      antView.walkerBox = {
+        x: p.x - WALKER_CLEAR_RADIUS,
+        y: p.y - WALKER_CLEAR_RADIUS,
+        size: WALKER_CLEAR_RADIUS * 2,
+      };
       const now = performance.now();
       if (isFlood && wet > 0.01 && WATER_POOL[level]) {
         g.globalAlpha = 1;
@@ -1069,7 +1108,8 @@
       ripples.forEach(ripple => {
         const k = (now - ripple.t) / 1000;
         const color = isFlood ? WATER_RIPPLE[ripple.level] : QUAKE_RING[Math.min(4, ripple.level)];
-        if (color) ring(p.x, p.y, 23 + 24 * k, color, 0.8 * (1 - k), 2.6 - 1.4 * k);
+        const signal = hazardSignalStyle(ripple.level);
+        if (color && signal) ring(p.x, p.y, 23 + signal.spread * k, color, signal.alpha * (1 - k), signal.width * (1 - 0.5 * k));
       });
       if (!ripples.length) ring(p.x, p.y, 20 + 3 * Math.sin(now / 260), route1Info.color, 0.35, 2);
       if (arrived) ring(p.x, p.y, 12 + 26 * arrived, route1Info.color, 0.9 * (1 - arrived), 2.6);
@@ -1146,12 +1186,13 @@
     function followRoute() {
       const startedAt = performance.now();
       let last = startedAt;
+      let lastPaint = startedAt;
       let focus = null;
       let focusAt = -Infinity;
       let cardsAt = -Infinity;
       let moved = 0;
+      let refreshedAt = startedAt;
       let distance = 0;
-      let speed = 0;
       let gait = 0;
       let lastRipple = -1e9;
       let ripples = [];
@@ -1159,37 +1200,37 @@
       let lastLevel = 0;
       function step(now) {
         if (!state.nav) return;
-        if (now - last < FRAME_INTERVAL - 1) {
+        const paintElapsed = now - lastPaint;
+        if (paintElapsed < FRAME_INTERVAL - 0.1) {
           state.nav.raf = requestAnimationFrame(step);
           return;
         }
-        const dt = Math.min(50, now - last);
+        // Preserve fractional frame time on 75/90/144 Hz displays instead
+        // of rounding every paint down to a whole browser callback.
+        lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / FRAME_INTERVAL)) * FRAME_INTERVAL;
+        // A stalled frame or returning to the tab must not jump the marker
+        // to the destination. Ordinary frames keep the same travel speed.
+        const travelMs = Math.min(100, now - last);
+        const dt = Math.min(50, travelMs);
         last = now;
+        distance = Math.min(route1.len, distance + NAV_METERS_PER_SECOND * travelMs / 1000);
+        gait += travelMs * NAV_GAIT_PER_MS;
         const levels = spanAt(distance).levels;
-        // Flood: slower in water, back to normal on a dry road, easing into
-        // each change; every walk starts gently and slows in the last metres.
-        const remaining = route1.len - distance;
-        const target = drySpeed * paceShare(levels)
-          * Math.min(1, 0.25 + (now - startedAt) / 600)
-          * Math.max(0.3, Math.min(1, remaining / 50));
-        speed += (target - speed) * Math.min(1, dt / 180);
-        distance = Math.min(route1.len, distance + speed * dt);
-        gait += speed * dt * 0.09;
         const level = isFlood ? levels[0] || 0 : Math.max(levels[0] || 1, levels[1] || 1);
-        const marked = isFlood ? level > 0 : level >= 3;
+        const signal = hazardSignalStyle(level);
         wet += ((isFlood && level ? 1 : 0) - wet) * Math.min(1, dt / 220);
-        if (marked) lastLevel = level;
-        if (marked && now - lastRipple > (isFlood ? 420 : 520)) {
+        if (signal && (level !== lastLevel || now - lastRipple >= signal.interval)) {
           ripples.push({ t: now, level });
           lastRipple = now;
         }
-        ripples = ripples.filter(ripple => now - ripple.t < 1000);
+        if (signal) lastLevel = level;
+        ripples = ripples.filter(ripple => now - ripple.t < 1000).slice(-HAZARD_SIGNAL_MAX_RINGS);
         const here = pointAlong(route1, distance);
         // Keep the walker at the focus point: pan by how far it drifted.
         // _rawPanBy + 'move' (what panBy does inside) moves the map without
         // a 'moveend' every frame, which would make each renderer and tile
-        // layer update 60 times a second; one goes out every
-        // NAV_REFRESH_PX of travel instead. While the visitor has moved the
+        // layer update every frame; refreshes are limited by both travel
+        // distance and elapsed time. While the visitor has moved the
         // map (isCameraPaused) it is theirs, and unlocked.
         const paused = isCameraPaused();
         setMapLocked(!paused);
@@ -1205,8 +1246,9 @@
           map._rawPanBy(offset);
           map.fire('move');
           moved += Math.abs(offset.x) + Math.abs(offset.y);
-          if (moved > NAV_REFRESH_PX) {
+          if (moved > NAV_REFRESH_PX && now - refreshedAt >= NAV_REFRESH_MS) {
             moved = 0;
+            refreshedAt = now;
             map.fire('moveend');
           }
         }
@@ -1227,8 +1269,15 @@
 
     function arrive(here, heading, gait, wet, level) {
       const startedAt = performance.now();
+      let lastPaint = startedAt;
       function step(now) {
         if (!state.nav) return;
+        const paintElapsed = now - lastPaint;
+        if (paintElapsed < FRAME_INTERVAL - 0.1) {
+          state.nav.raf = requestAnimationFrame(step);
+          return;
+        }
+        lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / FRAME_INTERVAL)) * FRAME_INTERVAL;
         const k = clamp01((now - startedAt) / ARRIVE_MS);
         drawWalker(here, heading, { arrived: k, gait, wet: wet * (1 - k), level });
         if (k < 1) {
@@ -1246,15 +1295,22 @@
 
     function zoomOut(here, heading, gait, level) {
       const startedAt = performance.now();
+      let lastPaint = startedAt;
       let cameraEnded = isCameraPaused();
       let markerFaded = false;
       const end = () => {
         if (cameraEnded && markerFaded) finish({ completed: true });
       };
-      // Continue drawing at the destination while the camera pulls back;
+      // Continue drawing at the last position while the camera pulls back;
       // a frozen canvas would slide away from its road during the flight.
       const fade = now => {
         if (!state.nav) return;
+        const paintElapsed = now - lastPaint;
+        if (paintElapsed < FRAME_INTERVAL - 0.1) {
+          state.nav.raf = requestAnimationFrame(fade);
+          return;
+        }
+        lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / FRAME_INTERVAL)) * FRAME_INTERVAL;
         const k = ease((now - startedAt) / WALKER_FADE_MS);
         antView.canvas.style.opacity = String(1 - k);
         drawWalker(here, heading, { gait, level });
@@ -1302,9 +1358,10 @@
           startWalk();
           return;
         }
-        if (now - lastPaint >= FRAME_INTERVAL - 1) {
+        const paintElapsed = now - lastPaint;
+        if (paintElapsed >= FRAME_INTERVAL - 0.1) {
           drawFrame(elapsed);
-          lastPaint = now;
+          lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / FRAME_INTERVAL)) * FRAME_INTERVAL;
         }
         state.raf = requestAnimationFrame(frame);
       };

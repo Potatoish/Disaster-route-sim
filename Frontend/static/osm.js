@@ -524,7 +524,7 @@ function bindRouteEtaLabel(hitLayer, content) {
 
 // Clicking a route line picks it, like picking it in the results panel: the
 // other routes dim and it gets the marching dash (createRoutePreview in
-// script.js). Clicking it again lets go.
+// script.js). Clicking it again stops the dash.
 function attachRouteClick(hitLayer, route) {
   hitLayer.on('click', ev => {
     // Not also a tap on the map underneath (which can drop a pin).
