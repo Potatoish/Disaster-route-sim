@@ -34,6 +34,19 @@ button, summary { touch-action: manipulation; }
 .form-status { color: var(--green-ink); font-size: var(--text-sm); line-height: 1.5; }
 .form-error { color: var(--danger-ink); }
 
+/* Keep page text from selecting during a pull; form text stays editable. */
+body.site-page, .site-page * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.site-page :is(input, textarea, select, [contenteditable]:not([contenteditable="false"])),
+.site-page [contenteditable]:not([contenteditable="false"]) * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* A quieter surface and shorter shadows keep long public pages readable. */
 body.site-page {
   --page-top: #f8fafc;
@@ -79,6 +92,18 @@ body.site-page.dark {
   line-height: 1.55;
   text-align: left;
   text-align-last: auto;
+}
+/* Keep section introductions and short notes centered after the shared
+   paragraph rules above, including when their text wraps on a phone. */
+.site-page .block-head.center-head { align-items: center; }
+.site-page .block-head.center-head > * { max-width: 100%; }
+.site-page .block-head.center-head p,
+.site-page :is(.qs-head, .qs-note, .fab-note, .panel .contact-note, .panel .thesis-note, .scope-modal-coverage) {
+  text-align: center;
+  text-align-last: auto;
+}
+@media (max-width: 820px) {
+  .site-page .hero p.lede { text-align: center; text-align-last: auto; }
 }
 .site-page :is(.cta, .hero-action, .gtk-link, .fab-send, .rate-row button,
   .fab-panel-close, .tutorial-btn, .scope-modal-close, .tutorial-modal-close, .hz-sim-btn) {

@@ -48,3 +48,16 @@
     canvasRatio: (maximum = 1.5) => Math.min(devicePixelRatio || 1, constrained ? 1 : maximum),
   };
 })();
+
+// Prevent ordinary page selection/copy while preserving form editing shortcuts.
+(function initPublicTextInteraction() {
+  if (!document.body.classList.contains('site-page')) return;
+  const editable = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+  function preventPageSelection(event) {
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    if (!target?.closest(editable)) event.preventDefault();
+  }
+  document.addEventListener('selectstart', preventPageSelection);
+  document.addEventListener('copy', preventPageSelection);
+  document.addEventListener('cut', preventPageSelection);
+})();

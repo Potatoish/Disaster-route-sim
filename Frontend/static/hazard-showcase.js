@@ -111,7 +111,10 @@
   const LENS_NAMES = { both: 'Both', liq: 'Liquefaction', gs: 'Ground shaking', none: 'No layer' };
   // The readout's levels come from the tiles' own "Level: ..." lines, so the
   // markup stays the one place they are written.
-  const tileLevel = layer => tiles[layer].querySelector('.hz-tile-level').textContent.replace(/^Level:\s*/, '');
+  const tileLevels = Object.fromEntries(Object.entries(tiles).map(([layer, tile]) =>
+    [layer, tile.querySelector('.hz-tile-level').textContent.replace(/^Level:\s*/, '')]));
+  const tileLevel = layer => tileLevels[layer];
+  const illustrativeIntensity = $('hzIntensityValue').textContent;
   const LAYER_NAMES = { gs: 'Ground shaking', liq: 'Liquefaction' };
   // The simulate button names and pictures whatever is switched on.
   const ICON_QUAKE = '<path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/>';
@@ -151,6 +154,11 @@
     $('hzQuakeLevels').innerHTML = on.length
       ? on.map(layer => `<span class="hz-chip hz-chip--${layer}">${LAYER_NAMES[layer]}: ${tileLevel(layer)}</span>`).join('')
       : '<span class="hz-note">No layer on</span>';
+    // This intensity illustrates the street scene, independently of a
+    // barangay. Liquefaction keeps its own susceptibility level.
+    $('hzQuakeIntensityLabel').hidden = !layers.gs;
+    $('hzQuakeIntensity').hidden = !layers.gs;
+    $('hzQuakeIntensityValue').textContent = illustrativeIntensity;
   }
 
   Object.entries(tiles).forEach(([layer, tile]) => tile.addEventListener('click', () => {

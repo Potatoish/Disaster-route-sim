@@ -1,4 +1,4 @@
-// Homepage / About page behavior: theme toggle, ant-trail hero
+// Homepage / About page behavior: theme toggle, ant colony hero
 // background, and the feedback widget. Loaded on every page that extends
 // site_base.html.
 
@@ -566,10 +566,9 @@ document.addEventListener('keydown', (event) => {
 });
 
 // ---- ant colony ambient hero background ----
-// Ants walk the edges of a small procedural road network (regenerated per
-// canvas size), like the ACO graph walk the app simulates. The pheromone
-// trail is the brand's electric cyan, independent of the theme colors.
-const PHEROMONE_COLOR = '#00e5ff';
+// Ants walk a faint road network, like the ACO graph walk the app simulates.
+// Cache their walking poses and deposit pheromone dots onto one fading
+// canvas, keeping the trail cost independent of how long the page runs.
 
 function initAntCanvas() {
   const canvas = document.getElementById('antCanvas');
@@ -577,18 +576,20 @@ function initAntCanvas() {
   canvas.dataset.initialized = 'true';
 
   const ctx = canvas.getContext('2d');
+  if (!ctx) return;
   const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   let reduced = motionQuery.matches;
   let animationFrame = 0;
   let lastPaint = 0;
   let lastUpdate = 0;
-  const frameInterval = 1000 / 60;
-  // Preserve the gentler ambient motion on constrained devices while
-  // drawing at 60 FPS. Movement and trail aging follow elapsed time.
-  const motionScale = window.agnasUI?.constrained ? 0.5 : 1;
-  let width, height, network = { nodes: [], edges: [] }, ants = [], trail = [];
+  const frameInterval = 1000 / (window.agnasUI?.constrained ? 24 : 30);
+  const motionScale = window.agnasUI?.constrained ? 0.75 : 1;
+  let width, height, ratio, network = { nodes: [], edges: [] }, ants = [];
+  let antSprites = [];
+  let pheromoneSprite;
   let cachedAccent = '#1d4ed8';
   let cachedRoad = '#94a3b8';
+  let cachedPheromone = '#0891b2';
   let resizeTimer = null;
 
   // Road lines and nodes never move once generated, so they are painted once
@@ -596,17 +597,117 @@ function initAntCanvas() {
   // of re-stroking ~80 segments per frame.
   const networkLayer = document.createElement('canvas');
   const networkCtx = networkLayer.getContext('2d');
+  const pheromoneLayer = document.createElement('canvas');
+  const pheromoneCtx = pheromoneLayer.getContext('2d');
 
   function refreshColors() {
     cachedAccent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#1d4ed8';
     cachedRoad = getComputedStyle(document.body).getPropertyValue('--border2').trim() || '#94a3b8';
+    cachedPheromone = document.body.classList.contains('dark') ? '#22d3ee' : '#0891b2';
   }
-  refreshAntCanvasColors = () => { refreshColors(); paintNetworkLayer(); paint(); };
+  refreshAntCanvasColors = () => {
+    refreshColors();
+    buildAntSprites();
+    buildPheromoneSprite();
+    paintNetworkLayer();
+    resetPheromones();
+    paint();
+  };
+
+  function buildPheromoneSprite() {
+    pheromoneSprite = document.createElement('canvas');
+    pheromoneSprite.width = Math.round(10 * ratio);
+    pheromoneSprite.height = Math.round(10 * ratio);
+    const pen = pheromoneSprite.getContext('2d');
+    pen.scale(ratio, ratio);
+    pen.fillStyle = cachedPheromone;
+    // Flat halo and a crisp center: no blur pass per particle.
+    for (const [radius, opacity] of [[3.4, 0.16], [1.3, 0.95]]) {
+      pen.globalAlpha = opacity;
+      pen.beginPath();
+      pen.arc(5, 5, radius, 0, Math.PI * 2);
+      pen.fill();
+    }
+  }
+
+  function stampPheromone(x, y, opacity = 1) {
+    pheromoneCtx.globalAlpha = opacity;
+    pheromoneCtx.drawImage(pheromoneSprite, x - 5, y - 5, 10, 10);
+  }
+
+  function resetPheromones() {
+    pheromoneCtx.clearRect(0, 0, width, height);
+    ants.forEach(ant => {
+      const from = network.nodes[ant.fromIdx];
+      const to = network.nodes[ant.toIdx];
+      const length = Math.hypot(to.x - from.x, to.y - from.y);
+      // A short trail is already visible on arrival, then fresh deposits
+      // follow the walking ant and old ones steadily evaporate.
+      for (let i = 1; i <= 24; i++) {
+        const t = ant.t - i * 3 / length;
+        if (t < 0) break;
+        stampPheromone(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, 1 - i / 25);
+      }
+    });
+  }
+
+  function drawPheromones(frameStep) {
+    if (frameStep > 0) {
+      pheromoneCtx.globalCompositeOperation = 'destination-out';
+      pheromoneCtx.globalAlpha = 1 - Math.exp(-frameStep / 1.6);
+      pheromoneCtx.fillRect(0, 0, width, height);
+      pheromoneCtx.globalCompositeOperation = 'source-over';
+    }
+    ctx.drawImage(pheromoneLayer, 0, 0, width, height);
+  }
+
+  function buildAntSprites() {
+    antSprites = Array.from({ length: 4 }, (_, frame) => {
+      const sprite = document.createElement('canvas');
+      sprite.width = Math.round(24 * ratio);
+      sprite.height = Math.round(20 * ratio);
+      const pen = sprite.getContext('2d');
+      pen.scale(ratio, ratio);
+      pen.translate(12, 10);
+      pen.fillStyle = cachedAccent;
+      pen.strokeStyle = cachedAccent;
+      pen.lineWidth = 0.9;
+      pen.lineCap = 'round';
+      pen.lineJoin = 'round';
+
+      // Three jointed legs on each side, alternating as the ant walks.
+      pen.beginPath();
+      for (let leg = 0; leg < 3; leg++) {
+        const x = 1.5 - leg * 1.7;
+        for (const side of [-1, 1]) {
+          const stride = Math.sin(frame * Math.PI / 2 + leg * Math.PI + (side > 0 ? Math.PI : 0)) * 1.1;
+          pen.moveTo(x, side * 0.8);
+          pen.lineTo(x + (1 - leg) * 1.8 + stride, side * 3.5);
+          pen.lineTo(x + (1 - leg) * 2.6 + stride, side * 5.5);
+        }
+      }
+      // Bent antennae extend from the head in the direction of travel.
+      for (const side of [-1, 1]) {
+        pen.moveTo(5, side);
+        pen.lineTo(7, side * 2.2);
+        pen.lineTo(8.4, side * 3.5);
+      }
+      pen.stroke();
+
+      // Abdomen, narrow thorax, and head give a recognizable ant silhouette.
+      for (const [x, rx, ry] of [[-4.5, 3.5, 2.5], [0, 2.2, 1.5], [3.8, 2, 1.9]]) {
+        pen.beginPath();
+        pen.ellipse(x, 0, rx, ry, 0, 0, Math.PI * 2);
+        pen.fill();
+      }
+      return sprite;
+    });
+  }
 
   function resize() {
     width = canvas.parentElement.clientWidth;
     height = canvas.parentElement.clientHeight;
-    const ratio = window.agnasUI?.canvasRatio() || Math.min(devicePixelRatio || 1, 1.5);
+    ratio = window.agnasUI?.canvasRatio() || Math.min(devicePixelRatio || 1, 1.5);
     canvas.width = Math.round(width * ratio);
     canvas.height = Math.round(height * ratio);
     canvas.style.width = width + 'px';
@@ -616,12 +717,17 @@ function initAntCanvas() {
     networkLayer.width = canvas.width;
     networkLayer.height = canvas.height;
     networkCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    pheromoneLayer.width = canvas.width;
+    pheromoneLayer.height = canvas.height;
+    pheromoneCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    buildAntSprites();
+    buildPheromoneSprite();
   }
 
   // A jittered grid reads as an organic little street layout at a glance
   // without needing real GIS data for a purely decorative background.
   function buildRoadNetwork() {
-    const spacing = 96;
+    const spacing = 120;
     const cols = Math.max(2, Math.ceil(width / spacing) + 1);
     const rows = Math.max(2, Math.ceil(height / spacing) + 1);
     const jitter = spacing * 0.28;
@@ -653,24 +759,28 @@ function initAntCanvas() {
     return { nodes, edges };
   }
 
-  function makeAnt() {
+  function makeAnt(index, count) {
     const travelable = network.nodes.filter((n) => n.edges.length > 0);
     if (!travelable.length) return null;
 
-    const from = travelable[Math.floor(Math.random() * travelable.length)];
+    const from = travelable[Math.floor((index + Math.random()) * travelable.length / count)];
     const fromIdx = network.nodes.indexOf(from);
     const toIdx = from.edges[Math.floor(Math.random() * from.edges.length)];
 
     return {
       fromIdx,
       toIdx,
-      t: Math.random(),
-      speed: 0.006 + Math.random() * 0.007,
+      t: 0.3 + Math.random() * 0.65,
+      speed: 20 + Math.random() * 12,
+      gait: Math.random() * 4,
+      depositTime: Math.random() * 0.13,
     };
   }
 
   function advanceAnt(ant, frameStep) {
-    ant.t += ant.speed * frameStep;
+    const from = network.nodes[ant.fromIdx];
+    const to = network.nodes[ant.toIdx];
+    ant.t += ant.speed * frameStep / Math.hypot(to.x - from.x, to.y - from.y);
     if (ant.t < 1) return;
 
     const arrived = network.nodes[ant.toIdx];
@@ -696,7 +806,7 @@ function initAntCanvas() {
   function paintNetworkLayer() {
     networkCtx.clearRect(0, 0, width, height);
 
-    networkCtx.globalAlpha = 0.5;
+    networkCtx.globalAlpha = 0.2;
     networkCtx.strokeStyle = cachedRoad;
     networkCtx.lineWidth = 1;
     network.edges.forEach(({ a, b }) => {
@@ -708,7 +818,7 @@ function initAntCanvas() {
       networkCtx.stroke();
     });
 
-    networkCtx.globalAlpha = 0.65;
+    networkCtx.globalAlpha = 0.28;
     networkCtx.fillStyle = cachedRoad;
     network.nodes.forEach((n) => {
       if (!n.edges.length) return;
@@ -722,58 +832,36 @@ function initAntCanvas() {
     network = buildRoadNetwork();
     paintNetworkLayer();
     ants = [];
-    for (let i = 0; i < (window.agnasUI?.constrained ? 8 : 14); i++) {
-      const ant = makeAnt();
+    const count = Math.min(window.agnasUI?.constrained ? 10 : 20, Math.max(8, Math.round(width / 72)));
+    for (let i = 0; i < count; i++) {
+      const ant = makeAnt(i, count);
       if (ant) ants.push(ant);
     }
-    trail = [];
+    resetPheromones();
   }
 
   function init() {
-    resize();
     refreshColors();
+    resize();
     rebuildScene();
   }
 
-  function drawTrail(frameStep) {
-    for (let i = trail.length - 1; i >= 0; i--) {
-      trail[i].life -= frameStep;
-      if (trail[i].life <= 0) trail.splice(i, 1);
-    }
-
-    // Two flat fills (soft wide + solid core) fake a glow far more cheaply than
-    // ctx.shadowBlur, which costs an extra blur pass per dot.
-    ctx.fillStyle = PHEROMONE_COLOR;
-    trail.forEach((p) => {
-      const ratio = Math.max(0, p.life / 70);
-      ctx.globalAlpha = ratio * 0.22;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = ratio * 0.85;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 1.3, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-
   function drawAnts(frameStep) {
-    ctx.fillStyle = cachedAccent;
     ants.forEach((ant) => {
       advanceAnt(ant, frameStep);
+      ant.gait = (ant.gait + frameStep * 8) % antSprites.length;
       const pose = antPose(ant);
-      if (Math.random() < Math.min(1, 0.45 * frameStep)) trail.push({ x: pose.x, y: pose.y, life: 70 });
+      ant.depositTime += frameStep;
+      if (ant.depositTime >= 0.13) {
+        stampPheromone(pose.x, pose.y);
+        ant.depositTime %= 0.13;
+      }
 
       ctx.save();
       ctx.translate(pose.x, pose.y);
       ctx.rotate(pose.angle);
-      ctx.globalAlpha = 0.85;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 3.4, 1.7, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(-4.2, 0, 2, 1.2, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(antSprites[Math.floor(ant.gait)], -13, -11, 26, 22);
       ctx.restore();
     });
   }
@@ -788,18 +876,16 @@ function initAntCanvas() {
     ctx.clearRect(0, 0, width, height);
     ctx.globalAlpha = 1;
     ctx.drawImage(networkLayer, 0, 0, width, height);
-    drawTrail(frameStep);
-    ctx.globalAlpha = 1;
+    drawPheromones(frameStep);
     drawAnts(frameStep);
-
   }
 
   function step(now) {
     animationFrame = 0;
-    if (!visible || reduced) return;
+    if (!visible || document.hidden || reduced) return;
     const paintElapsed = now - lastPaint;
     if (paintElapsed >= frameInterval - 0.1) {
-      const frameStep = lastUpdate ? Math.min(100, now - lastUpdate) / frameInterval * motionScale : 0;
+      const frameStep = lastUpdate ? Math.min(100, now - lastUpdate) / 1000 * motionScale : 0;
       paint(frameStep);
       lastUpdate = now;
       lastPaint += Math.max(1, Math.floor((paintElapsed + 0.1) / frameInterval)) * frameInterval;
@@ -812,23 +898,17 @@ function initAntCanvas() {
     animationFrame = 0;
     lastPaint = performance.now();
     lastUpdate = 0;
-    if (visible && !reduced) animationFrame = requestAnimationFrame(step);
+    if (visible && !document.hidden && !reduced) animationFrame = requestAnimationFrame(step);
   }
 
   if ('IntersectionObserver' in window) {
-    const inViewport = { current: true };
     const observer = new IntersectionObserver((entries) => {
-      inViewport.current = entries[entries.length - 1].isIntersecting;
-      visible = inViewport.current && !document.hidden;
+      visible = entries[entries.length - 1].isIntersecting;
       syncAnimation();
     }, { threshold: 0 });
     observer.observe(canvas);
-
-    document.addEventListener('visibilitychange', () => {
-      visible = inViewport.current && !document.hidden;
-      syncAnimation();
-    });
   }
+  document.addEventListener('visibilitychange', syncAnimation);
 
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);

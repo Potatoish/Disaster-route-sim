@@ -6,12 +6,14 @@
 <main id="main" tabindex="-1">
 <section class="block about-section">
   <div class="wrap">
-    <div class="block-head center-head">
-      <span class="about-logo" aria-hidden="true">
-        <img class="logo-light" src="{{ url_for('static', filename='agnas-logo.png') }}" alt="">
-        <img class="logo-dark" src="{{ url_for('static', filename='agnas-logo-dark.png') }}" alt="">
-      </span>
-      <h1>About AGNAS</h1>
+    <div class="about-intro">
+      <div class="block-head center-head about-heading">
+        <span class="about-logo" aria-hidden="true">
+          <img class="logo-light" src="{{ url_for('static', filename='agnas-logo.png') }}" alt="">
+          <img class="logo-dark" src="{{ url_for('static', filename='agnas-logo-dark.png') }}" alt="">
+        </span>
+        <h1>About AGNAS</h1>
+      </div>
     </div>
 
     <div class="about-grid">
@@ -105,4 +107,8 @@
   </div>
 </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='about-intro.js') }}"></script>
 {% endblock %}

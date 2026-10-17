@@ -2,6 +2,10 @@
 
 {% block content %}
 <main id="main" tabindex="-1">
+<div class="dashboard-refresh" id="dashboardRefresh" hidden>
+    <span class="pull-refresh-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 11.5-1L20 9M4 15l2.5 3A7 7 0 0 0 18 17"/></svg></span>
+    <span class="refresh-status" id="pullRefreshLabel" role="status" aria-live="polite"></span>
+</div>
 <section id="hero" class="hero">
   <canvas id="antCanvas" aria-hidden="true"></canvas>
   <div class="wrap hero-inner hero-split">
@@ -274,6 +278,7 @@
             <span class="hz-switch" aria-hidden="true"></span>
             <span class="hz-tile-desc">How strongly the ground shakes.</span>
             <span class="hz-tile-level">Level: High</span>
+            <span class="hz-tile-intensity">Intensity: <span id="hzIntensityValue">IX &middot; Violent (MMI)</span><span class="hz-intensity-context">Illustrative example</span></span>
           </button>
           <button type="button" class="hz-tile" id="hzTileLiq" data-layer="liq" aria-pressed="false">
             <span class="hz-tile-icon" aria-hidden="true">
@@ -428,6 +433,11 @@
         <dl class="hz-readout hz-readout--quake" aria-live="polite">
           <dt>Level</dt>
           <dd id="hzQuakeLevels"><span class="hz-chip hz-chip--gs">Ground shaking: High</span></dd>
+          <dt id="hzQuakeIntensityLabel">Intensity</dt>
+          <dd id="hzQuakeIntensity">
+            <span class="hz-chip hz-chip--gs" id="hzQuakeIntensityValue">IX &middot; Violent (MMI)</span>
+            <span class="hz-intensity-note">Illustrative example for this street scene.<br><a class="src-link" href="https://www.usgs.gov/programs/earthquake-hazards/modified-mercalli-intensity-scale" target="_blank" rel="noopener">Modified Mercalli scale</a></span>
+          </dd>
           <dt>On the street</dt>
           <dd><span class="hz-street" id="hzCrossCaption"><b>Ground shaking:</b> strong shaking cracks walls and drops debris on roads.</span></dd>
         </dl>
@@ -530,4 +540,5 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='hazard-showcase.js') }}"></script>
 <script src="{{ url_for('static', filename='smooth-scroll.js') }}"></script>
+<script src="{{ url_for('static', filename='pull-refresh.js') }}"></script>
 {% endblock %}
