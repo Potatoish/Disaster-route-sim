@@ -4151,7 +4151,7 @@ body.dark .leaflet-popup-close-button {
 
 /* Results details (half / full). */
 .msheet-safety-details {
-  margin-bottom: 16px;
+  margin-block: 12px 16px;
 }
 
 .msheet-safety-action .safety-card-action {
