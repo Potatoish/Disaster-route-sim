@@ -444,15 +444,8 @@
             </div>
             <p class="msummary-dest" id="msimSummaryDest" hidden></p>
             <p class="msummary-far" id="msimFarNote" hidden></p>
-            {# Flood with no safe route: the first thing to do. It opens the
-               Emergency hotlines (_emergency_contacts.html), like the desktop
-               "What to do" card, and never dials: a stray tap must not place
-               a real emergency call. #}
-            <button class="mrescue" id="msimRescue" type="button" onclick="openEmergencyContactModal(event)" hidden>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
-              <span class="mrescue-text" id="msimRescueText"></span>
-              <span class="mrescue-more">Hotlines<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
-            </button>
+            {# Show the full "What to do" guidance once, above the result actions. #}
+            <div class="safety-result-cards msheet-safety-action" id="msimSafetyAction" hidden></div>
             <div class="msheet-actions" id="msimResultActions">
               <button class="mbtn" type="button" onclick="showMobileSetup()">Edit setup</button>
               <button class="mbtn mbtn--primary" id="msimDetailsBtn" type="button" onclick="toggleMobileResultDetails()" aria-controls="msimResultDetails" aria-expanded="false">Routes &amp; directions</button>
@@ -460,8 +453,7 @@
 
             <div class="msheet-details" id="msimResultDetails">
               <div id="msimRouteNavigation"></div>
-              {# Keep the desktop's action guidance and hazard breakdown in
-                 the mobile results too. #}
+              {# The hazard breakdown follows the selected route. #}
               <div class="safety-result-cards msheet-safety-details" id="msimSafetyDetails"></div>
               <p class="result-route-description" id="msimRouteComparison" hidden></p>
 

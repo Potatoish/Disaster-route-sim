@@ -828,8 +828,10 @@
   // Uses the desktop panel's data helpers and card styles so the mobile
   // layout preserves its full safety guidance and per-hazard distances.
   function renderSafetyDetails(route, peak, action, isEarthquake) {
-    $('msimSafetyDetails').innerHTML = buildSafetyActionCard(action)
-      + buildSafetyHazardCard(peak, Number(route?.max_hazard || 0), isEarthquake);
+    const guidance = $('msimSafetyAction');
+    guidance.innerHTML = buildSafetyActionCard(action);
+    guidance.hidden = !action;
+    $('msimSafetyDetails').innerHTML = buildSafetyHazardCard(peak, Number(route?.max_hazard || 0), isEarthquake);
   }
 
   function renderCurrentRoute(view) {
@@ -845,16 +847,12 @@
     const duration = route.display_duration || formatRouteWalkingDuration(route);
     const distance = route.display_distance || formatDistanceCompact(route.distance);
     renderSafetyDetails(route, peak, action, isEarthquake);
-    const showRescue = !!action && !isEarthquake;
     $('msimSummaryMain').innerHTML = notWalkable
       ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong> · not walkable</span>`
       : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
     $('msimSummaryMain').classList.toggle('is-danger', notWalkable);
-    const rescue = $('msimRescue');
-    rescue.hidden = !showRescue;
-    setText($('msimRescueText'), showRescue ? action.title : '');
-    // One primary action at a time: rescue, else the details.
-    $('msimDetailsBtn').classList.toggle('mbtn--primary', !showRescue);
+    // One primary action at a time: safety guidance, else the details.
+    $('msimDetailsBtn').classList.toggle('mbtn--primary', !action);
     setText($('msimSummaryRoute'), view.context);
     const comparison = getRouteComparisonText(route, best);
     setText($('msimRouteComparison'), comparison);
@@ -894,6 +892,8 @@
 
   function clearResults() {
     $('msimRouteNavigation').innerHTML = '';
+    $('msimSafetyAction').innerHTML = '';
+    $('msimSafetyAction').hidden = true;
     $('msimSafetyDetails').innerHTML = '';
     $('msimRouteComparison').textContent = '';
     $('msimRouteComparison').hidden = true;

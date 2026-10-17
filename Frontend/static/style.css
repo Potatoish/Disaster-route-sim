@@ -4121,61 +4121,9 @@ body.dark .leaflet-popup-close-button {
   color: var(--red);
 }
 
-/* Flood with no safe route: the call for rescue, the sheet's first action.
-   It opens the Emergency hotlines list rather than dialing (index.html).
-   A fixed dark red keeps white text at 4.5:1 in both themes. */
-.mrescue {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
+/* Keep the full safety guidance above the result actions. */
+.msheet-safety-action {
   margin-top: 10px;
-  padding: 0 10px 0 14px;
-  border: 1px solid #991b1b;
-  border-radius: 10px;
-  background: #b91c1c;
-  color: #ffffff;
-  font: 800 .94rem/1.25 var(--font-body);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color .16s ease, scale .12s ease;
-}
-
-.mrescue:hover {
-  background: #991b1b;
-}
-
-.mrescue svg {
-  flex: none;
-  width: 20px;
-  height: 20px;
-}
-
-.mrescue-text {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.mrescue-more {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 4px 3px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .18);
-  font-size: .8rem;
-}
-
-.mrescue .mrescue-more svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .msummary-route {
@@ -4206,7 +4154,7 @@ body.dark .leaflet-popup-close-button {
   margin-bottom: 16px;
 }
 
-.msheet-safety-details .safety-card-action {
+.msheet-safety-action .safety-card-action {
   min-height: 44px;
 }
 
@@ -5293,7 +5241,7 @@ body.dark .aco-legend-stuck {
   :is(.run-btn, .evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
       .reset-btn, .safety-download-btn, .safety-all-routes-btn, .route-modal-btn,
       .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
-      .safety-card-action, .mrescue, .aco-replay-skip):active:not(:disabled) {
+      .safety-card-action, .aco-replay-skip):active:not(:disabled) {
     scale: .97;
   }
 }
