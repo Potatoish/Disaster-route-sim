@@ -57,6 +57,7 @@
   // words, and an unchanged rewrite still makes the next size reading
   // (measureSnaps, the legend) lay the page out again.
   const setText = (element, text) => {
+    text = window.agnasI18n?.t(text) || text;
     if (element && element.textContent !== text) element.textContent = text;
   };
   // The window's size, kept from its resize events (a capturing listener, so
@@ -548,6 +549,7 @@
       window.cancelAnimationFrame(state.syncFrame);
       state.syncFrame = null;
     }
+    if (!isActive()) return;
     if (state.mode === 'results' && !simData) state.mode = 'setup';
     if (state.mode === 'replay' && !$('msimReplay').firstElementChild) state.mode = simData ? 'results' : 'setup';
     sheet.dataset.mode = state.mode;
@@ -767,7 +769,9 @@
     setText(value, pin?.status === 'checking'
       ? 'Checking this spot…'
       : pin
-      ? pin.label || PIN_ROLE_COPY[role].fallbackLabel
+      ? pin.street ? pin.label || pin.street
+        : pin.nearbyStreet ? `${uiCopy('Near')} ${pin.nearbyStreet}`
+        : pin.label || PIN_ROLE_COPY[role].fallbackLabel
       : placing
       ? `Move the map, then tap “Set ${role} here”`
       : waiting
@@ -806,12 +810,7 @@
     if (role) return routePins[role] ? `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.` : '';
     // The two buttons under the slots say it themselves.
     if (isWaitingForEvacSites() && getReadyPin('start')) return '';
-    if (canRunCurrentSimulation()) {
-      if (simData) return 'Change the hazard or move a pin to compare routes.';
-      return isToEvacuationSite() && !routePins.end
-        ? `Ready. Routes go to the evacuation site with the ${getRouteRankingLabel()}. Tap Run simulation.`
-        : 'Ready. Tap Run simulation.';
-    }
+    if (canRunCurrentSimulation()) return getSetupRouteDescription();
     return '';
   }
 
@@ -1359,9 +1358,11 @@
   // Leaving the phone layout (rotation, resize) closes the layers sheet and
   // gives the moving pin its marker back; entering it re-measures from zero.
   function onLayoutChange() {
+    edgeCache.clear();
     if (isActive()) {
       state.height = 0;
       state.snap = 'peek';
+      if (simData && shell.classList.contains('safety-open') && state.mode !== 'replay') state.mode = 'results';
       syncNow();
     } else {
       closeLayers({ restoreFocus: false });
@@ -1373,6 +1374,10 @@
       shell.style.removeProperty('--sheet-box-h');
       shell.classList.remove('msim-controls-hidden', 'msim-map-covered', 'msim-dragging', 'msim-legend-hidden', 'msim-route-on');
       $('msimCenterPin').hidden = true;
+      // A short viewport or replay can close the desktop aside while the
+      // sheet continues showing results. Restore it when zoom/rotation brings
+      // the desktop layout back, without rerunning or clearing the simulation.
+      if (simData && state.mode === 'results') setRouteSafetyPanelVisible(true);
     }
     syncRoutePinMarkers();
   }
@@ -1391,6 +1396,11 @@
     }).observe(desktopLegend, { attributes: true, attributeFilter: ['style'], childList: true, subtree: true });
   }
   document.fonts?.ready?.then(scheduleSync);
+  document.addEventListener('site:languagechange', () => {
+    edgeCache.clear();
+    state.legendHtml = null;
+    scheduleSync();
+  });
 
   $('msimDisclaimerText').textContent = SAFETY_DISCLAIMER_TEXT;
 

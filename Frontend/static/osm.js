@@ -276,10 +276,13 @@ function buildLocationPhoto({ lat, lng, id, label = 'Location', role = 'site' })
 const EVAC_BADGE_LARGE = { labelSize: 17, height: 26, charWidth: 11.8, padding: 18 };
 
 function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labelSize, halo = false }) {
+  const copyStyle = { fill, stroke, accent, label, badgeWidth, labelSize, halo };
+  label = window.agnasI18n?.t(label) || label;
+  badgeWidth = Math.max(badgeWidth, Math.ceil(label.length * labelSize * 0.65 + 10));
   const large = !!window.mobileSim?.isActive();
   // The pin is drawn 92 units wide; a large badge widens the icon around it.
   const largeBadgeWidth = Math.round(label.length * EVAC_BADGE_LARGE.charWidth + EVAC_BADGE_LARGE.padding);
-  const width = large ? Math.max(92, largeBadgeWidth + 4) : 92;
+  const width = Math.max(92, (large ? largeBadgeWidth : badgeWidth) + 4);
   const shift = (width - 92) / 2;
   const badge = large
     ? { width: largeBadgeWidth, height: EVAC_BADGE_LARGE.height, y: 62, size: EVAC_BADGE_LARGE.labelSize, baseline: 81 }
@@ -311,6 +314,7 @@ function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labe
 
   const scale = 58 / 92;
   return L.icon({
+    agnasEvacCopyStyle: copyStyle,
     iconUrl: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     iconSize: [Math.round(width * scale), Math.round(height * (70 / 110))],
     iconAnchor: [Math.round((46 + shift) * scale), 63],
@@ -319,6 +323,15 @@ function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labe
     className: 'evac-site-marker',
   });
 }
+
+// Evacuation labels are embedded in SVG image URLs, outside the text walker.
+document.addEventListener('site:languagechange', () => {
+  if (typeof gMap === 'undefined' || !gMap) return;
+  gMap.eachLayer(layer => {
+    const style = layer.options?.icon?.options?.agnasEvacCopyStyle;
+    if (style) layer.setIcon(buildEvacSiteMarkerIcon(style));
+  });
+});
 
 // The best route's color is its verdict (getRouteSafetyTier in script.js).
 function getBestRouteColor(route) {

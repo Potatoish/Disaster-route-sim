@@ -291,3 +291,52 @@ html[data-keyboard-open="true"] .fab-panel {
     transition-duration: .01ms !important;
   }
 }
+
+/* Optional translation tool in the left corner, separate from navigation. */
+.language-menu{ position:fixed; top:20px; left:max(16px, env(safe-area-inset-left,0px)); z-index:45; }
+.language-trigger{
+  min-height:44px; display:flex; align-items:center; justify-content:center; gap:5px;
+  padding:0 9px; border:1px solid var(--border); border-radius:999px;
+  color:var(--muted); background:var(--panel); cursor:pointer; box-shadow:var(--shadow-sm);
+  font-family:var(--font-meta); font-size:11px;
+}
+.language-trigger svg{ width:15px; height:15px; }
+.language-trigger[aria-expanded="true"]{ border-color:var(--accent); color:var(--accent); }
+.translation-popup{
+  position:fixed; left:max(16px, env(safe-area-inset-left,0px)); top:72px; z-index:50;
+  width:300px; max-width:calc(100% - 32px); padding:14px; border:1px solid var(--border);
+  border-radius:14px; background:var(--panel); box-shadow:var(--shadow);
+}
+.translation-popup-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.translation-popup-head h2{ font-family:var(--font-body); font-size:14px; font-weight:600; }
+.translation-popup-close{ display:grid; place-items:center; flex:none; width:36px; height:36px; border:0; border-radius:50%; color:var(--muted); background:transparent; }
+.translation-popup-close:hover{ background:var(--accent-soft-bg); color:var(--text); }
+.translation-popup-close svg{ width:17px; height:17px; }
+.language-options{
+  display:grid; grid-template-columns:1fr 1fr; gap:8px;
+}
+.language-options button{
+  min-height:44px; border:1px solid var(--border); border-radius:8px; padding:8px 14px;
+  background:transparent; color:var(--text); font-size:13px; text-align:center;
+}
+.language-options button:hover, .language-options button[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft-bg); }
+
+@media (max-width: 820px) {
+  .site-page .language-menu { top: calc(var(--language-nav-bottom, 64px) + 4px); left: max(12px, env(safe-area-inset-left, 0px)); }
+  .site-page .translation-popup { left: max(12px, env(safe-area-inset-left, 0px)); }
+}
+@media (max-width: 639px) {
+  .site-page .language-trigger { padding-inline: 7px; gap: 4px; }
+  .site-page .translation-popup { max-width: calc(100% - 24px); }
+}
+/* Keep the simulator language control clear of the map buttons and sheet. */
+.sim-page .language-menu { top: auto; bottom: 16px; right: 16px; left: auto; z-index: 210; }
+.sim-page .translation-popup { top: auto; bottom: 68px; right: 16px; left: auto; z-index: 211; max-height: calc(100dvh - 88px); overflow-y: auto; }
+@media (max-height: 499px) {
+  .sim-page .language-menu { bottom: calc(var(--mobile-bar-h, 56px) + 8px); }
+  .sim-page .translation-popup { bottom: calc(var(--mobile-bar-h, 56px) + 60px); max-height: calc(100dvh - 128px); }
+}
+@media (max-width: 1023px) and (min-height: 500px) {
+  .sim-page .language-menu { top: calc(70px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: auto; }
+  .sim-page .translation-popup { top: calc(122px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: auto; }
+}

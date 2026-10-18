@@ -49,6 +49,9 @@ PIN_STREET_LABEL_RADIUS_METERS = 30.0
 # With no named street that close, the nearest one within this distance still
 # gives the spot a recognisable name ("a spot near Davao Street").
 PIN_NEARBY_STREET_RADIUS_METERS = 300.0
+# Allow a small tapping/GPS tolerance, but never route from a remote river,
+# building or open lot. Accepted UI pins are placed on the returned road point.
+MAX_PIN_ROAD_DISTANCE_METERS = 12.0
 # A pin's route starts/ends where the pin meets the road (see
 # add_road_access_nodes); a meeting point this close to an existing
 # intersection just uses that intersection.
@@ -927,9 +930,8 @@ def parse_route_pin(value, role):
 
 
 def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):
-    """Whether a map-pinned start/destination can be routed: inside G's hazard
-    data coverage area. How far it is from a road does not matter -- its route
-    starts or ends on the street nearest it (add_road_access_nodes)."""
+    """Accept only covered points within tapping distance of a walkable road.
+    Shared by the instant pin check and both hazards' simulation endpoints."""
     if not is_point_in_hazard_coverage(G, lat, lng):
         return {
             "valid": False,
@@ -946,6 +948,21 @@ def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):
             "valid": False,
             "reason": "no_road",
             "message": f"No walkable road was found in the area covered by {coverage_label}.",
+        }
+
+    if road["distance"] > MAX_PIN_ROAD_DISTANCE_METERS:
+        return {
+            "valid": False,
+            "reason": "too_far_from_road",
+            "message": "Choose a spot on a walkable road inside the barangay. River and off-road areas cannot be pinned.",
+            "max_road_distance": MAX_PIN_ROAD_DISTANCE_METERS,
+        }
+
+    if not is_point_in_hazard_coverage(G, road["lat"], road["lng"]):
+        return {
+            "valid": False,
+            "reason": "outside_coverage",
+            "message": "Choose a walkable road inside the barangay's covered area.",
         }
 
     return {

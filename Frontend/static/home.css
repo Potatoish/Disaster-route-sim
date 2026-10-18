@@ -146,34 +146,6 @@ body.dark .brand .logo-dark{ display:block; }
 .nav-links.has-pill .nav-btn:active{ color:var(--text); background-color:var(--panel-strong); background-image:none; }
 .nav-actions{display:flex; align-items:center; gap:8px;}
 
-/* Optional translation tool in the left corner, separate from navigation. */
-.language-menu{ position:fixed; top:20px; left:max(16px, env(safe-area-inset-left,0px)); z-index:45; }
-.language-trigger{
-  min-height:44px; display:flex; align-items:center; justify-content:center; gap:5px;
-  padding:0 9px; border:1px solid var(--border); border-radius:999px;
-  color:var(--muted); background:var(--panel); cursor:pointer; box-shadow:var(--shadow-sm);
-  font-family:var(--font-meta); font-size:11px;
-}
-.language-trigger svg{ width:15px; height:15px; }
-.language-trigger[aria-expanded="true"]{ border-color:var(--accent); color:var(--accent); }
-.translation-popup{
-  position:fixed; left:max(16px, env(safe-area-inset-left,0px)); top:72px; z-index:50;
-  width:300px; max-width:calc(100% - 32px); padding:14px; border:1px solid var(--border);
-  border-radius:14px; background:var(--panel); box-shadow:var(--shadow);
-}
-.translation-popup-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
-.translation-popup-head h2{ font-family:var(--font-body); font-size:14px; font-weight:600; }
-.translation-popup-close{ display:grid; place-items:center; flex:none; width:36px; height:36px; border:0; border-radius:50%; color:var(--muted); background:transparent; }
-.translation-popup-close:hover{ background:var(--accent-soft-bg); color:var(--text); }
-.translation-popup-close svg{ width:17px; height:17px; }
-.language-options{
-  display:grid; grid-template-columns:1fr 1fr; gap:8px;
-}
-.language-options button{
-  min-height:44px; border:1px solid var(--border); border-radius:8px; padding:8px 14px;
-  background:transparent; color:var(--text); font-size:13px; text-align:center;
-}
-.language-options button:hover, .language-options button[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft-bg); }
 summary:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 
 /* The circle appears below the nav only during a pull, with no reserved
@@ -191,14 +163,8 @@ html.has-pull-refresh{ overscroll-behavior-y:contain; }
 .dashboard-refresh[aria-busy="true"] .pull-refresh-icon svg{ animation:refresh-spin .7s linear infinite; }
 .refresh-status{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 @keyframes refresh-spin{ to{ transform:rotate(360deg); } }
-@media (max-width:820px){
-  .language-menu{ top:calc(var(--language-nav-bottom, 64px) + 4px); left:max(12px, env(safe-area-inset-left,0px)); }
-  .translation-popup{ left:max(12px, env(safe-area-inset-left,0px)); }
-}
 @media (max-width:639px){
-  .language-trigger{ padding-inline:7px; gap:4px; }
   .site-nav .nav-actions{ gap:5px; }
-  .translation-popup{ max-width:calc(100% - 24px); }
 }
 @media (prefers-reduced-motion:reduce){
   .pull-refresh-icon svg{ transform:none; animation:none !important; }

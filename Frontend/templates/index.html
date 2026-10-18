@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" translate="no" class="notranslate">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <meta name="format-detection" content="telephone=no"/>
+  <meta name="google" content="notranslate"/>
   <title>Route simulator · AGNAS</title>
   <meta name="description" content="Plan safer walking evacuation routes for flood and earthquake scenarios in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City.">
   {# The phone browser's toolbar color; the theme script below swaps it. #}
@@ -86,10 +87,10 @@
         <div class="workflow-card-head">
           <div>
             <div class="sec-label">Disaster</div>
-            <div class="workflow-card-summary" id="summaryHazard">Choose which hazard scenario to test.</div>
+            <div class="workflow-card-summary" id="summaryHazard"></div>
           </div>
           <div class="workflow-card-actions">
-            <button class="card-action-btn" id="changeHazardBtn" type="button" onclick="changeWorkflowSection('hazard')">Select</button>
+            <button class="card-action-btn" id="changeHazardBtn" type="button" onclick="changeWorkflowSection('hazard')" hidden>Change</button>
           </div>
         </div>
         <div class="workflow-card-body">
@@ -117,12 +118,12 @@
         <div class="workflow-card-head">
           <div>
             <div class="sec-label" id="routeCardLabel">Start / End</div>
-            <div class="workflow-card-summary" id="summaryRoute"></div>
           </div>
           <div class="workflow-card-actions">
             <button class="card-action-btn" id="changeRouteBtn" type="button" onclick="changeWorkflowSection('route')">Change</button>
           </div>
         </div>
+        <div class="workflow-card-summary" id="summaryRoute"></div>
         <div class="workflow-card-body">
           <div class="workflow-route-flow">
             <div class="pin-inputs" id="pinInputs">
@@ -183,32 +184,21 @@
               </button>
             </div>
 
-            <div class="pin-field-help" id="pinFieldHelp">Choose on Map, then tap the spot. Drag a pin to adjust it.</div>
+            <div class="pin-field-help" id="pinFieldHelp">Choose a road inside the barangay.</div>
           </div>
         </div>
       </div>
 
-      <div class="workflow-card" id="cardRun" data-workflow-card="run">
-        <div class="workflow-card-head">
-          <div>
-            <div class="sec-label">Run</div>
-            <div class="workflow-card-summary" id="summaryRun">Review the setup, then launch the simulation.</div>
-          </div>
-        </div>
-        <div class="workflow-card-body workflow-run-body">
-          <div class="info-box" id="infoBox">
-            Loading the barangay map&hellip;
-          </div>
-
-          <button class="run-btn" id="runBtn" type="button" onclick="runSimulation()" disabled>
-            Run Simulation
-          </button>
-        </div>
-      </div>
       </div>
     </div>
 
     <div class="panel-foot" id="panelFoot">
+      <div class="workflow-run" id="cardRun" data-workflow-card="run">
+        <button class="run-btn" id="runBtn" type="button" onclick="runSimulation()" disabled>
+          Run Simulation
+        </button>
+        <p class="setup-run-hint" id="infoBox" role="status">Choose a disaster.</p>
+      </div>
       <button class="panel-back-btn" id="changeRunBtn" type="button" onclick="goToHomepageForNewScope()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
         Back to Home
@@ -631,6 +621,7 @@
 </div>
 
 {% include "_tutorial_modal.html" %}
+{% include "_language_menu.html" %}
 
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 
@@ -651,6 +642,8 @@
    image and CDN script, so the map tiles began loading late. #}
 <script>initTheme(); initMap();</script>
 <script src="{{ url_for('static', filename='visitor-count.js') }}"></script>
+<script src="{{ url_for('static', filename='simulator-language.js') }}"></script>
+<script src="{{ url_for('static', filename='site-language.js') }}"></script>
 
 </body>
 </html>

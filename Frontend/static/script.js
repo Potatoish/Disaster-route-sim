@@ -3,6 +3,10 @@
 // gunicorn, Docker, Railway).
 window.BACKEND_BASE = window.location.origin;
 
+function uiCopy(message) {
+  return window.agnasI18n?.t(message) ?? message;
+}
+
 let gMap = null;
 let selectedBarangay = null;
 let selectedHazard = null;
@@ -309,13 +313,13 @@ const PIN_ROLE_COPY = {
   start: {
     empty: 'Your location',
     fallbackLabel: 'Your location',
-    hint: 'Tap the map to pin where you are',
+    hint: 'Tap a walkable road to pin where you are',
     popupRole: 'Start point',
   },
   end: {
     empty: 'Choose destination',
     fallbackLabel: 'Your destination',
-    hint: 'Now tap the map to pin your destination',
+    hint: 'Now tap a walkable road to pin your destination',
     popupRole: 'Destination',
   },
 };
@@ -749,6 +753,14 @@ async function leaveHazardOnlyView() {
 // in a grid column (desktop). Phones and tablets have their own bottom
 // sheet instead (mobile-sim.js), which hides both panels.
 const MOBILE_PANEL_QUERY = window.matchMedia('(max-height: 499px)');
+MOBILE_PANEL_QUERY.addEventListener('change', () => {
+  // Browser zoom can cross the short-screen breakpoint while the result
+  // lives in another layout. Reopen the result without changing its data.
+  if (simData && !simulationInProgress && !pinPlacementRole
+      && !document.getElementById('appShell')?.classList.contains('aco-replaying')) {
+    setRouteSafetyPanelVisible(true);
+  }
+});
 
 function applySetupSidebarState(shouldCollapse) {
   const shell = document.getElementById('appShell');
@@ -941,7 +953,7 @@ function syncSimulationConfigLock() {
     card.setAttribute('aria-disabled', String(interactionLocked));
   });
 
-  // changeHazardBtn/changeRouteBtn are left out: syncWorkflowSummaries() (via
+  // The Change buttons are left out: syncWorkflowSummaries() (via
   // advanceStep(), just before this) recomputes their disabled state on every
   // call, and saving/restoring them here too raced with it and could leave them
   // stuck disabled. Pin fields and markers are recomputed from state too.
@@ -1253,10 +1265,15 @@ const CoarseTileLayer = L.TileLayer.extend({
 
   _setView(center, zoom, noPrune, noUpdate) {
     if (!this._inUpdate) {
+      const size = this._map?.getSize();
+      // Browser zoom-out can expose tens of millions of CSS pixels. Keep
+      // decoded tile counts bounded by enlarging coarser tiles in that case.
+      const extraLevels = size ? Math.max(0, Math.ceil(Math.log2(size.x * size.y / (96 * 256 * 256)) / 2)) : 0;
       this.options.maxNativeZoom = Math.min(
         this._finestNativeZoom,
-        Math.max(0, Math.round(zoom) - BASEMAP_UNDERLAY_LEVELS),
+        Math.max(0, Math.round(zoom) - (this.options.coarseLevels ?? BASEMAP_UNDERLAY_LEVELS) - extraLevels),
       );
+      this.options.keepBuffer = extraLevels ? 0 : MAP_TILE_KEEP_BUFFER;
     }
     return L.TileLayer.prototype._setView.call(this, center, zoom, noPrune, noUpdate);
   },
@@ -1286,11 +1303,13 @@ function makeBaseMapLayer(url, { maxZoom, maxNativeZoom, attribution }) {
     keepBuffer: MAP_TILE_KEEP_BUFFER,
     zIndex: 0,
   }));
-  const detail = retryFailedTiles(L.tileLayer(url, {
+  const detail = retryFailedTiles(new CoarseTileLayer(url, {
+    coarseLevels: 0,
     maxZoom,
     maxNativeZoom,
     keepBuffer: MAP_TILE_KEEP_BUFFER,
     updateWhenZooming: false,
+    updateWhenIdle: true,
     zIndex: 1,
     attribution,
   }));
@@ -1337,6 +1356,10 @@ function initMap() {
   gMap = L.map('map', {
     center: [14.5590, 121.0955],
     zoom: 15,
+    minZoom: 12,
+    // The map's ResizeObserver handles both panel and browser changes.
+    // A second window-resize handler would redraw the same map twice.
+    trackResize: false,
     zoomControl: false,
     // Quarter steps let automatic fits fill the available map without
     // dropping a whole zoom level. The zoom buttons still move one level.
@@ -1453,6 +1476,9 @@ function initMap() {
     clearTimeout(mapResizeDebounceTimer);
     mapResizeDebounceTimer = window.setTimeout(() => {
       keepMapContentInPlace();
+      getActiveBaseMapLayer()?.eachLayer(layer => {
+        if (layer instanceof CoarseTileLayer) layer._setView(gMap.getCenter(), gMap.getZoom());
+      });
       // Keep the visitor's camera, including a popup's auto-pan: a delayed
       // resize fit must not put its larger photo back outside the map.
       if (!window.mobileSim?.isAutoFitPaused() && !pinPlacementRole
@@ -2656,7 +2682,7 @@ function setRunButtonLabel() {
   const runBtn = document.getElementById('runBtn');
   if (!runBtn) return;
 
-  runBtn.textContent = isEarthquakeMode() ? 'Run Earthquake Simulation' : 'Run Simulation';
+  runBtn.textContent = uiCopy('Run Simulation');
 }
 
 function resetEarthquakeState() {
@@ -2767,6 +2793,21 @@ function describePinPlace(pin) {
   }
   if (pin.nearbyStreet) return `a spot near ${pin.nearbyStreet}`;
   return `the pinned spot (${formatPinCoordinates(pin)})`;
+}
+
+function getSetupRouteDescription() {
+  return isEarthquakeMode()
+    ? 'Checks ground shaking and liquefaction along your walking route.'
+    : 'Checks flood levels along your walking route.';
+}
+
+function buildSetupPinName(pin) {
+  const place = pin.street || pin.nearbyStreet;
+  if (place) {
+    const near = !pin.street || Number(pin.roadDistance) > PIN_ON_STREET_METERS;
+    return `${near ? `${escapeHtml(uiCopy('Near'))} ` : ''}<span data-no-translate>${escapeHtml(place)}</span>`;
+  }
+  return `${escapeHtml(uiCopy('Pinned location'))} <span data-no-translate>(${escapeHtml(formatPinCoordinates(pin))})</span>`;
 }
 
 // The route payload for one pin; the label is what the backend echoes back
@@ -3018,18 +3059,25 @@ function syncRoutePinFields() {
   document.getElementById('pinInputs')?.classList.remove('is-single');
   syncEndPinMenu();
 
-  // Shown while the route card is collapsed: how to change pins already set.
+  // Once ready, keep the pinned places visible while their inputs collapse.
   const summary = document.getElementById('summaryRoute');
   if (summary) {
     const start = getReadyPin('start');
     const end = getReadyPin('end');
-    summary.textContent = !selectedHazard
-      ? ''
-      : start && isToEvacuationSite() && !routePins.end
-      ? `Your location is pinned. Routes lead to the evacuation site with the ${getRouteRankingLabel()}.`
-      : start && end
-      ? 'Both points are pinned. Drag a pin on the map to change it.'
-      : 'Pin your location and destination on the map.';
+    const ready = canRunCurrentSimulation();
+    summary.classList.toggle('has-route-review', ready);
+    if (ready) {
+      const destination = end
+        ? buildSetupPinName(end)
+        : escapeHtml(uiCopy(getResultEvacSite()?.name || 'Evacuation sites'));
+      summary.innerHTML = `<p class="setup-route-description">${escapeHtml(uiCopy(getSetupRouteDescription()))}</p>
+        <dl class="setup-route-points">
+          <div><dt>${escapeHtml(uiCopy('Start'))}</dt><dd>${buildSetupPinName(start)}</dd></div>
+          <div><dt>${escapeHtml(uiCopy('Destination'))}</dt><dd>${destination}</dd></div>
+        </dl>`;
+    } else {
+      summary.textContent = selectedHazard ? uiCopy('Set your start and destination.') : '';
+    }
   }
 
   // Most setup changes pass through here; the phone sheet re-reads them all.
@@ -3288,13 +3336,13 @@ async function placeRoutePin(role, lat, lng) {
   }
 
   routePins[role] = {
-    lat,
-    lng,
+    lat: Number(check.road_lat),
+    lng: Number(check.road_lng),
     status: 'ready',
     street: check.street || null,
     nearbyStreet: check.nearby_street || null,
-    roadDistance: Number(check.road_distance),
-    label: buildPinLabel(role, check.street, check.road_distance),
+    roadDistance: 0,
+    label: buildPinLabel(role, check.street, 0),
   };
   // A pinned destination replaces the evacuation sites.
   if (role === 'end' && floodToEvacSite) {
@@ -3355,7 +3403,7 @@ function syncEarthquakeRouteUi() {
   if (pinFieldHelp) {
     pinFieldHelp.textContent = choicePending
       ? 'Drag a pin to adjust it.'
-      : 'Click a field to change it. Drag a pin to adjust it.';
+      : 'Choose a road inside the barangay.';
   }
 
   syncRoutePinFields();
@@ -3996,69 +4044,25 @@ function revealRunButtonAbovePins() {
   if (lowestPin + shift <= window.innerHeight - margin) window.scrollBy(0, -shift);
 }
 
-// The Run card's guidance line, rebuilt from the current state -- so it only
-// says "tap the map" while a tap will actually place a pin.
+// Keep the footer hint short and show it only while setup needs another choice.
 function syncRouteInfoBox() {
   const infoBox = document.getElementById('infoBox');
   if (!infoBox || !selectedBarangay || isSimulationInteractionLocked()) return;
-  infoBox.innerHTML = buildRouteInfoHtml();
+  const message = buildRouteInfoHtml();
+  infoBox.textContent = uiCopy(message);
+  infoBox.hidden = !message;
 }
 
 function buildRouteInfoHtml() {
-  const startPin = getReadyPin('start');
-  const endPin = getReadyPin('end');
-  const pinPrompt = (role, target) => pinPlacementRole === role
-    ? `Tap the map to pin ${target}.`
-    : role === 'end'
-    ? `Choose ${target}: click <strong>${PIN_ROLE_COPY.end.empty}</strong>, then the evacuation site or a spot of your own.`
-    : `Pin ${target}: click <strong>${PIN_ROLE_COPY[role].empty}</strong>, then <strong>Choose on Map</strong>.`;
-
-  if (!selectedHazard) {
-    return `<strong>Brgy. ${escapeHtml(selectedBarangay)}</strong> loaded. Choose a <strong>disaster type</strong> to continue.`;
-  }
+  if (!selectedHazard) return 'Choose a disaster.';
   if (isEarthquakeMode() && !isEarthquakeBarangaySupported()) {
-    return `<strong>Earthquake Routing</strong> is currently available only for <strong>${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}</strong>.`;
+    return 'Earthquake routing is unavailable for this barangay.';
   }
-  if (isAnyRoutePinChecking()) {
-    return 'Checking that the pinned spot can be reached by road…';
-  }
-  if (simData) {
-    return 'Simulation complete. Drag a <strong>pin</strong> or change the <strong>hazard</strong> to try another route, or click <strong>Back to Home</strong> to pick a different barangay.';
-  }
-
-  if (isEarthquakeMode() && earthquakeToEvacSite) {
-    if (!startPin) {
-      return `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
-    }
-    if (!earthquakeEvacSitesVisible) {
-      return 'Location pinned. Now click <strong>Show Evacuation Sites</strong>, or choose your own destination.';
-    }
-    return `The system will compare routes from <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the evacuation sites that can still be reached.<br>Click <strong>Run Earthquake Simulation</strong> to view the results.`;
-  }
-
-  if (pinPlacementRole === 'end' && !endPin) {
-    return `${pinPrompt('end', 'your <strong>destination</strong>')} To keep the evacuation site instead, click the destination again.`;
-  }
-  if (startPin && endPin) {
-    // The box is justified, and the wide monospace names leave "Click" only a
-    // word or two of company on its line, so the spaces there stretch wide.
-    // The <br> starts the instruction on a fresh line; the line before a
-    // forced break isn't stretched.
-    return `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to <strong>${escapeHtml(describePinPlace(endPin))}</strong>.<br>Click <strong>Run Simulation</strong>.`;
-  }
-  if (isFloodToEvacSite() && !routePins.end) {
-    if (!startPin) {
-      return `${pinPrompt('start', '<strong>where you are</strong>')} Routes will lead from there to the evacuation sites.`;
-    }
-    return areFloodEvacSitesShown()
-      ? `Ready! <strong>${escapeHtml(describePinPlace(startPin))}</strong> to the <strong>evacuation site</strong> with the ${getRouteRankingLabel()}.<br>Click <strong>Run Simulation</strong>.`
-      : 'Location pinned. Now click <strong>Show Evacuation Sites</strong>, or choose your own destination.';
-  }
-  if (startPin) return `Location pinned. ${pinPrompt('end', 'your <strong>destination</strong>')}`;
-  if (endPin) return `Destination pinned. ${pinPrompt('start', '<strong>where you are</strong>')}`;
-  return pinPlacementRole === 'start'
-    ? 'Tap the map to pin <strong>where you are</strong>, then <strong>where you want to go</strong>.'
-    : pinPrompt('start', '<strong>where you are</strong>');
+  if (isAnyRoutePinChecking()) return 'Checking this spot…';
+  if (canRunCurrentSimulation()) return '';
+  if (!getReadyPin('start')) return 'Pin your location on a walkable road.';
+  if (isWaitingForEvacSites()) return 'Choose an evacuation site or pin a destination.';
+  return 'Pin your destination on a walkable road.';
 }
 
 async function selectHazard(name, el) {
@@ -4187,42 +4191,17 @@ function getWorkflowCard(sectionKey) {
 }
 
 function syncWorkflowSummaries() {
-  const canRun = canRunCurrentSimulation();
-
   const summaryHazard = document.getElementById('summaryHazard');
-  const summaryRun = document.getElementById('summaryRun');
 
   if (summaryHazard) {
-    summaryHazard.textContent = selectedHazard
-      ? isEarthquakeMode()
-        ? isEarthquakeBarangaySupported()
-          ? `${selectedHazard} routing is active for ${selectedBarangay || 'the selected barangay'}.`
-          : `${selectedHazard} routing is currently limited to ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`
-        : `${selectedHazard} is the active hazard scenario.`
-      : selectedBarangay
-      ? 'Choose which hazard scenario to test.'
-      : 'Choose a barangay first to unlock hazard testing.';
-  }
-
-  if (summaryRun) {
-    // While running or locked, the run body below already says this in full.
-    summaryRun.hidden = simulationInProgress;
-    summaryRun.textContent = simulationInProgress
-      ? ''
-      : isEarthquakeMode()
-      ? canRun
-        ? 'Everything is ready. Launch the simulation when you are set.'
-        : 'Review the earthquake setup, then launch the simulation.'
-      : canRun
-      ? 'Everything is ready. Launch the simulation when you are set.'
-      : 'Review the setup, then launch the simulation.';
+    summaryHazard.textContent = uiCopy(selectedHazard || '');
   }
 
   const changeHazardBtn = document.getElementById('changeHazardBtn');
   const changeRouteBtn = document.getElementById('changeRouteBtn');
 
   if (changeHazardBtn) {
-    changeHazardBtn.textContent = selectedHazard ? 'Change' : 'Select';
+    changeHazardBtn.hidden = !selectedHazard;
     changeHazardBtn.disabled = isSimulationInteractionLocked() || !selectedBarangay;
   }
 
@@ -4395,11 +4374,11 @@ async function setFloodHazardOverlayMode(modeKey) {
 
   if (overlayState.failed) {
     floodHazardOverlayMode = 'all';
-    alert('Could not load the flood overlay. Restart the backend, then try again.');
+    alert(uiCopy('Could not load the flood overlay. Restart the backend, then try again.'));
     await syncFloodHazardOverlay(selectedBarangay);
   } else if (!overlayState.hasLayers) {
     floodHazardOverlayMode = 'all';
-    alert('No flood areas were found for the selected map view.');
+    alert(uiCopy('No flood areas were found for the selected map view.'));
     await syncFloodHazardOverlay(selectedBarangay);
   }
 }
@@ -4505,12 +4484,12 @@ async function showEvacuationSites({ fit = true } = {}) {
   }
   if (isSimulationInteractionLocked()) return;
   if (!isEarthquakeBarangaySupported()) {
-    alert(`Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`);
+    alert(uiCopy(`Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`));
     return;
   }
 
   if (!getReadyPin('start')) {
-    alert('Pin your location on the map first.');
+    alert(uiCopy('Pin your location on the map first.'));
     return;
   }
   if (earthquakeEvacSitesLoading) return;
@@ -4558,7 +4537,7 @@ async function showEvacuationSites({ fit = true } = {}) {
   } catch (err) {
     if (choice !== earthquakeDestinationChoice) return;
     console.error(err);
-    alert('Failed to load evacuation sites: ' + err.message);
+    alert(uiCopy('Failed to load evacuation sites: ' + err.message));
   } finally {
     if (choice === earthquakeDestinationChoice) {
       earthquakeEvacSitesLoading = false;
@@ -4632,7 +4611,7 @@ async function runSimulation() {
   if (!canRunCurrentSimulation()) return;
 
   if (!isBackendLive) {
-    alert('Backend is not connected.');
+    alert(uiCopy('Backend is not connected.'));
     return;
   }
 
@@ -4723,8 +4702,9 @@ async function followSimulationJob(startJob, context) {
   setSimulationInProgress(true);
   resetRouteSafetyPanel();
   statusTxt.textContent = 'Simulating…';
-  document.getElementById('infoBox').innerHTML =
-    `Simulation is now <strong>running</strong>. The selected barangay, disaster type, and map pins are <strong>temporarily locked</strong> until the results are ready.`;
+  const runHint = document.getElementById('infoBox');
+  runHint.textContent = uiCopy('Simulation is running…');
+  runHint.hidden = false;
   setLoaderStep('ready', 8, { immediate: true });
 
   try {
@@ -4767,7 +4747,7 @@ async function followSimulationJob(startJob, context) {
       window.mobileSim?.showResults();
     }
     if (!(context.quietIfGone && err.backendCode === 'job_not_found')) {
-      alert(`${context.label} failed: ${err.message}`);
+      alert(uiCopy(`${context.label} failed: ${err.message}`));
     }
   } finally {
     setSimulationInProgress(false);
@@ -6387,6 +6367,13 @@ async function downloadSimulationReport() {
     // directly with jsPDF (see the section header).
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const reportCopy = value => Array.isArray(value)
+      ? value.map(reportCopy) : window.agnasI18n?.t(value) || value;
+    // Translate before measuring/wrapping, so Tagalog text also fits the PDF.
+    for (const method of ['text', 'splitTextToSize', 'getTextWidth']) {
+      const original = doc[method].bind(doc);
+      doc[method] = (value, ...args) => original(reportCopy(value), ...args);
+    }
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 40;
     let y = margin;
@@ -6548,7 +6535,7 @@ async function downloadSimulationReport() {
     doc.save(`agnas-report-${fileSafeBarangay}-${Date.now()}.pdf`);
   } catch (err) {
     console.error(err);
-    alert('Could not generate the report: ' + err.message);
+    alert(uiCopy('Could not generate the report: ' + err.message));
   } finally {
     reportInProgress = false;
     if (btn) {
@@ -6602,7 +6589,7 @@ document.getElementById('panelBarangaySwitch')?.addEventListener('click', event 
   const name = event.target.closest?.('[data-switch-barangay]')?.dataset.switchBarangay;
   if (!name || name === selectedBarangay) return;
   const hasWork = !!simData || PIN_ROLES.some(role => routePins[role]);
-  if (hasWork && !window.confirm(`Switch to Brgy. ${name}? Your pins and routes will be cleared.`)) return;
+  if (hasWork && !window.confirm(uiCopy(`Switch to Brgy. ${name}? Your pins and routes will be cleared.`))) return;
   switchBarangay(name);
 });
 

@@ -95,22 +95,7 @@
     </div>
   </div>
 </nav>
-<div class="language-menu" id="siteLanguageMenu" data-no-translate>
-  <button type="button" class="language-trigger" id="siteLanguageTrigger" aria-label="Translate / Isalin" title="Translate / Isalin" aria-expanded="false" aria-controls="siteTranslatePopup">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>
-    <span id="siteLanguageCode">EN</span>
-  </button>
-</div>
-<aside class="translation-popup" id="siteTranslatePopup" role="region" aria-labelledby="translationPromptTitle" data-no-translate hidden>
-  <div class="translation-popup-head">
-    <h2 id="translationPromptTitle">Translate this page?</h2>
-    <button type="button" class="translation-popup-close" id="translationPromptClose" aria-label="Close / Isara"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-  </div>
-  <div class="language-options" role="group" aria-label="Language / Wika">
-    <button type="button" data-language="en" aria-pressed="true" lang="en">English</button>
-    <button type="button" data-language="tl" aria-pressed="false" lang="tl">Tagalog</button>
-  </div>
-</aside>
+{% include "_language_menu.html" %}
 {# #pageBody opens before the scripts below, so it exists by the first paint
    the page-switch transition captures. #}
 <div id="pageBody"><span id="pageStart" hidden></span>

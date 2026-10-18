@@ -1,4 +1,4 @@
-// Curated English/Tagalog copy for the public pages. Translate text nodes
+// Curated English/Tagalog copy shared by every page. Translate text nodes
 // and accessible labels without replacing elements, inputs, or listeners.
 // No translation service, account, or network request is needed.
 (function initSiteLanguage() {
@@ -239,7 +239,9 @@
     ['Program head', 'Pinuno ng programa'],
     ['Developed in partial fulfillment of the requirements for the degree of Bachelor of Science in Computer Science at STI College Global City.', 'Binuo bilang bahagi ng mga kinakailangan para sa kursong Bachelor of Science in Computer Science sa STI College Global City.'],
   ]);
-  const normalize = value => value.replace(/\s+/g, ' ').trim();
+  for (const [english, tagalog] of window.agnasSimulatorCopy || []) copy.set(english, tagalog);
+  const normalize = value => String(value).replace(/\s+/g, ' ').trim();
+  const lowerCopy = new Map([...copy].map(([english, tagalog]) => [english.toLowerCase(), tagalog]));
   const reverse = new Map([...copy].map(([english, tagalog]) => [normalize(tagalog), english]));
   const textSources = new WeakMap();
   const attributeSources = new WeakMap();
@@ -257,7 +259,25 @@
   function tagalog(source) {
     const key = normalize(source);
     if (copy.has(key)) return copy.get(key);
-    let match = key.match(/^Opens with (.+) selected\.$/);
+    if (key === key.toUpperCase() && lowerCopy.has(key.toLowerCase())) {
+      return lowerCopy.get(key.toLowerCase()).toUpperCase();
+    }
+    if (key === key.toLowerCase() && lowerCopy.has(key)) {
+      const value = lowerCopy.get(key);
+      return value[0].toLowerCase() + value.slice(1);
+    }
+    // A caption can join a title to several independently generated
+    // sentences. Translate those before a parameterized title can consume
+    // the rest as a place name.
+    let match = key.match(/^(.+?[.!?])\s+(.+)$/);
+    if (match) {
+      const first = tagalog(match[1]);
+      if (first !== match[1]) return `${first} ${tagalog(match[2])}`;
+    }
+    for (const [pattern, replacement] of window.agnasSimulatorPatterns || []) {
+      if (pattern.test(key)) return key.replace(pattern, (_match, ...args) => replacement(tagalog, ...args));
+    }
+    match = key.match(/^Opens with (.+) selected\.$/);
     if (match) return `Magbubukas na napili ang ${match[1]}.`;
     match = key.match(/^(Adult|Child): (?:up to the (.+)|(over the head))$/);
     if (match) return `${match[1] === 'Adult' ? 'Adulto' : 'Bata'}: ${match[3] ? 'lampas sa ulo' : `hanggang ${reach[match[2]] || match[2]}`}`;
@@ -265,13 +285,36 @@
     if (match) return `Hakbang ${match[1]}`;
     match = key.match(/^([\d.]+ m), (Low|Medium|High) flood$/);
     if (match) return `${match[1]}, ${copy.get(match[2]).toLowerCase()} na baha`;
+    // Captions and warnings combine independently translated sentences.
+    // Split only when the leading sentence/label is recognized, preserving
+    // place names, abbreviations, measurements and unknown copy verbatim.
+    match = key.match(/^([^:]+): (.+)$/);
+    if (match) {
+      const label = tagalog(match[1]);
+      if (label !== match[1]) return `${label}: ${tagalog(match[2])}`;
+    }
+    match = key.match(/^(.+?); (.+)$/);
+    if (match) {
+      const first = tagalog(match[1]);
+      if (first !== match[1]) return `${first}; ${tagalog(match[2])}`;
+    }
+    if (key.endsWith('.')) {
+      const sentence = key.slice(0, -1);
+      const translated = tagalog(sentence);
+      if (translated !== sentence) return `${translated}.`;
+    }
     return source;
   }
 
   function render(source) {
+    source = String(source ?? '');
     if (language === 'en') return source;
     const translated = tagalog(source);
     if (translated === source) return source;
+    // Leaflet and the mobile legend can copy translated labels into new
+    // nodes. Remember dynamic sentences as well as the static dictionary so
+    // switching back to English restores them too.
+    if (reverse.size < 4000) reverse.set(normalize(translated), normalize(source));
     return source.replace(/\S[\s\S]*\S|\S/, translated);
   }
 
@@ -339,13 +382,14 @@
   const trigger = document.getElementById('siteLanguageTrigger');
   const popup = document.getElementById('siteTranslatePopup');
   function positionMenu() {
-    const navBottom = document.querySelector('.site-nav').getBoundingClientRect().bottom;
+    if (document.body.classList.contains('sim-page')) return;
+    const navBottom = document.querySelector('.site-nav')?.getBoundingClientRect().bottom || 0;
     menu.style.setProperty('--language-nav-bottom', `${Math.round(navBottom)}px`);
     if (!popup.hidden) popup.style.top = `${Math.round(trigger.getBoundingClientRect().bottom + 8)}px`;
   }
   function showPopup() {
     positionMenu();
-    popup.style.top = `${Math.round(trigger.getBoundingClientRect().bottom + 8)}px`;
+    if (!document.body.classList.contains('sim-page')) popup.style.top = `${Math.round(trigger.getBoundingClientRect().bottom + 8)}px`;
     popup.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');
   }
@@ -389,7 +433,20 @@
       else if (record.type === 'attributes') translateAttributes(record.target);
       else changed.add(record.target);
     }
-    changed.forEach(node => { if (node.isConnected) translateTree(node); });
+    // Do not observe our own text writes. Avoid walking the same subtree
+    // repeatedly when a result creates many nested nodes at once.
+    observer.disconnect();
+    changed.forEach(node => {
+      if (!node.isConnected) return;
+      for (let parent = node.parentNode; parent; parent = parent.parentNode) {
+        if (changed.has(parent)) return;
+      }
+      translateTree(node);
+    });
+    observeCopy();
   });
-  observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: attributes });
+  function observeCopy() {
+    observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: attributes });
+  }
+  observeCopy();
 })();

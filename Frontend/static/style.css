@@ -306,6 +306,7 @@ body.dark .left-panel {
 
 .panel-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 16px 18px;
@@ -320,6 +321,11 @@ body.dark .left-panel {
   padding: 12px 18px 16px;
   border-top: 1px solid var(--border);
 }
+
+.workflow-run { display: flex; flex-direction: column; gap: 6px; }
+.panel-foot .run-btn { min-height: 48px; margin: 0; }
+.setup-run-hint { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.4; text-align: left; }
+.panel-foot .panel-back-btn { margin-top: 10px; }
 
 .panel-back-btn {
   display: flex;
@@ -541,9 +547,10 @@ body.dark .workflow-card.active {
   box-shadow: none;
 }
 
-.workflow-run-body .info-box {
-  margin-top: 0;
-}
+/* The open disaster cards explain the choice themselves. A compact Change
+   action remains available once the section is collapsed. */
+#cardHazard:not(.collapsed) #summaryHazard,
+#cardHazard:not(.collapsed) .workflow-card-actions { display: none; }
 
 .sec-label {
   font-family: 'DM Mono', monospace;
@@ -635,6 +642,15 @@ body.dark .workflow-card.active {
 #cardRoute:not(.collapsed) #summaryRoute {
   display: none;
 }
+
+/* One description and the actual pinned places replace repeated ready/run
+   instructions. Keep names readable in the full width of the route card. */
+#summaryRoute.has-route-review { text-align: left; }
+.setup-route-description { margin: 0; line-height: 1.5; text-align: left; }
+.setup-route-points { display: grid; gap: 12px; margin: 14px 0 0; }
+.setup-route-points > div { min-width: 0; padding-left: 10px; border-left: 2px solid var(--accent); }
+.setup-route-points dt { color: var(--muted); font-size: .72rem; }
+.setup-route-points dd { margin: 3px 0 0; color: var(--text); font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 
 /* Start/destination inputs: an icon column joined by a dotted line, and a
    text-box-like button that opens a "Choose on Map" menu. */
@@ -1971,7 +1987,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .app.safety-open .route-safety-panel { display: block; }
 
 .safety-brand { display: flex; align-items: center; gap: 12px; padding: 1px 5px 12px; border-bottom: 1px solid var(--border); }
-.route-safety-panel > .safety-brand { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+.route-safety-panel > .safety-brand { position: static; background: var(--surface); }
 .safety-brand-copy { min-width: 0; }
 .safety-logo-refresh { display: grid; place-items: center; flex: 0 0 52px; width: 52px; min-height: 58px; padding: 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
 .safety-logo-refresh:hover { border-color: var(--border2); background: var(--accent-soft-bg); }
