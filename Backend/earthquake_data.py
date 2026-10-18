@@ -30,7 +30,7 @@ _LAYER_FILES = {
 }
 _EVACUATION_SITES_FILE = EARTHQUAKE_DATA_ROOT / "evacuation_sites.json"
 # Display only: the intensity zones a barangay's map and the earthquake intro
-# show (Sta. Lucia: Project SHAKE). Routing reads _LAYER_FILES alone.
+# show (PHIVOLCS via HazardHunterPH). Routing reads _LAYER_FILES alone.
 _INTENSITY_FILE = EARTHQUAKE_DATA_ROOT / "ground_shaking_intensity.geojson"
 _FAULT_FILE = EARTHQUAKE_DATA_ROOT / "west_valley_fault.geojson"
 # The scenario the hazard maps are drawn for.

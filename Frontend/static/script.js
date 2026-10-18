@@ -25,6 +25,12 @@ let selectedRouteFocus = null;
 let workflowFocusSection = null;
 let simulationInProgress = false;
 let floodHazardOverlayMode = 'all';
+let hazardOnlyView = false;
+let hazardViewLoadId = 0;
+let hazardViewLoading = false;
+let hazardViewLayers = null;
+let hazardViewMessage = '';
+let hazardViewPinRole = null;
 // Barangay names the homepage's quick-start card hands over in ?barangay=...;
 // must match its data-barangay values exactly.
 const SUPPORTED_QUICKSTART_BARANGAYS = ['Pinagbuhatan', 'Sta. Lucia'];
@@ -578,13 +584,16 @@ function syncMapOverlayLayout() {
 
 function setMapLegendVisible(visible) {
   const legend = document.getElementById('mapLegend');
-  if (legend) legend.style.display = visible ? 'block' : 'none';
+  // The legend is also the quiet entry point for browsing hazards before a run.
+  if (legend) legend.style.display = visible || (selectedBarangay && selectedHazard) ? 'block' : 'none';
+  syncHazardViewControl();
   syncMapOverlayLayout();
+  window.mobileSim?.scheduleSync();
 }
 
 function toggleDesktopMapLegend() {
   const legend = document.getElementById('mapLegend');
-  const body = document.getElementById('mapLegendBody');
+  const body = document.getElementById('mapLegendDetails');
   const toggle = document.getElementById('mapLegendToggle');
   const action = document.getElementById('mapLegendToggleAction');
   if (!legend || !body || !toggle || !action) return;
@@ -596,6 +605,143 @@ function toggleDesktopMapLegend() {
   toggle.setAttribute('aria-label', collapsed ? 'Show map legend' : 'Hide map legend');
   action.textContent = collapsed ? 'Show' : 'Hide';
   syncMapOverlayLayout();
+}
+
+function isHazardOnlyView() {
+  return hazardOnlyView;
+}
+
+function getHazardViewMessage() {
+  if (hazardViewLoading) return `Loading ${selectedHazard.toLowerCase()} layers...`;
+  return hazardViewMessage || (hazardOnlyView
+    ? 'Pins, sites and routes are hidden. Switch off to return.'
+    : 'View layers without pins or sites.');
+}
+
+function buildHazardViewControlHtml() {
+  if (!selectedBarangay || !selectedHazard) return '';
+  return `<div class="legend-map-view">
+    <button type="button" class="legend-hazard-toggle" data-hazards-only
+      aria-pressed="${hazardOnlyView}" ${isSimulationInteractionLocked() ? 'disabled' : ''}
+      onclick="toggleHazardOnlyView()">
+      <span>Hazards only</span><span class="legend-hazard-switch" aria-hidden="true"></span>
+    </button>
+    <p class="legend-view-status" data-hazard-view-status role="status">${escapeHtml(getHazardViewMessage())}</p>
+  </div>`;
+}
+
+function syncHazardViewControl() {
+  document.querySelectorAll('[data-hazards-only]').forEach(button => {
+    button.setAttribute('aria-pressed', String(hazardOnlyView));
+    button.disabled = !selectedBarangay || !selectedHazard || isSimulationInteractionLocked();
+  });
+  document.querySelectorAll('[data-hazard-view-status]').forEach(status => {
+    status.textContent = getHazardViewMessage();
+  });
+}
+
+function renderHazardOnlyLegend() {
+  const body = document.getElementById('mapLegendBody');
+  if (!body || !hazardOnlyView) return;
+  let hazards = '';
+  if (hazardViewLayers) {
+    hazards = isEarthquakeMode()
+      ? window.earthquakeUI.buildHazardLegendHtml(hazardViewLayers, 'overall')
+      : window.floodHazardUI.getLegendItems().map(({ color, label }) => (
+        `<div class="legend-row"><i class="hazard-view-swatch" style="background:${color}"></i><span>${label}</span></div>`
+      )).join('');
+  }
+  body.innerHTML = `<div class="hazard-view-scope">${escapeHtml(selectedBarangay)} · ${escapeHtml(selectedHazard)}</div>
+    ${buildBoundaryLegendRow()}${hazards}`;
+  setMapLegendVisible(true);
+}
+
+// A view change only: the pins, sites, route layers and result stay intact.
+// A generation check prevents an old download drawing over a newer scope.
+async function toggleHazardOnlyView() {
+  if (isSimulationInteractionLocked() || !gMap || !selectedBarangay || !selectedHazard) return;
+  if (hazardOnlyView) {
+    await leaveHazardOnlyView();
+    return;
+  }
+  hazardOnlyView = true;
+  const loadId = ++hazardViewLoadId;
+  const barangay = selectedBarangay;
+  const hazard = selectedHazard;
+  const isCurrent = () => hazardOnlyView && loadId === hazardViewLoadId
+    && barangay === selectedBarangay && hazard === selectedHazard;
+  hazardViewPinRole = pinPlacementRole;
+  hazardViewLoading = true;
+  hazardViewMessage = '';
+  hazardViewLayers = null;
+  gMap.getContainer().classList.add('hazards-only');
+  gMap.closePopup();
+  cancelPinPlacement();
+  window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
+  window.earthquakeUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
+  syncFloodFilterControl();
+  renderHazardOnlyLegend();
+  window.mobileSim?.scheduleSync();
+  fitMapToBoundaryPaths(barangayBoundaryRings);
+  try {
+    let layers;
+    if (hazard === 'Flood') {
+      layers = await window.floodHazardUI.loadHazardLayers({ scope: 'barangay', barangay, vars: [1, 2, 3] });
+    } else {
+      const response = await fetch(`${window.BACKEND_BASE}/earthquake/hazard-layers?${new URLSearchParams({ barangay })}`);
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.message || 'Could not load earthquake layers.');
+      layers = data.hazard_layers;
+    }
+    if (!isCurrent()) return;
+    const hasLayers = hazard === 'Flood'
+      ? layers?.features?.length
+      : Object.values(layers || {}).some(layer => layer?.features?.length);
+    if (!hasLayers) throw new Error('No hazard layers are available for this barangay.');
+    hazardViewLayers = layers;
+    if (hazard === 'Flood') window.floodHazardUI.renderHazardLayers({ map: gMap, hazardLayers: layers });
+    else window.earthquakeUI.renderHazardLayers({ map: gMap, hazardLayers: layers, activeView: 'overall' });
+  } catch (err) {
+    if (!isCurrent()) return;
+    hazardViewMessage = 'Could not load layers. Switch off and on to retry.';
+    console.warn('Failed to load barangay hazard view:', err);
+  } finally {
+    if (isCurrent()) {
+      hazardViewLoading = false;
+      renderHazardOnlyLegend();
+    }
+  }
+}
+
+function resetHazardOnlyView() {
+  hazardOnlyView = false;
+  hazardViewLoadId += 1;
+  hazardViewLoading = false;
+  hazardViewLayers = null;
+  hazardViewMessage = '';
+  gMap?.getContainer().classList.remove('hazards-only');
+}
+
+async function leaveHazardOnlyView() {
+  if (!hazardOnlyView) return;
+  const pinRole = hazardViewPinRole;
+  resetHazardOnlyView();
+  if (isEarthquakeMode()) {
+    const hasResult = isEarthquakeSimulationResult(simData);
+    window.earthquakeUI.renderHazardLayers({
+      map: gMap, hazardLayers: hasResult ? simData.hazard_layers : null, activeView: activeEarthquakeView,
+    });
+    window.earthquakeUI.syncLegend(activeEarthquakeView, { showRouteKeys: hasResult, showHazardLayers: hasResult });
+    setMapLegendVisible(true);
+  } else {
+    window.floodHazardUI.renderHazardLayers({ map: gMap, hazardLayers: null });
+    setFloodLegendContent();
+    setMapLegendVisible(true);
+  }
+  setPinPlacementRole(pinRole);
+  syncSimulationConfigLock();
+  syncFloodFilterControl();
+  if (!isEarthquakeMode()) await syncFloodHazardOverlay();
 }
 
 // Short viewports (style.css: phone landscape, any width) -- setup and
@@ -707,7 +853,7 @@ function reopenSetupSidebar() {
 function syncFloodFilterControl() {
   const control = document.getElementById('floodFilterControl');
   const hint = document.getElementById('floodFilterHint');
-  const isFlood = selectedHazard === 'Flood' && !!selectedBarangay && hasFloodSimulationResult();
+  const isFlood = !hazardOnlyView && selectedHazard === 'Flood' && !!selectedBarangay && hasFloodSimulationResult();
   if (control) control.hidden = !isFlood;
 
   document.querySelectorAll('[data-flood-filter]').forEach(button => {
@@ -788,6 +934,7 @@ function isSimulationInteractionLocked() {
 
 function syncSimulationConfigLock() {
   const interactionLocked = isSimulationInteractionLocked();
+  syncHazardViewControl();
 
   document.querySelectorAll('.hazard-card').forEach(card => {
     card.classList.toggle('interaction-locked', interactionLocked);
@@ -1344,10 +1491,14 @@ function getResultMapBounds() {
 }
 
 function refitMapToCurrentRoute(options = {}) {
+  if (hazardOnlyView) return refitMapToCurrentContent(options);
   return fitMapBounds(getResultMapBounds(), options);
 }
 
 function refitMapToCurrentContent(options = {}) {
+  if (hazardOnlyView) return fitMapToBoundaryPaths(barangayBoundaryRings, 24, {
+    fly: !!options.flySeconds, duration: options.flySeconds, onlyIfOutOfView: options.onlyIfOutOfView,
+  });
   if (activeReplayController && !activeReplayController.isDone()) {
     if (!activeReplayController.isWalking()) fitReplaySearch(options);
     return true;
@@ -1419,7 +1570,7 @@ function recenterMap() {
         : 'Showing the ants\' search');
       return;
     }
-    window.mobileSim.toast(simData ? 'Showing full route'
+    window.mobileSim.toast(hazardOnlyView ? 'Showing the whole barangay' : simData ? 'Showing full route'
       : areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Showing evacuation sites'
       : 'Showing the whole barangay');
   }
@@ -1448,6 +1599,7 @@ function showVisitorLocation(latlng, accuracy) {
   if (!visitorLocationLayers) {
     visitorLocationLayers = {
       accuracy: L.circle(latlng, {
+        className: 'visitor-accuracy',
         radius: accuracy,
         interactive: false,
         color: '#1d4ed8',
@@ -1512,6 +1664,7 @@ function getLocateErrorMessage(error) {
 
 function locateVisitor({ button = null, moveTo = flyToVisitor, onFound = null } = {}) {
   if (!gMap || isMapGestureLocked()) return;
+  if (hazardOnlyView) leaveHazardOnlyView();
   if (!navigator.geolocation) {
     showLocateNotice('This browser cannot share your location.');
     return;
@@ -2286,7 +2439,9 @@ function buildHazardSourceNoteHtml(isEarthquake) {
 // (a source with none online has no link line).
 function getReportDataSources(isEarthquake, result = simData) {
   const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
-  const intensitySource = result?.hazard_layers?.shaking_intensity?.features?.[0]?.properties?.source;
+  const intensitySource = result?.hazard_layers?.shaking_intensity?.features?.length
+    ? 'PHIVOLCS via HazardHunterPH'
+    : '';
   const hazardRows = isEarthquake
     ? [
       { label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url },
@@ -2626,6 +2781,7 @@ function canPlaceRoutePins() {
     gMap
     && selectedBarangay
     && selectedHazard
+    && !hazardOnlyView
     && !isSimulationInteractionLocked()
     && (!isEarthquakeMode() || isEarthquakeBarangaySupported())
   );
@@ -2666,7 +2822,7 @@ function syncPinHint() {
 
   const message = pinHintMessage?.text
     || (pinPlacementRole ? PIN_ROLE_COPY[pinPlacementRole].hint : '');
-  hint.hidden = !message;
+  hint.hidden = hazardOnlyView || !message;
   hint.classList.toggle('is-error', !!pinHintMessage?.isError);
   text.textContent = message;
   if (closeBtn) closeBtn.hidden = !pinPlacementRole;
@@ -3149,7 +3305,7 @@ async function placeRoutePin(role, lat, lng) {
     setPinPlacementRole(getNextUnpinnedRole());
   }
   onRoutePinsChange();
-  if (role === 'start' && !previous) zoomToConfirmedStartPin(routePins.start);
+  if (role === 'start' && !previous && !hazardOnlyView) zoomToConfirmedStartPin(routePins.start);
 }
 
 function onMapClickForPin(event) {
@@ -3313,6 +3469,10 @@ function buildFloodEvacLegendRows() {
 // Route rows only once a result is on the map: while pinning there are no
 // route lines for them to explain.
 function setFloodLegendContent() {
+  if (hazardOnlyView) {
+    renderHazardOnlyLegend();
+    return;
+  }
   const body = document.getElementById('mapLegendBody');
   if (!body) return;
 
@@ -3375,6 +3535,7 @@ function clearHazardSelectionState() {
 // Back to an empty setup for the selected barangay: no result, no pins, no
 // map layers (loadBarangayMapOnly() redraws the barangay after this).
 function clearBarangaySelections({ keepBoundary = false } = {}) {
+  resetHazardOnlyView();
   clearSimulationSession();
   floodHazardOverlayMode = 'none';
   resetEarthquakeState();
@@ -3757,14 +3918,18 @@ async function selectBarangay(name) {
   syncRouteInfoBox();
 }
 
-// Legend while pinning, before any result: flood shows the pin key;
-// earthquake shows nothing until the evacuation sites are revealed.
+// Before a result, keep the pin key and hazard-view control available.
 function showPinningLegend() {
+  if (!selectedHazard) {
+    setMapLegendVisible(false);
+    return;
+  }
   if (selectedHazard === 'Flood') {
     setFloodLegendContent();
     setMapLegendVisible(true);
   } else {
-    setMapLegendVisible(false);
+    window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: false, showHazardLayers: false });
+    setMapLegendVisible(true);
   }
 }
 
@@ -4166,10 +4331,13 @@ function advanceStep(n) {
 // Resolves to { hasLayers, failed }, or null if the state moved on while the
 // layers were loading (a newer call draws the current state instead).
 async function syncFloodHazardOverlay(barangay = selectedBarangay) {
+  if (hazardOnlyView) return null;
   const overlayConfig = getFloodOverlayConfig();
   const showsOverlay = () => !!(
     gMap
     && barangay
+    && barangay === selectedBarangay
+    && !hazardOnlyView
     && selectedHazard === 'Flood'
     && hasFloodSimulationResult()
     && getFloodOverlayConfig() === overlayConfig
@@ -4207,6 +4375,7 @@ async function syncFloodHazardOverlay(barangay = selectedBarangay) {
     setMapLegendVisible(true);
     return { hasLayers, failed: false };
   } catch (err) {
+    if (!showsOverlay()) return null;
     console.warn('Failed to load flood hazard overlay:', err);
     window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
     syncFloodFilterControl();
@@ -4324,10 +4493,11 @@ async function showFloodEvacuationSites({ fit = true } = {}) {
   setFloodLegendContent();
   setMapLegendVisible(true);
   onRoutePinsChange();
-  if (fit) fitMapToFloodEvacSites();
+  if (fit && !hazardOnlyView) fitMapToFloodEvacSites();
 }
 
 async function showEvacuationSites({ fit = true } = {}) {
+  if (hazardOnlyView) await leaveHazardOnlyView();
   closePinMenus();
   if (!isEarthquakeMode()) {
     await showFloodEvacuationSites({ fit });
@@ -4384,7 +4554,7 @@ async function showEvacuationSites({ fit = true } = {}) {
         : { showRouteKeys: false, showHazardLayers: false }
     );
     setMapLegendVisible(true);
-    if (fit) fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
+    if (fit && !hazardOnlyView) fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
   } catch (err) {
     if (choice !== earthquakeDestinationChoice) return;
     console.error(err);
@@ -4403,6 +4573,7 @@ async function showEvacuationSites({ fit = true } = {}) {
 }
 
 async function switchEarthquakeView(viewKey) {
+  await leaveHazardOnlyView();
   if (!isEarthquakeSimulationResult(simData)) return;
   if (!hydrateActiveEarthquakeView(viewKey)) return;
 
@@ -4453,6 +4624,8 @@ function buildSimulationSessionBase(isEarthquakeRun) {
 }
 
 async function runSimulation() {
+  if (isSimulationInteractionLocked()) return;
+  await leaveHazardOnlyView();
   if (isSimulationInteractionLocked()) return;
 
   workflowFocusSection = null;
@@ -6453,6 +6626,8 @@ async function checkBackend() {
 // polylines (osm.js). Re-clicking stops the dash and restores the other
 // routes, while retaining the selected route's summary and directions.
 window.toggleRouteFocus = function toggleRouteFocus(routeNo, category, fit = true) {
+  // Choosing a route is an explicit return to the route map.
+  if (hazardOnlyView) leaveHazardOnlyView();
   routeNo = Number(routeNo);
   const sameRoute = Number(selectedRouteFocus?.routeNo) === routeNo;
   const animate = !sameRoute || selectedRouteFocus.animate === false;

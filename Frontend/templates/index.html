@@ -268,14 +268,22 @@
 
       <div class="map-badge map-legend" id="mapLegend" style="display:none;">
         <div class="legend-head">
-          <button class="legend-toggle" id="mapLegendToggle" type="button" onclick="toggleDesktopMapLegend()" aria-expanded="true" aria-controls="mapLegendBody" aria-label="Hide map legend">
+          <button class="legend-toggle" id="mapLegendToggle" type="button" onclick="toggleDesktopMapLegend()" aria-expanded="true" aria-controls="mapLegendDetails" aria-label="Hide map legend">
             <span class="legend-title">Legend</span>
             <span class="legend-toggle-action" id="mapLegendToggleAction">Hide</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
           </button>
         </div>
 
-        <div class="legend-body" id="mapLegendBody"></div>
+        <div id="mapLegendDetails">
+          <div class="legend-body" id="mapLegendBody"></div>
+          <div class="legend-map-view">
+            <button type="button" class="legend-hazard-toggle" data-hazards-only aria-pressed="false" onclick="toggleHazardOnlyView()">
+              <span>Hazards only</span><span class="legend-hazard-switch" aria-hidden="true"></span>
+            </button>
+            <p class="legend-view-status" data-hazard-view-status role="status">View layers without pins or sites.</p>
+          </div>
+        </div>
       </div>
 
     </div>

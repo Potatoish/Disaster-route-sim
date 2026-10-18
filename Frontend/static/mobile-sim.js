@@ -557,7 +557,7 @@
     $('msimResults').hidden = state.mode !== 'results';
     // The hazard fills step back while routes or trails are on them
     // (style.css), and come back in full for setup.
-    shell.classList.toggle('msim-route-on', isActive() && state.mode !== 'setup');
+    shell.classList.toggle('msim-route-on', isActive() && state.mode !== 'setup' && !isHazardOnlyView());
     syncTopBar();
     syncMapButtons();
     if (state.mode === 'setup') syncSetup();
@@ -575,7 +575,7 @@
     $('msimLayersBtn').disabled = held;
     if (held) closeLayers({ restoreFocus: false });
     const fit = $('msimRecenterBtn');
-    const fitLabel = state.mode === 'setup'
+    const fitLabel = isHazardOnlyView() ? 'Show the whole barangay' : state.mode === 'setup'
       ? areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Show evacuation sites' : 'Show the whole barangay'
       : 'Show the whole route';
     fit.disabled = held;
@@ -1178,6 +1178,7 @@
       )).join('');
       html += `<div><span class="msim-legend-caption">Flood level</span><div class="msim-legend-levels">${rows}</div></div>`;
     }
+    if (legend && legend.style.display !== 'none') html += buildHazardViewControlHtml();
     return html;
   }
 

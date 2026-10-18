@@ -845,9 +845,6 @@ body.dark .hz-section{
 .hz-tile-name{ font-family:var(--font-heading); font-weight:700; font-size:17px; line-height:1.1; }
 .hz-tile-desc{ grid-column:2 / -1; font-size:11.5px; color:var(--muted); line-height:1.4; }
 .hz-tile-level{ grid-column:1 / -1; margin-top:6px; font-family:var(--font-meta); font-size:10.5px; color:var(--c-ink); letter-spacing:.03em; }
-.hz-tile-intensity{ grid-column:1 / -1; font-family:var(--font-meta); font-size:10.5px; color:var(--c-ink); letter-spacing:.03em; }
-.hz-intensity-context{ display:block; margin-top:3px; font-family:var(--font-body); font-size:11px; color:var(--muted); letter-spacing:normal; }
-.hz-intensity-note{ flex-basis:100%; font-size:12px; line-height:1.55; color:var(--muted); }
 .hz-switch{
   grid-column:3; grid-row:1; margin-top:1px;
   width:30px; height:17px; border-radius:999px; background:var(--border2); position:relative;

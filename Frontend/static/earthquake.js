@@ -188,7 +188,7 @@
             word: INTENSITY_WORDS[numeral] || '',
             part: zones.length < 2 ? '' : rank === 0 ? 'stronger' : 'strong',
             where: props.where || '',
-            source: props.source || '',
+            source: 'PHIVOLCS via HazardHunterPH',
             range: props.mmi_min != null && props.mmi_max != null
               ? `${Number(props.mmi_min).toFixed(2)}–${Number(props.mmi_max).toFixed(2)}`
               : '',
@@ -477,6 +477,10 @@
   // showRouteKeys / showHazardLayers: whether a result's routes and hazard
   // layers are on the map (before a run, only the pin and shelters are).
   function syncLegend(activeView = 'overall', options = {}) {
+    if (window.isHazardOnlyView?.()) {
+      window.renderHazardOnlyLegend();
+      return;
+    }
     const {
       showRouteKeys = true,
       showHazardLayers = true,

@@ -503,6 +503,7 @@ function addRouteHitArea(pathCoords, gMap, mapLayers, routeGroup) {
     weight: ROUTE_HIT_WEIGHT,
     lineCap: 'round',
     lineJoin: 'round',
+    className: 'route-hit-area',
   }).addTo(gMap), routeGroup, mapLayers, 'hit');
 }
 

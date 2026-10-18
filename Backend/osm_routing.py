@@ -559,6 +559,14 @@ def build_flood_hazard_layer_payload(name=None, vars_filter=None, clip_scope="ba
             simplified_geometry,
             lambda coords: np.round(coords, FLOOD_LAYER_COORDINATE_DECIMALS),
         )
+        # Simplifying and rounding can push a boundary vertex outside the
+        # barangay. The standalone hazard view must stay inside its scope.
+        if clip_scope == "barangay" and boundary_geometry is not None:
+            simplified_geometry = get_polygonal_geometry(
+                simplified_geometry.intersection(boundary_geometry)
+            )
+            if simplified_geometry.is_empty:
+                continue
 
         var_value = zone_var
         features.append({

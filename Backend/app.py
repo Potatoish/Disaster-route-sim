@@ -26,6 +26,7 @@ from earthquake_service import (
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
+from earthquake_data import get_earthquake_dataset
 from flood_scenario import get_flood_scenario_payload
 from main import simulate, simulate_to_evacuation_site
 import osm_routing
@@ -635,6 +636,29 @@ def flood_scenario():
     response.headers["Cache-Control"] = "no-cache"
     response.add_etag()
     return response.make_conditional(request)
+
+@app.route("/earthquake/hazard-layers", methods=["GET"])
+def earthquake_hazard_layers():
+    barangay = (request.args.get("barangay") or "").strip()
+    if not barangay:
+        return jsonify({"error": True, "message": "Barangay name is required"}), 400
+    try:
+        dataset = get_earthquake_dataset(barangay)
+        response = jsonify({
+            "error": False,
+            "hazard_layers": {
+                **dataset["layer_payloads"],
+                "shaking_intensity": dataset["shaking_intensity"],
+            },
+        })
+        response.headers["Cache-Control"] = "no-cache"
+        response.add_etag()
+        return response.make_conditional(request)
+    except ValueError as e:
+        return jsonify({"error": True, "message": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": True, "message": str(e)}), 500
+
 
 @app.route("/earthquake/evac-sites", methods=["GET"])
 def earthquake_evac_sites():

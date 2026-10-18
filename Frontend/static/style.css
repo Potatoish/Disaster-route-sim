@@ -1067,6 +1067,69 @@ body.dark .pin-input-menu {
   pointer-events: none;
 }
 
+.legend-map-view {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--map-ui-border);
+  pointer-events: auto;
+}
+.legend-hazard-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--map-ui-text);
+  font: 600 .76rem/1.3 var(--font-body);
+  cursor: pointer;
+}
+.legend-hazard-toggle:disabled { opacity: .5; cursor: default; }
+.legend-hazard-toggle:focus-visible { outline: 2px solid var(--map-ui-accent); outline-offset: 2px; border-radius: 4px; }
+.legend-hazard-switch {
+  flex: none;
+  width: 28px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--map-ui-border);
+}
+.legend-hazard-switch::after {
+  content: '';
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--map-ui-bg);
+}
+.legend-hazard-toggle[aria-pressed="true"] .legend-hazard-switch { background: var(--map-ui-accent); }
+.legend-hazard-toggle[aria-pressed="true"] .legend-hazard-switch::after { transform: translateX(12px); }
+.legend-view-status {
+  max-width: 210px;
+  margin: 2px 0 0;
+  color: var(--map-ui-muted);
+  font: .68rem/1.45 var(--font-body);
+}
+.hazard-view-scope { margin-bottom: 6px; font: 600 .72rem/1.4 var(--font-body); }
+.hazard-view-swatch { flex: none; width: 13px; height: 10px; border-radius: 2px; }
+
+/* Keep the stored route and marker layers, including their hit targets,
+   hidden while the visitor inspects only the barangay's hazard areas. */
+#map.hazards-only .leaflet-marker-pane,
+#map.hazards-only .leaflet-shadow-pane,
+#map.hazards-only .leaflet-tooltip-pane,
+#map.hazards-only .leaflet-popup-pane,
+#map.hazards-only .route-line,
+#map.hazards-only .route-hit-area,
+#map.hazards-only .visitor-accuracy {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+#map.hazards-only .route-flow { animation-play-state: paused; }
+
 .legend-row {
   display: flex;
   align-items: center;
@@ -1179,9 +1242,10 @@ body.dark .pin-input-menu {
   outline: none;
 }
 
-/* On a map too narrow for the hint and the bottom-left legend side by side,
-   the legend (route colors, irrelevant before a run) steps aside. */
-.map-wrap.pin-hint-crowded .map-legend {
+/* Keep the hazard-view control reachable before pinning on narrow maps.
+   Setup already gives the pin prompt; a rejected spot still takes priority. */
+.map-wrap.pin-hint-crowded .map-pin-hint:not(.is-error),
+.map-wrap.pin-hint-crowded:has(.map-pin-hint.is-error:not([hidden])) .map-legend {
   opacity: 0;
   visibility: hidden;
 }
@@ -3563,6 +3627,13 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
   padding-bottom: 4px;
   border-bottom: 1px solid var(--map-ui-border);
 }
+
+.msim-maplegend .legend-map-view {
+  margin-top: 8px !important;
+  padding-top: 6px;
+  padding-bottom: 10px;
+}
+.msim-maplegend .legend-hazard-toggle { min-height: 44px; }
 
 .msim-maplegend .legend-row {
   gap: 6px;
