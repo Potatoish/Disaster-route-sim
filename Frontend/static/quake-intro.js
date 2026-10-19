@@ -20,9 +20,10 @@
   const METERS_PER_DEGREE_LAT = 110574;
   const METERS_PER_DEGREE_LNG = 111320;
   const FAULT_COLOR = '#7f1d1d';
-  // The rings use the shared earthquake amber, lighter as they fade.
-  const RING_NEAR = window.agnasPalette.amber.near;
-  const RING_FAR = window.agnasPalette.amber.far;
+  // The rings: the app's ground-shaking orange near the epicenter, the
+  // earthquake theme's light orange as they fade.
+  const RING_NEAR = [194, 65, 12];
+  const RING_FAR = [251, 146, 60];
   // The shaking map's opacity while the intro paints it (the results show
   // it lighter, under the routes).
   const INTENSITY_ALPHA = 0.72;
@@ -319,7 +320,7 @@
         <div class="quake-legend-keys">
           ${row(`<svg class="legend-sym" viewBox="0 0 22 16" aria-hidden="true"><path d="${starPath(11, 8.4, 7.4, 3.2)}" fill="#dc2626" stroke="#fff" stroke-width="1.2"/></svg>`, 'Epicenter')}
           ${row(`<span class="legend-line quake-legend-fault"></span>`, faultName)}
-          ${row('<svg class="legend-sym" viewBox="0 0 22 16" aria-hidden="true"><path d="M4 14a9 9 0 0 1 14 0" fill="none" stroke="#ffbf00" stroke-width="2" stroke-linecap="round"/><path d="M7.5 14a5 5 0 0 1 7 0" fill="none" stroke="#997300" stroke-width="2" stroke-linecap="round"/></svg>', 'Shaking wave')}
+          ${row('<svg class="legend-sym" viewBox="0 0 22 16" aria-hidden="true"><path d="M4 14a9 9 0 0 1 14 0" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/><path d="M7.5 14a5 5 0 0 1 7 0" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round"/></svg>', 'Shaking wave')}
         </div>
         <div class="aco-legend-pins">${options.legendPins || ''}</div>
       </div>`;
@@ -629,8 +630,8 @@
           const radius = 6 + 22 * easeOut(age);
           const glow = g.createRadialGradient(epi.x, epi.y, 0, epi.x, epi.y, radius);
           glow.addColorStop(0, `rgba(255,255,255,${(0.9 * (1 - age)).toFixed(3)})`);
-          glow.addColorStop(0.4, `rgba(255,191,0,${(0.55 * (1 - age)).toFixed(3)})`);
-          glow.addColorStop(1, 'rgba(255,191,0,0)');
+          glow.addColorStop(0.4, `rgba(234,88,12,${(0.55 * (1 - age)).toFixed(3)})`);
+          glow.addColorStop(1, 'rgba(234,88,12,0)');
           g.fillStyle = glow;
           g.beginPath();
           g.arc(epi.x, epi.y, radius, 0, Math.PI * 2);
@@ -655,11 +656,11 @@
     // The trace's size comes from a ResizeObserver and its colors are read
     // once per run (and on a resize or theme change), so a frame never makes
     // the browser lay out or restyle the page to draw it.
-    const trace = { w: 0, h: 0, quiet: '#64748b', loud: '#997300', observer: null };
+    const trace = { w: 0, h: 0, quiet: '#64748b', loud: '#c2410c', observer: null };
     function readTraceColors() {
       const styles = getComputedStyle(panel);
       trace.quiet = styles.getPropertyValue('--muted').trim() || '#64748b';
-      trace.loud = styles.getPropertyValue('--shake-ink').trim() || '#997300';
+      trace.loud = styles.getPropertyValue('--shake-ink').trim() || '#c2410c';
     }
     function watchTrace() {
       const canvas = field('trace');

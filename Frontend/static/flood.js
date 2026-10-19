@@ -11,13 +11,14 @@
     evacuationPopup: null,
   };
 
-  // Flood sites use the shared blue palette. The chosen site stays green
-  // to preserve its route-status meaning.
+  // Blue, not the earthquake open areas' amber: amber and orange are the
+  // Low/Medium flood fills these pins sit on after a run. The site a run
+  // picks is the earthquake mode's green "CHOSEN" pin.
   const EVAC_MARKER_STYLES = {
     site: {
-      fill: window.agnasPalette.flood[2].fill,
-      stroke: window.agnasPalette.flood[3].edge,
-      accent: window.agnasPalette.flood[2].edge,
+      fill: '#2563eb',
+      stroke: '#1e3a8a',
+      accent: '#1d4ed8',
       label: 'EVAC SITE',
       badgeWidth: 76,
       labelSize: 10,
@@ -37,22 +38,22 @@
   // route lines stay on top anyway (hazard pane + dark route casing in osm.js).
   const FLOOD_LAYER_STYLES = {
     1: {
-      fillColor: window.agnasPalette.flood[1].fill,
-      strokeColor: window.agnasPalette.flood[1].edge,
+      fillColor: '#facc15',
+      strokeColor: '#ca8a04',
       fillOpacity: 0.32,
       strokeOpacity: 0.5,
       strokeWeight: 0.8,
     },
     2: {
-      fillColor: window.agnasPalette.flood[2].fill,
-      strokeColor: window.agnasPalette.flood[2].edge,
+      fillColor: '#f97316',
+      strokeColor: '#ea580c',
       fillOpacity: 0.36,
       strokeOpacity: 0.55,
       strokeWeight: 0.9,
     },
     3: {
-      fillColor: window.agnasPalette.flood[3].fill,
-      strokeColor: window.agnasPalette.flood[3].edge,
+      fillColor: '#e11d48',
+      strokeColor: '#be123c',
       fillOpacity: 0.42,
       strokeOpacity: 0.65,
       strokeWeight: 1,

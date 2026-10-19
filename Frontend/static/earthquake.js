@@ -14,22 +14,22 @@
   const LAYER_STYLES = {
     liquefaction: {
       label: 'Liquefaction',
-      strokeColor: window.agnasPalette.liquefaction.edge,
-      fillColor: window.agnasPalette.liquefaction.fill,
+      strokeColor: '#b45309',
+      fillColor: '#f59e0b',
     },
     ground_shaking: {
       label: 'Ground Shaking',
-      strokeColor: window.agnasPalette.liquefaction.edge,
-      fillColor: '#' + window.agnasPalette.shaking[0].map(c => c.toString(16).padStart(2, '0')).join(''),
+      strokeColor: '#7c2d12',
+      fillColor: '#c2410c',
     },
   };
 
-  // Ground shaking is a solid fill in the shared amber palette, strongest
+  // Ground shaking is a solid fill in the earthquake oranges, strongest
   // darkest, and liquefaction is never a solid fill: High as amber stripes
   // inside a solid edge (the shaking shows between the stripes), Moderate as
   // a dashed edge, so where the two overlap neither color mixes into the
-  // other. The strongest class is the darkest amber.
-  const SHAKING_CLASS_COLORS = window.agnasPalette.shaking;
+  // other. The strongest class is the app's ground-shaking orange.
+  const SHAKING_CLASS_COLORS = [[194, 65, 12], [250, 160, 120], [254, 226, 213]];
   const SHAKING_FILL_OPACITY = { overall: 0.34, ground_shaking: 0.5, intro: 0.72 };
   const LIQUEFACTION_HATCH_ID = 'agnasLiqHatch';
   // Modified Mercalli words for the Roman numerals the maps reach.
@@ -66,7 +66,7 @@
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
     svg.style.position = 'absolute';
-    svg.innerHTML = `<defs><pattern id="${LIQUEFACTION_HATCH_ID}" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><rect width="2.2" height="7" fill="${LAYER_STYLES.liquefaction.fillColor}" fill-opacity="0.7"/></pattern></defs>`;
+    svg.innerHTML = `<defs><pattern id="${LIQUEFACTION_HATCH_ID}" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><rect width="2.2" height="7" fill="#f59e0b" fill-opacity="0.7"/></pattern></defs>`;
     document.body.appendChild(svg);
   }
 
@@ -93,7 +93,7 @@
   function buildEvacMarkerIcon(isHighlighted) {
     return buildEvacSiteMarkerIcon(isHighlighted
       ? { fill: '#22c55e', stroke: '#14532d', accent: '#166534', label: 'CHOSEN', badgeWidth: 56, labelSize: 11, halo: true }
-      : { fill: LAYER_STYLES.liquefaction.fillColor, stroke: LAYER_STYLES.liquefaction.strokeColor, accent: window.agnasPalette.amber.edge, label: 'OPEN AREA', badgeWidth: 80, labelSize: 10 });
+      : { fill: '#f59e0b', stroke: '#9a3412', accent: '#b45309', label: 'OPEN AREA', badgeWidth: 80, labelSize: 10 });
   }
 
   // Setup and surroundings are safety claims, so a site without them in the
@@ -383,8 +383,7 @@
     tile.width = 10;
     tile.height = 10;
     const t = tile.getContext('2d');
-    t.strokeStyle = LAYER_STYLES.liquefaction.fillColor;
-    t.globalAlpha = 0.7;
+    t.strokeStyle = 'rgba(245, 158, 11, 0.7)';
     t.lineWidth = 2.2;
     [-10, 0, 10].forEach(offset => {
       t.beginPath();
@@ -508,7 +507,7 @@
         ${window.buildPinLegendRow('start')}
         ${!window.isToEvacuationSite?.() ? window.buildPinLegendRow('end')
           : showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen evacuation site') : ''}
-        ${state.evacuationMarkers.length ? pinRow(LAYER_STYLES.liquefaction.fillColor, LAYER_STYLES.liquefaction.strokeColor, 'house', 'Open area') : ''}
+        ${state.evacuationMarkers.length ? pinRow('#f59e0b', '#9a3412', 'house', 'Open area') : ''}
         ${typeof window.buildBoundaryLegendRow === 'function' ? window.buildBoundaryLegendRow() : ''}
         ${hazardLegend}
       </div>`;

@@ -154,9 +154,9 @@
       .filter(ring => ring.length >= 3);
     const styles = window.floodHazardUI?.layerStyles || {};
     const COLORS = {
-      1: hexRgb(styles[1]?.fillColor || window.agnasPalette.flood[1].fill),
-      2: hexRgb(styles[2]?.fillColor || window.agnasPalette.flood[2].fill),
-      3: hexRgb(styles[3]?.fillColor || window.agnasPalette.flood[3].fill),
+      1: hexRgb(styles[1]?.fillColor || '#facc15'),
+      2: hexRgb(styles[2]?.fillColor || '#f97316'),
+      3: hexRgb(styles[3]?.fillColor || '#e11d48'),
     };
     const ALPHAS = {
       1: styles[1]?.fillOpacity ?? 0.32,

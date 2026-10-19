@@ -1,12 +1,12 @@
-/* Shared palette for public pages, map layers, replay and exported reports.
-   The map code reads these same tokens through palette.js. */
+/* Brand palette for public pages and disaster/theme selection.
+   Hazard severity colors remain independent in the map renderers and legends. */
 :root {
-  --blue-100: #c0e6fd;
-  --blue-300: #80aad3;
-  --blue-500: #5b86b6;
-  --blue-700: #3f6593;
-  --blue-900: #1b3554;
-  --blue-950: #000f22;
+  --blue-100: #deebf7;
+  --blue-300: #6baed6;
+  --blue-500: #4292c6;
+  --blue-700: #2c76a5;
+  --blue-900: #164362;
+  --blue-950: #0b263b;
   --amber-100: #ffe599;
   --amber-200: #ffd966;
   --amber-300: #ffcc33;
@@ -14,63 +14,44 @@
   --amber-600: #cc9900;
   --amber-700: #997300;
   --amber-900: #664c00;
-  --flood-low: var(--blue-300);
-  --flood-medium: var(--blue-700);
-  --flood-high: var(--blue-900);
-  --flood-low-edge: var(--blue-500);
-  --flood-medium-edge: var(--blue-900);
-  --flood-high-edge: var(--blue-950);
-  --liquefaction-fill: var(--amber-400);
-  --liquefaction-edge: var(--amber-700);
-  --shaking-high: var(--amber-700);
-  --shaking-medium: var(--amber-400);
-  --shaking-low: var(--amber-100);
 }
 
 body.site-page, body.sim-page {
-  --page-top: #f7f9fc; --page-bottom: #f7f9fc;
-  --bg: #f7f9fc; --surface: #ffffff; --panel: #ffffff; --panel-strong: #eef3f8;
-  --border: #d5dfe9; --border2: #a6b9cd;
-  --text: var(--blue-950); --muted: #4e637a; --dim: #5d7287;
-  --ink-strong: var(--blue-900); --ink-soft: #4e637a;
-  --accent: var(--blue-700); --accent2: var(--blue-500); --accent-ink: #ffffff;
-  --accent-soft-bg: #edf3f9; --accent-soft-border: #c4d4e5; --accent-soft-shadow: transparent;
-  --hazard-selected-bg: #edf3f9; --hazard-selected-border: var(--blue-700);
+  --page-top: #f5fbfe; --page-bottom: #f5fbfe;
+  --bg: #f5fbfe; --surface: #ffffff; --panel: #ffffff; --panel-strong: #edf7fb;
+  --border: #c7e0ec; --border2: #8bb6c9;
+  --text: var(--blue-950); --muted: #466477; --dim: #53758a;
+  --ink-strong: var(--blue-900); --ink-soft: #466477;
+  --accent: var(--blue-500); --accent2: var(--blue-700); --accent-ink: #ffffff;
+  --accent-soft-bg: #eaf6fb; --accent-soft-border: #b2d7e7; --accent-soft-shadow: transparent;
+  --hazard-selected-bg: #eaf6fb; --hazard-selected-border: var(--blue-500);
   --hazard-selected-text: var(--blue-700);
-  --hazard-chip-bg: #edf3f9; --hazard-chip-border: #c4d4e5; --hazard-chip-text: var(--blue-700);
-  --hazard-panel-bg: #edf3f9; --hazard-panel-border: #c4d4e5; --hazard-panel-strong: var(--blue-700);
+  --hazard-chip-bg: #eaf6fb; --hazard-chip-border: #b2d7e7; --hazard-chip-text: var(--blue-700);
+  --hazard-panel-bg: #eaf6fb; --hazard-panel-border: #b2d7e7; --hazard-panel-strong: var(--blue-700);
   --hazard-button-start: var(--blue-700); --hazard-button-end: var(--blue-700);
   --hazard-button-shadow: transparent; --hazard-button-hover-shadow: transparent;
   --map-ui-bg: var(--panel); --map-ui-bg-soft: var(--panel); --map-ui-border: var(--border);
   --map-ui-text: var(--text); --map-ui-muted: var(--muted); --map-ui-accent: var(--accent);
   --map-ui-chip: var(--accent-soft-bg);
-  --flood-low-ink: var(--blue-700); --flood-medium-ink: var(--blue-700); --flood-high-ink: var(--blue-900);
-  --shake-ink: var(--amber-700);
-  --gauge-sky-top: #edf3f9; --gauge-sky-bottom: #edf3f9;
-  --gauge-figure: var(--blue-900); --gauge-water: #80aad380; --gauge-water-soft: #80aad330;
-  --gauge-line: var(--blue-700);
-  --shadow: 0 8px 24px #1b35540a; --shadow-sm: 0 3px 10px #1b355406;
+  --flood-theme-ink: var(--blue-500); --quake-theme-ink: var(--amber-900);
+  --shadow: 0 8px 24px #0b3a520a; --shadow-sm: 0 3px 10px #0b3a5206;
   background: var(--bg);
 }
 body.site-page.dark, body.sim-page.dark {
-  --page-top: var(--blue-950); --page-bottom: var(--blue-950);
-  --bg: var(--blue-950); --surface: #0b1c30; --panel: #10243b; --panel-strong: #172f49;
-  --border: #29415b; --border2: #526f8e;
-  --text: #edf4fb; --muted: #a9bdd2; --dim: #97aec5;
-  --ink-strong: #edf4fb; --ink-soft: #bdcfe0;
+  --page-top: #071b28; --page-bottom: #071b28;
+  --bg: #071b28; --surface: #0b2535; --panel: #102e41; --panel-strong: #153b50;
+  --border: #24536b; --border2: #4a839a;
+  --text: #effaff; --muted: #b1d4e2; --dim: #96bfce;
+  --ink-strong: #effaff; --ink-soft: #c2e0ed;
   --accent: var(--blue-300); --accent2: var(--blue-100); --accent-ink: var(--blue-950);
-  --accent-soft-bg: #172f49; --accent-soft-border: #3f6593;
-  --hazard-selected-bg: #172f49; --hazard-selected-border: var(--blue-300);
+  --accent-soft-bg: #153b50; --accent-soft-border: #2a677f;
+  --hazard-selected-bg: #153b50; --hazard-selected-border: var(--blue-300);
   --hazard-selected-text: var(--blue-100);
-  --hazard-chip-bg: #172f49; --hazard-chip-border: #3f6593; --hazard-chip-text: var(--blue-100);
-  --hazard-panel-bg: #172f49; --hazard-panel-border: #3f6593; --hazard-panel-strong: var(--blue-300);
+  --hazard-chip-bg: #153b50; --hazard-chip-border: #2a677f; --hazard-chip-text: var(--blue-100);
+  --hazard-panel-bg: #153b50; --hazard-panel-border: #2a677f; --hazard-panel-strong: var(--blue-300);
   --hazard-button-start: var(--blue-300); --hazard-button-end: var(--blue-300);
-  --flood-low-ink: var(--blue-100); --flood-medium-ink: var(--blue-300); --flood-high-ink: var(--blue-100);
-  --shake-ink: var(--amber-300);
-  --gauge-sky-top: #10243b; --gauge-sky-bottom: #10243b;
-  --gauge-figure: #c0e6fd; --gauge-water: #5b86b680; --gauge-water-soft: #5b86b630;
-  --gauge-line: var(--blue-300);
-  --shadow: 0 8px 24px #000f2240; --shadow-sm: 0 3px 10px #000f2220;
+  --flood-theme-ink: var(--blue-300); --quake-theme-ink: var(--amber-300);
+  --shadow: 0 8px 24px #071b2840; --shadow-sm: 0 3px 10px #071b2820;
 }
 body.sim-page[data-hazard-theme="earthquake"] {
   --accent: var(--amber-900); --accent2: var(--amber-700);
@@ -93,9 +74,33 @@ body.sim-page.dark[data-hazard-theme="earthquake"] {
   --hazard-button-start: var(--amber-300); --hazard-button-end: var(--amber-300);
 }
 
-/* Flat surfaces and a quiet map-paper texture; no colored border effects. */
+/* Solid, theme-aware card edges; hazard colors keep their existing meaning. */
+body.site-page, body.site-page.dark {
+  --accent: var(--blue-500); --accent2: var(--blue-700); --accent-ink: #ffffff;
+  --accent-text: var(--blue-700);
+}
+body.site-page.dark { --accent-text: var(--blue-300); }
+.site-page {
+  --card-line: color-mix(in srgb, var(--blue-500) 50%, var(--surface));
+  --card-accent: var(--blue-500);
+  --quake-card-line: color-mix(in srgb, var(--amber-700) 50%, var(--surface));
+}
+.site-page.dark {
+  --card-line: color-mix(in srgb, var(--blue-300) 45%, var(--surface));
+  --card-accent: var(--blue-300);
+  --quake-card-line: color-mix(in srgb, var(--amber-300) 45%, var(--surface));
+}
 .site-page .nav-btn:is(:active, .is-active), .site-page .nav-pill,
-.site-page .cta, .site-page .fab { background: var(--accent); }
+.site-page .cta, .site-page .fab,
+.site-page .fab-send, .site-page .tutorial-btn.primary, .site-page .skip-link {
+  background: var(--blue-700);
+}
+.site-page .qs-cta:hover { background: var(--blue-900); }
+.site-page :is(.eyebrow, .src-link, .src-name, .gtk-link, .research-label),
+.site-page .qs-barangay-card.is-active strong,
+.site-page .rate-row button[aria-pressed="true"],
+.site-page .language-options button:is(:hover, [aria-pressed="true"]),
+.site-page .language-trigger[aria-expanded="true"] { color: var(--accent-text); }
 .site-page .nav-links.has-pill .nav-btn.is-active { background: transparent; }
 .site-page .nav-row { background: var(--panel); box-shadow: var(--shadow-sm); }
 /* Keep the last paragraph above Feedback when the footer lifts the button. */
@@ -121,23 +126,37 @@ body.sim-page.dark[data-hazard-theme="earthquake"] {
 .site-page .dashboard-nav-drawer .nav-btn svg { display: block; width: 20px; height: 20px; }
 .site-page .dashboard-nav-drawer .nav-pill { display: none; }
 .site-page .dashboard-nav-drawer .nav-links.has-pill .nav-btn.is-active {
-  color: var(--accent-ink); background: var(--accent);
+  color: var(--accent-ink); background: var(--blue-700);
 }
 .site-page .hero-quickstart, .site-page .stat, .site-page .gtk-card,
 .site-page .hz-module, .site-page .algo-step { background: var(--surface); }
-.site-page .hero-quickstart { padding: 28px; border-radius: 16px; }
+.site-page .hero-quickstart, .site-page .gtk-card, .site-page .algo-step,
+.site-page .panel, .site-page .qs-barangay-card { border-color: var(--card-line); }
+.site-page .hero-quickstart {
+  padding: 28px; border-radius: 16px; border-top: 3px solid var(--card-accent);
+}
+.site-page .gtk-card { border-inline-start: 3px solid var(--card-accent); }
+.site-page .algo-step { border-top: 3px solid var(--card-accent); }
+.site-page .algo-step-no { color: var(--card-accent); }
+.site-page .algo-diagram {
+  border: 0; background: var(--accent-soft-bg); padding: 12px; border-radius: 12px;
+}
 .site-page .qs-head { padding-bottom: 4px; }
 .site-page .qs-head h2 { text-align: left; font-size: 23px; }
 .site-page .qs-barangay-card { padding: 14px 12px; min-height: 68px; }
-.site-page .qs-barangay-card.is-active { box-shadow: inset 0 0 0 1px var(--accent); }
+.site-page .qs-barangay-card.is-active {
+  border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);
+}
 .site-page .qs-cta { min-height: 48px; box-shadow: none; }
 .site-page .hero-split { grid-template-columns: 1.15fr 1fr; gap: 56px; }
 .site-page .hero-inner { padding-block: 60px 48px; }
 .site-page .hero h1 { font-size: clamp(36px, 4.2vw, 54px); line-height: 1.08; letter-spacing: -.02em; }
 .site-page .hero-copy { gap: 20px; }
-.site-page .hero-accent { color: var(--blue-700); }
-.site-page.dark .hero-accent { color: var(--blue-300); }
-.site-page .stats { border-radius: 12px; box-shadow: none; }
+.site-page .hero-accent { color: var(--blue-500); }
+.site-page.dark :is(.hero-accent, .stat b, #hzFlood .hz-icon) { color: var(--blue-300); }
+.site-page .stats {
+  border-color: var(--card-line); background: var(--card-line); border-radius: 12px; box-shadow: none;
+}
 .site-page .stat { padding-block: 20px; }
 .site-page .wave-zone::before {
   background: var(--blue-500); opacity: .32;
@@ -169,33 +188,26 @@ body.sim-page.dark[data-hazard-theme="earthquake"] {
 .site-page .block-head { margin-bottom: 28px; }
 .site-page .gtk-card, .site-page .algo-step { box-shadow: none; }
 
-/* The same blue depth scale as the map, with a separate amber quake scale. */
+/* Brand-colored frames surround the original severity indicators. */
 .site-page .hz-section {
-  --low: var(--flood-low); --low-ink: var(--blue-700); --low-on: var(--blue-950);
-  --med: var(--flood-medium); --med-ink: var(--blue-700); --med-on: #ffffff;
-  --high: var(--flood-high); --high-ink: var(--blue-900); --high-on: #ffffff;
-  --liq: var(--liquefaction-fill); --liq-ink: var(--amber-900);
-  --gs: var(--shaking-high); --gs-ink: var(--amber-900);
-  --sky-top: #edf3f9; --sky-bottom: #edf3f9;
-  --water: #80aad380; --water-line: var(--blue-700);
+  --sky-top: #eaf6fb; --sky-bottom: #eaf6fb;
+  --water: color-mix(in srgb, var(--blue-500) 42%, transparent); --water-line: var(--blue-700);
 }
 .site-page.dark .hz-section {
-  --low-ink: var(--blue-100); --med-ink: var(--blue-300); --high-ink: var(--blue-100);
-  --gs-ink: var(--amber-300); --liq-ink: var(--amber-300);
-  --sky-top: #10243b; --sky-bottom: #10243b;
-  --water: #5b86b680; --water-line: var(--blue-300);
+  --sky-top: #102e41; --sky-bottom: #102e41;
+  --water: color-mix(in srgb, var(--blue-300) 36%, transparent); --water-line: var(--blue-300);
 }
 .site-page .hz-module { padding: 24px; border-radius: 16px; gap: 20px; box-shadow: var(--shadow-sm); }
-.site-page #hzFlood { border-top: 3px solid var(--blue-700); }
-.site-page #hzQuake { border-top: 3px solid var(--amber-400); }
-.site-page #hzQuake .hz-icon { color: var(--gs-ink); background: color-mix(in srgb, var(--amber-400) 18%, var(--panel)); }
+.site-page #hzFlood { border-color: var(--card-line); border-top: 3px solid var(--card-accent); }
+.site-page #hzQuake { border-color: var(--quake-card-line); border-top: 3px solid var(--amber-400); }
+.site-page #hzQuake .hz-icon { color: var(--quake-theme-ink); background: color-mix(in srgb, var(--amber-400) 18%, var(--panel)); }
 .site-page .hz-level { padding: 13px 10px; }
 .site-page .hz-level-icon, .site-page .hz-tile-icon { width: 40px; height: 40px; border-radius: 8px; }
 .site-page .hz-level-icon svg, .site-page .hz-tile-icon svg { width: 30px; height: 30px; }
 .site-page .hz-level[aria-pressed="true"], .site-page .hz-tile[aria-pressed="true"] {
   border-color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--c-ink);
 }
-.site-page .hz-sim-btn { color: var(--gs-ink); border-color: var(--border2); }
+.site-page .hz-sim-btn { color: var(--quake-theme-ink); border-color: var(--border2); }
 .sim-page :is(.left-panel, .right-panel, .route-safety-panel, .topbar, .msheet) { background: var(--surface); }
 body.sim-page .workflow-card, body.sim-page.dark .workflow-card {
   background: var(--panel); box-shadow: none;
@@ -204,22 +216,16 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
   border-color: var(--accent); background: var(--panel); box-shadow: none;
 }
 .sim-page #hFlood .hazard-icon {
-  color: var(--flood-medium-ink); background: color-mix(in srgb, var(--blue-300) 18%, var(--panel));
+  color: var(--flood-theme-ink); background: color-mix(in srgb, var(--blue-300) 18%, var(--panel));
 }
 .sim-page #hEarthquake .hazard-icon {
-  color: var(--shake-ink); background: color-mix(in srgb, var(--amber-400) 18%, var(--panel));
+  color: var(--quake-theme-ink); background: color-mix(in srgb, var(--amber-400) 18%, var(--panel));
 }
-.sim-page [data-msim-hazard="Flood"] svg { color: var(--flood-medium-ink); }
-.sim-page [data-msim-hazard="Earthquake"] svg { color: var(--shake-ink); }
+.sim-page [data-msim-hazard="Flood"] svg { color: var(--flood-theme-ink); }
+.sim-page [data-msim-hazard="Earthquake"] svg { color: var(--quake-theme-ink); }
 .sim-page :is(.run-btn, .evac-btn) {
   background: var(--hazard-panel-strong); color: var(--accent-ink); box-shadow: none;
 }
-.sim-page .mchips .swatch--all {
-  background: var(--flood-medium);
-  box-shadow: inset 3px 0 var(--flood-low), inset -3px 0 var(--flood-high);
-}
-.sim-page .liq-swatch--high { border-color: var(--liquefaction-edge); background: repeating-linear-gradient(45deg, var(--liquefaction-fill) 0 2px, transparent 2px 5px); }
-.sim-page .liq-swatch--moderate { border-color: var(--liquefaction-edge); }
 .sim-page .loader-visual--flood .loader-graph,
 .sim-page #loaderProgress.loader-progress--flood {
   --accent: var(--blue-700); --accent2: var(--blue-300);
@@ -231,6 +237,19 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
 @media (max-width: 999px) {
   .site-page .hero-split { grid-template-columns: 1fr; gap: 28px; }
   .site-page .hero-inner { padding-block: 36px; }
+}
+@media (max-width: 820px) {
+  /* The stepper sits directly on the page; only its diagram has a frame. */
+  .site-page .algo-step { background: transparent; border: 0; box-shadow: none; }
+  .site-page .algo-step-no {
+    border-color: var(--card-accent); background: var(--surface);
+  }
+  .site-page .algo-step:not(:last-child)::before { background: var(--card-line); }
+  .site-page .algo-diagram {
+    background: var(--surface); border: 1px solid var(--card-line); padding: 12px;
+  }
+  .site-page .algo-diagram svg { border: 0; border-radius: 0; padding: 0; background: transparent; }
+  .site-page .algo-diagram-caption { margin-top: 10px; line-height: 1.5; }
 }
 @media (max-width: 767px) {
   .site-page .site-nav {
