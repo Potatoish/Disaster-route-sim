@@ -246,6 +246,18 @@ html[data-keyboard-open="true"] .fab-panel {
 .result-walking-note { margin: 6px 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .result-route-directions { flex: 1 0 100%; min-width: 0; margin: 0; }
 .result-route-directions summary { font-size: .8125rem; font-weight: 700; }
+/* The accordion owns the outline; the steps inside share that surface. */
+.result-route-directions[open] > summary {
+  border-bottom: 1px solid var(--border);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.result-route-directions .mroute-steps {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
 .msheet .result-route-nav { padding: 0; border: 0; margin-block: 10px 0; }
 #msimRouteNavigation { background: var(--surface); }
 .sim-page .msheet[data-mode="results"][data-snap="peek"] #msimResultActions {

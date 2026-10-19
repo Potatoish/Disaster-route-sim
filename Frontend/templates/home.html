@@ -14,12 +14,6 @@
       <span class="eyebrow">Ant Guided Navigation And Safety System</span>
       <h1>Disaster Preparedness<br><span class="hero-accent">for safer communities</span></h1>
       <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios, filtering out hazard-prone routes before evaluating path distance.</p>
-      <div class="hero-actions">
-        <button type="button" class="hero-action" onclick="openScopeMap()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0 1 18.5 10c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>
-          Coverage map
-        </button>
-      </div>
     </div>
 
     <section class="hero-quickstart" aria-labelledby="qsTitle">
@@ -75,47 +69,6 @@
 </section>
 
 <div class="wave-zone">
-<section class="block gtk-section">
-  <div class="wrap">
-    <div class="block-head center-head">
-      <span class="eyebrow center">Good to know</span>
-      <h2>Before you start</h2>
-      <p>A few things worth knowing before you plan a route.</p>
-    </div>
-    <div class="gtk-grid">
-      <div class="gtk-card">
-        <span class="gtk-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="2"/><path d="M12 8v5M8.5 10.5 12 9l3.5 1.5M9 21l2.2-7.5h1.6L15 21"/></svg>
-        </span>
-        <h3>Walking routes only</h3>
-        <p>Routes are built for pedestrians, so they don't follow one-way streets or other vehicle-only restrictions.</p>
-      </div>
-      <div class="gtk-card">
-        <span class="gtk-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 18.5 6.3v5.2c0 4.2-2.8 7.6-6.5 8.5-3.7-.9-6.5-4.3-6.5-8.5V6.3L12 3.5Z"/><path d="M9 12.2 11 14.2 15 10"/></svg>
-        </span>
-        <h3>Built on official hazard data</h3>
-        <p>Flood levels come from <span class="src-name">Project NOAH</span>. Earthquake liquefaction and ground shaking levels come from <span class="src-name">PHIVOLCS</span>, through <span class="src-name">HazardHunterPH</span>.</p>
-        <a class="gtk-link" href="{{ url_for('about_page') }}#data-sources">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h14v15H5z"/><path d="M8.5 9h7M8.5 12h7M8.5 15h4"/></svg>
-          All data sources
-        </a>
-      </div>
-      <div class="gtk-card">
-        <span class="gtk-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.3"/><path d="M12 7.5V12l3.2 1.9"/></svg>
-        </span>
-        <h3>Plan ahead, not during an emergency</h3>
-        <p>AGNAS is built for preparation, not live alerts. When a disaster strikes, rely on your local authorities for instructions.</p>
-        <button type="button" class="gtk-link" onclick="openHotlines(event)" aria-haspopup="dialog" aria-controls="hotlineModal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
-          Emergency hotlines
-        </button>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section class="block hz-section" id="hazards">
   <div class="wrap">
     <div class="block-head center-head">
@@ -141,7 +94,7 @@
         <div class="hz-levels" role="group" aria-label="Flood level">
           <button type="button" class="hz-level" data-level="low" aria-pressed="false">
             <span class="hz-level-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6M8.5 10h7M12 13.5l-2.5 5M12 13.5l2.5 5"/><path d="M3 19.5c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2" fill="currentColor" stroke="none"/><path d="M8 13V9q4-3 8 0v4M12 8v7M10 15v3M14 15v3"/><path d="M2 19q2.5-2 5 0t5 0 5 0 5 0"/><path d="M2 23q2.5-2 5 0t5 0 5 0 5 0"/></svg>
             </span>
             <span class="hz-level-name">Low</span>
             <span class="hz-level-range">Up to 0.5 m</span>
@@ -149,7 +102,7 @@
           </button>
           <button type="button" class="hz-level" data-level="medium" aria-pressed="false">
             <span class="hz-level-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6M8.5 10h7M12 13.5l-2.5 5M12 13.5l2.5 5"/><path d="M3 14c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/><path d="M3 18c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" opacity=".5"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2" fill="currentColor" stroke="none"/><path d="M8 11V9q4-3 8 0v2M12 8v4"/><path d="M2 13q2.5-2 5 0t5 0 5 0 5 0"/><path d="M2 18q2.5-2 5 0t5 0 5 0 5 0"/><path d="M2 23q2.5-2 5 0t5 0 5 0 5 0"/></svg>
             </span>
             <span class="hz-level-name">Medium</span>
             <span class="hz-level-range">0.5–1.5 m</span>
@@ -157,7 +110,7 @@
           </button>
           <button type="button" class="hz-level" data-level="high" aria-pressed="false">
             <span class="hz-level-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6M8.5 10h7"/><path d="M3 9.5c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0"/><path d="M3 14c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" opacity=".6"/><path d="M3 18.5c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0 3 1 4.5 0" opacity=".35"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2" fill="currentColor" stroke="none"/><path d="M8 8 5 5M16 8l3-3M12 7v1"/><path d="M2 9q2.5-2 5 0t5 0 5 0 5 0"/><path d="M2 14q2.5-2 5 0t5 0 5 0 5 0"/><path d="M2 19q2.5-2 5 0t5 0 5 0 5 0"/><path d="M2 23q2.5-2 5 0t5 0 5 0 5 0"/></svg>
             </span>
             <span class="hz-level-name">High</span>
             <span class="hz-level-range">Over 1.5 m</span>
@@ -260,7 +213,7 @@
         <div class="hz-head">
           <div class="hz-title">
             <span class="hz-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13V7l5-4 5 4v6H7ZM10 13V9h4v4M3 7q-2 3 0 6M21 7q2 3 0 6"/><path d="M2 16h9l-2 3 3 1-2 3H2ZM14 16h8v7h-9l2-3-3-1Z" fill="currentColor" stroke="none"/></svg>
             </span>
             <div>
               <h3 id="hzQuakeTitle">Earthquake hazards</h3>
@@ -272,7 +225,7 @@
         <div class="hz-tiles" role="group" aria-label="Earthquake layers">
           <button type="button" class="hz-tile" id="hzTileGs" data-layer="gs" aria-pressed="false">
             <span class="hz-tile-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V11h5v10M13 21V6h5v15"/><path d="M15 9.5h1M15 13h1M8 14h1"/><path d="M3 8.5 1.8 10 3 11.5M21 8.5l1.2 1.5-1.2 1.5M2 21h20"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13V7l5-4 5 4v6H7ZM10 13V9h4v4M3 7q-2 3 0 6M21 7q2 3 0 6"/><path d="M2 16h9l-2 3 3 1-2 3H2ZM14 16h8v7h-9l2-3-3-1Z" fill="currentColor" stroke="none"/></svg>
             </span>
             <span class="hz-tile-name">Ground shaking</span>
             <span class="hz-switch" aria-hidden="true"></span>
@@ -281,7 +234,7 @@
           </button>
           <button type="button" class="hz-tile" id="hzTileLiq" data-layer="liq" aria-pressed="false">
             <span class="hz-tile-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 17.5 7 7.3l6-1 1.8 10.3"/><path d="M9.5 10l2-.3M10 13l2-.3"/><path d="M2 19.5h5l1.5-1.5 2 2.5 2-2 1.5 1h8"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 16 2-13 9 1-2 13M12 7l3 .4M11.5 10l3 .4M11 13l3 .4M2 18h8l-1 4M22 20h-8l1 3"/><path d="m12 17-2 3 3 1-2 3"/></svg>
             </span>
             <span class="hz-tile-name">Liquefaction</span>
             <span class="hz-switch" aria-hidden="true"></span>
@@ -293,7 +246,7 @@
         <div class="hz-lens-row">
           <span class="hz-lens-name" aria-live="polite">Showing: <b id="hzLensName">Ground shaking</b></span>
           <button type="button" class="hz-sim-btn" id="hzSimBtn" data-mode="gs">
-            <svg id="hzSimIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l2.5-6 4 13 3-9 2 2H22"/></svg>
+            <svg id="hzSimIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13V7l5-4 5 4v6H7ZM10 13V9h4v4M3 7q-2 3 0 6M21 7q2 3 0 6"/><path d="M2 16h9l-2 3 3 1-2 3H2ZM14 16h8v7h-9l2-3-3-1Z" fill="currentColor" stroke="none"/></svg>
             <span id="hzSimLabel">Simulate ground shaking</span>
           </button>
         </div>
@@ -436,6 +389,47 @@
           <dd><span class="hz-street" id="hzCrossCaption"><b>Ground shaking:</b> strong shaking cracks walls and drops debris on roads.</span></dd>
         </dl>
       </article>
+    </div>
+  </div>
+</section>
+
+<section class="block gtk-section">
+  <div class="wrap">
+    <div class="block-head center-head">
+      <span class="eyebrow center">Good to know</span>
+      <h2>Before you start</h2>
+      <p>A few things worth knowing before you plan a route.</p>
+    </div>
+    <div class="gtk-grid">
+      <div class="gtk-card">
+        <span class="gtk-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="2"/><path d="M12 8v5M8.5 10.5 12 9l3.5 1.5M9 21l2.2-7.5h1.6L15 21"/></svg>
+        </span>
+        <h3>Walking routes only</h3>
+        <p>Routes are built for pedestrians, so they don't follow one-way streets or other vehicle-only restrictions.</p>
+      </div>
+      <div class="gtk-card">
+        <span class="gtk-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 18.5 6.3v5.2c0 4.2-2.8 7.6-6.5 8.5-3.7-.9-6.5-4.3-6.5-8.5V6.3L12 3.5Z"/><path d="M9 12.2 11 14.2 15 10"/></svg>
+        </span>
+        <h3>Built on official hazard data</h3>
+        <p>Flood levels come from <span class="src-name">Project NOAH</span>. Earthquake liquefaction and ground shaking levels come from <span class="src-name">PHIVOLCS</span>, through <span class="src-name">HazardHunterPH</span>.</p>
+        <a class="gtk-link" href="{{ url_for('about_page') }}#data-sources">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h14v15H5z"/><path d="M8.5 9h7M8.5 12h7M8.5 15h4"/></svg>
+          All data sources
+        </a>
+      </div>
+      <div class="gtk-card">
+        <span class="gtk-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.3"/><path d="M12 7.5V12l3.2 1.9"/></svg>
+        </span>
+        <h3>Plan ahead, not during an emergency</h3>
+        <p>AGNAS is built for preparation, not live alerts. When a disaster strikes, rely on your local authorities for instructions.</p>
+        <button type="button" class="gtk-link" onclick="openHotlines(event)" aria-haspopup="dialog" aria-controls="hotlineModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.6 3.5h2.8l1.4 4.2-2 1.4a11 11 0 0 0 6.1 6.1l1.4-2 4.2 1.4v2.8a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></svg>
+          Emergency hotlines
+        </button>
+      </div>
     </div>
   </div>
 </section>

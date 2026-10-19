@@ -8,7 +8,7 @@
   <title>Route simulator · AGNAS</title>
   <meta name="description" content="Plan safer walking evacuation routes for flood and earthquake scenarios in Barangay Pinagbuhatan and Barangay Sta. Lucia, Pasig City.">
   {# The phone browser's toolbar color; the theme script below swaps it. #}
-  <meta name="theme-color" content="#f6f9fd">
+  <meta name="theme-color" content="#f7f9fc">
   {# Home <-> simulator cross-fade opt-in (styled in style.css). Inline and
      first: from a stylesheet, Chrome sometimes skipped it. #}
   <style>
@@ -28,6 +28,7 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='palette.css') }}">
 </head>
 <body class="sim-page">
 {# Same theme pick as site_base.html: the visitor's choice, else the device's. #}
@@ -627,6 +628,7 @@
 
 {# The PDF library downloads only when a report is requested. #}
 <script src="{{ url_for('static', filename='ui.js') }}"></script>
+<script src="{{ url_for('static', filename='palette.js') }}"></script>
 <script src="{{ url_for('static', filename='location-photos.js') }}"></script>
 <script src="{{ url_for('static', filename='osm.js') }}"></script>
 <script src="{{ url_for('static', filename='flood.js') }}"></script>

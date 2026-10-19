@@ -12,7 +12,7 @@
   const links = document.querySelector('.site-nav .nav-links');
   if (!links || typeof links.animate !== 'function') return;
 
-  const items = Array.from(links.querySelectorAll('.nav-btn'));
+  const items = Array.from(links.querySelectorAll('a.nav-btn'));
   const pageItem = links.querySelector('.nav-btn.is-active');
   const howToUseItem = document.getElementById('howToUseNavBtn');
   const HANDOFF_KEY = 'agnas-nav-pill';
@@ -199,7 +199,7 @@
   }
 
   links.addEventListener('click', (event) => {
-    const item = event.target.closest('.nav-btn');
+    const item = event.target.closest('a.nav-btn');
     // "How to use" opens the tutorial in place; its events move the pill.
     if (!item || item === howToUseItem || event.defaultPrevented || event.button !== 0) return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

@@ -8,7 +8,7 @@ window.BACKEND_BASE = window.BACKEND_BASE || window.location.origin;
 
 const HOME_THEME_STORAGE_KEY = 'disaster-route-sim-theme';
 // The phone browser's toolbar color per theme (--page-top in home.css).
-const HOME_THEME_COLORS = { light: '#f6f9fd', dark: '#0a1420' };
+const HOME_THEME_COLORS = { light: '#f7f9fc', dark: '#000f22' };
 const darkSchemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
 
 // Only a theme the visitor picked with the switch is stored.
@@ -94,6 +94,66 @@ function switchHomeTheme(theme) {
     applyHomeTheme(theme);
   }
 }
+
+// Home and About share the compact right-side menu on phones. The links
+// move back into the header when the viewport reaches desktop width.
+(function initMobileNavigation() {
+  const nav = document.querySelector('.site-nav');
+  const toggle = document.getElementById('siteNavToggle');
+  const links = document.getElementById('siteNavLinks');
+  if (!nav || !toggle || !links) return;
+  const mobile = window.matchMedia('(max-width: 767px)');
+  const drawer = document.getElementById('dashboardNavDrawer');
+  const drawerLinks = document.getElementById('dashboardNavDrawerLinks');
+  const actions = nav.querySelector('.nav-actions');
+  const usesDrawer = () => Boolean(drawer && mobile.matches);
+  function setOpen(open) {
+    open = open && mobile.matches;
+    toggle.setAttribute('aria-expanded', String(open));
+    nav.classList.toggle('is-menu-open', open && !usesDrawer());
+    if (!drawer) return;
+    if (open && usesDrawer()) {
+      if (!drawer.open) drawer.show();
+    } else {
+      drawer.close();
+    }
+  }
+  function placeLinks() {
+    setOpen(false);
+    if (!drawer) return;
+    if (usesDrawer()) {
+      drawerLinks.appendChild(links);
+      toggle.setAttribute('aria-haspopup', 'dialog');
+    } else {
+      actions.before(links);
+      toggle.removeAttribute('aria-haspopup');
+    }
+  }
+  toggle.addEventListener('click', (event) => {
+    const open = toggle.getAttribute('aria-expanded') !== 'true';
+    setOpen(open);
+    if (open && event.detail === 0 && !usesDrawer()) links.querySelector('a')?.focus();
+  });
+  links.addEventListener('click', (event) => {
+    if (event.target.closest('.nav-btn')) setOpen(false);
+  }, true);
+  document.addEventListener('click', (event) => {
+    const menu = usesDrawer() ? drawer : links;
+    if (!menu.contains(event.target) && !toggle.contains(event.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || toggle.getAttribute('aria-expanded') !== 'true') return;
+    event.preventDefault();
+    setOpen(false);
+    toggle.focus();
+  });
+  drawer?.addEventListener('close', () => {
+    toggle.setAttribute('aria-expanded', 'false');
+  });
+  mobile.addEventListener('change', placeLinks);
+  document.addEventListener('tutorial:open', () => setOpen(false));
+  placeLinks();
+})();
 
 // ---- feedback widget and contact form ----
 // Both POST to the backend (contact_service.py): feedback becomes a row in

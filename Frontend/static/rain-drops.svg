@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="720" viewBox="0 0 800 720" fill="none">
+  <defs><path id="drop" d="M0-13S-8-3-8 2a8 8 0 0 0 16 0C8-3 0-13 0-13Z"/></defs>
+  <g stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#drop" transform="translate(58 80) rotate(10)"/>
+    <use href="#drop" transform="translate(393 46) rotate(-12) scale(.8)"/>
+    <use href="#drop" transform="translate(697 168) rotate(8) scale(1.15)"/>
+    <use href="#drop" transform="translate(225 292) rotate(-7) scale(.9)"/>
+    <use href="#drop" transform="translate(525 398) rotate(15)"/>
+    <use href="#drop" transform="translate(88 573) rotate(-14) scale(1.1)"/>
+    <use href="#drop" transform="translate(717 624) rotate(9) scale(.8)"/>
+    <use href="#drop" transform="translate(350 665) rotate(-6)"/>
+    <path d="m157 26-7 18m424 21-5 13m-143 99-7 19m350 142-6 15M58 326l-6 17m290 110-6 16m283 3-7 18M208 592l-6 15m344 81-7 19"/>
+  </g>
+</svg>

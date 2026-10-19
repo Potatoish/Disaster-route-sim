@@ -9,6 +9,8 @@
     ['How to use', 'Paano gamitin'],
     ['Skip to content', 'Pumunta sa nilalaman'],
     ['Main', 'Pangunahing nabigasyon'],
+    ['Navigation menu', 'Menu ng nabigasyon'],
+    ['Close navigation', 'Isara ang nabigasyon'],
     ['AGNAS home', 'Simula ng AGNAS'],
     ['Theme', 'Tema'],
     ['Light mode', 'Maliwanag na tema'],
@@ -383,14 +385,19 @@
   const popup = document.getElementById('siteTranslatePopup');
   function positionMenu() {
     if (document.body.classList.contains('sim-page')) return;
-    const navBottom = document.querySelector('.site-nav')?.getBoundingClientRect().bottom || 0;
-    menu.style.setProperty('--language-nav-bottom', `${Math.round(navBottom)}px`);
-    if (!popup.hidden) popup.style.top = `${Math.round(trigger.getBoundingClientRect().bottom + 8)}px`;
+    if (popup.hidden) return;
+    const rect = trigger.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= innerHeight) {
+      closePopup();
+      return;
+    }
+    const left = Math.max(12, Math.min(rect.right - popup.offsetWidth, innerWidth - popup.offsetWidth - 12));
+    popup.style.left = `${Math.round(left)}px`;
+    popup.style.top = `${Math.round(Math.max(12, Math.min(rect.bottom + 8, innerHeight - popup.offsetHeight - 12)))}px`;
   }
   function showPopup() {
-    positionMenu();
-    if (!document.body.classList.contains('sim-page')) popup.style.top = `${Math.round(trigger.getBoundingClientRect().bottom + 8)}px`;
     popup.hidden = false;
+    positionMenu();
     trigger.setAttribute('aria-expanded', 'true');
   }
   function closePopup(restoreFocus = false) {
@@ -415,6 +422,7 @@
   setLanguage(language, false);
   positionMenu();
   window.addEventListener('resize', positionMenu, { passive: true });
+  window.addEventListener('scroll', () => { if (!popup.hidden) positionMenu(); }, { passive: true });
   document.fonts?.ready?.then(positionMenu);
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;

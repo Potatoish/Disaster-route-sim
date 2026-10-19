@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="900" viewBox="0 0 1000 900" fill="none">
+  <defs>
+    <path id="crack" d="m0-48-10 23 14 18-18 15 8 22-15 21 7 20M4-7l24 3 14-16M-14 8-36-1-49 9m34 42 24 7 10 18"/>
+  </defs>
+  <g stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#crack" transform="translate(175 157) rotate(-20) scale(.85)"/>
+    <use href="#crack" transform="translate(768 82) rotate(28) scale(.75)"/>
+    <use href="#crack" transform="translate(480 392) rotate(-38)"/>
+    <use href="#crack" transform="translate(896 504) rotate(13) scale(.8)"/>
+    <use href="#crack" transform="translate(87 638) rotate(34) scale(.7)"/>
+    <use href="#crack" transform="translate(627 766) rotate(-11) scale(.9)"/>
+  </g>
+</svg>

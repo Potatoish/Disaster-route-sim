@@ -103,10 +103,13 @@
   const FRAME_INTERVAL = 1000 / 60;
 
   // Flood: the water the ant walks through, in the map's own fill colors.
-  const WATER_RIPPLE = { 1: '#ca8a04', 2: '#ea580c', 3: '#be123c' };
+  const WATER_RIPPLE = Object.fromEntries([1, 2, 3].map(level => [level, window.agnasPalette.flood[level].edge]));
   const WATER_POOL = { 1: '250, 204, 21', 2: '249, 115, 22', 3: '225, 29, 72' };
   // Earthquake: Low (1-2), Moderate (3) and High (4+) roads.
-  const QUAKE_RING = { 1: '#ca8a04', 2: '#ca8a04', 3: '#d97706', 4: '#c2410c' };
+  const QUAKE_RING = {
+    1: window.agnasPalette.amber.medium, 2: window.agnasPalette.amber.medium,
+    3: window.agnasPalette.amber.high, 4: window.agnasPalette.amber.edge,
+  };
   // Stronger hazards make larger, bolder, more frequent signal rings.
   // Rings fit inside the walker clear box; cap their count to bound work.
   const HAZARD_SIGNAL_STYLES = {
@@ -461,7 +464,7 @@
           + legendRow('<span class="aco-legend-stuck"></span>', 'Ant that got stuck');
       const hazards = options.hazardLegendHtml || (isFlood
         ? '<div class="aco-legend-levels"><span><i style="background:rgba(250,204,21,.86)"></i>Low</span><span><i style="background:rgba(249,115,22,.9)"></i>Medium</span><span><i style="background:rgba(225,29,72,.94)"></i>High</span></div>'
-        : '<div class="aco-legend-levels"><span><i style="background:#f59e0b"></i>Liquefaction</span><span><i style="background:#c2410c"></i>Ground shaking</span></div>');
+        : '<div class="aco-legend-levels"><span><i style="background:var(--liquefaction-fill)"></i>Liquefaction</span><span><i style="background:var(--shaking-high)"></i>Ground shaking</span></div>');
       // One wrapper, so the phone legend (mobile-sim.js) keeps every row; it
       // leaves out the pin rows (.aco-legend-pins) to stay short there.
       options.legendBody.innerHTML = `<div class="aco-legend">${rows}<div class="aco-legend-pins">${options.legendExtra || ''}</div>${hazards}</div>`;
