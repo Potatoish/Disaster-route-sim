@@ -668,17 +668,17 @@ html.theme-transition .theme-switch{ view-transition-name:theme-switch; }
    earthquake.js). */
 .hz-section{
   --sky-top:#dfeaf7; --sky-bottom:#f5f8fc;
-  --street:#8d99a8; --street-text:#f8fafc;
+  --street:#8d99a8; --street-text:var(--text);
   --house:#cdd8e5; --house-roof:#95a7bd; --window:#f5f8fc;
   --figure:#334155;
   --water:rgba(40,104,170,.42); --water-line:#1e5fa8; --groundwater:rgba(37,132,222,.5); --river:#aad3df;
   --low:#facc15; --low-ink:#854d0e; --low-on:#1c1917;
   --med:#f97316; --med-ink:#c2410c; --med-on:#1c1917;
   --high:#e11d48; --high-ink:#be123c; --high-on:#ffffff;
-  --liq:#f59e0b; --liq-ink:#b45309;
+  --liq:#f59e0b; --liq-ink:#92400e;
   --gs:#c2410c; --gs-ink:#7c2d12;
-  --soil-top:#9c7b5c; --sand:#e3cc98; --sand-grain:#b89a5e; --firm:#7f6f60; --soil-text:#4a3b2c; --crack:#3b2f25;
-  --safe-ink:#166534; --risk-ink:#b45309; --elim-ink:#b91c1c;
+  --soil-top:#9c7b5c; --sand:#e3cc98; --sand-grain:#b89a5e; --firm:#7f6f60; --soil-text:#4a3b2c; --firm-text:#ffffff; --crack:#3b2f25;
+  --safe-ink:#166534; --risk-ink:#92400e; --elim-ink:#b91c1c;
 }
 body.dark .hz-section{
   --sky-top:#0c1726; --sky-bottom:#14223a;
@@ -688,7 +688,7 @@ body.dark .hz-section{
   --water:rgba(56,140,220,.36); --water-line:#60a5fa; --groundwater:rgba(56,150,235,.45); --river:#1b3a4b;
   --low-ink:#facc15; --med-ink:#fb923c; --high-ink:#fb7185;
   --liq-ink:#fbbf24; --gs-ink:#fb923c;
-  --soil-top:#5b4636; --sand:#6e5c3c; --sand-grain:#8d7650; --firm:#3b322b; --soil-text:#eadfca; --crack:#f1e6d2;
+  --soil-top:#5b4636; --sand:#6e5c3c; --sand-grain:#8d7650; --firm:#3b322b; --soil-text:#eadfca; --firm-text:var(--soil-text); --crack:#f1e6d2;
   --safe-ink:#4ade80; --risk-ink:#fbbf24; --elim-ink:#f87171;
 }
 .hz-section p{ margin:0; }
@@ -849,7 +849,7 @@ body.dark .hz-section{
 .hz-cross .xl text, .hz-cross text.xl{ font-family:var(--font-meta); font-size:10px; }
 .hz-cross .xl-note{ fill:var(--text); paint-order:stroke; stroke:var(--sky-bottom); stroke-width:3px; }
 .hz-cross .xl-soil{ fill:var(--soil-text); }
-.hz-cross .xl-water{ fill:#fff; font-weight:500; }
+.hz-cross .xl-water{ fill:var(--text); font-weight:500; }
 .hz-cross .liq-only, .hz-cross .gs-wash, .hz-cross .quake-waves,
 .hz-cross .after-liq, .hz-cross .after-gs, .hz-cross .debris{ opacity:0; transition:opacity .4s; }
 .hz-cross.liq-on .liq-only{ opacity:1; }

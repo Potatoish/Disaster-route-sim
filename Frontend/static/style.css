@@ -440,10 +440,6 @@ body.dark .workflow-card {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), 0 14px 30px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-.workflow-card.completed:not(.active) {
-  border-color: rgba(34, 197, 94, .20);
-}
-
 .workflow-card.disabled {
   opacity: .82;
 }
@@ -1046,6 +1042,17 @@ body.dark .pin-input-menu {
   transition: opacity .18s ease, transform .18s ease;
 }
 
+/* Flood swaps the legend and severity corners; Earthquake keeps its lens. */
+.sim-page[data-hazard-theme="flood"] .map-legend {
+  top: calc(13px + env(safe-area-inset-top, 0px));
+  bottom: auto;
+  left: calc(13px + env(safe-area-inset-left, 0px));
+  right: auto;
+  max-width: min(232px, calc(100% - 160px));
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
 .legend-head {
   margin-bottom: 6px;
   pointer-events: none;
@@ -1261,7 +1268,8 @@ body.dark .pin-input-menu {
 /* Keep the hazard-view control reachable before pinning on narrow maps.
    Setup already gives the pin prompt; a rejected spot still takes priority. */
 .map-wrap.pin-hint-crowded .map-pin-hint:not(.is-error),
-.map-wrap.pin-hint-crowded:has(.map-pin-hint.is-error:not([hidden])) .map-legend {
+.sim-page:not([data-hazard-theme="flood"]) .map-wrap.pin-hint-crowded:has(.map-pin-hint.is-error:not([hidden])) .map-legend,
+.sim-page[data-hazard-theme="flood"] .map-wrap.pin-hint-crowded:has(.map-pin-hint.is-error:not([hidden])) .flood-filter-control {
   opacity: 0;
   visibility: hidden;
 }
@@ -1967,9 +1975,9 @@ body.dark .empty-map {
   display: inline-grid;
 }
 
-/* ...and the flood filter / earthquake lens card, which shares that corner,
+/* ...and the flood legend / earthquake lens card, which shares that corner,
    moves down below it. */
-.app.sidebar-collapsed .flood-filter-control,
+.sim-page[data-hazard-theme="flood"] .app.sidebar-collapsed .map-legend,
 .app.sidebar-collapsed .earthquake-view-switcher {
   top: 50px;
 }
@@ -1988,12 +1996,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 
 .safety-brand { display: flex; align-items: center; gap: 12px; padding: 1px 5px 12px; border-bottom: 1px solid var(--border); }
 .route-safety-panel > .safety-brand { position: static; background: var(--surface); }
-.safety-brand-copy { min-width: 0; }
-.safety-logo-refresh { display: grid; place-items: center; flex: 0 0 52px; width: 52px; min-height: 58px; padding: 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; }
-.safety-logo-refresh:hover { border-color: var(--border2); background: var(--accent-soft-bg); }
-.safety-logo-refresh img { display: block; width: 48px; height: 54px; object-fit: contain; }
-.safety-logo-refresh .safety-logo-dark, body.dark .safety-logo-refresh .safety-logo-light { display: none; }
-body.dark .safety-logo-refresh .safety-logo-dark { display: block; }
+.safety-brand-copy { flex: 1; min-width: 0; }
 .safety-eyebrow { color: var(--accent); font-family: var(--font-meta); font-size: .77rem; font-weight: 700; letter-spacing: .14em; }
 .safety-brand h2, .route-list-modal h2 { margin-top: 4px; color: var(--text); font-size: .92rem; line-height: 1.32; font-weight: 800; }
 .safety-route-hint { margin: 13px 2px 6px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
@@ -2086,8 +2089,11 @@ body.dark .safety-download-btn:hover { background: var(--green); color: var(--ac
 .safety-download-btn:disabled { opacity: .55; cursor: not-allowed; }
 .safety-download-btn.show { display: flex; }
 
-.flood-filter-control { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); right: auto; padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); }
-.flood-filter-title { margin: 0 2px 5px; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
+.flood-filter-control { position: absolute; z-index: 6; top: auto; bottom: calc(34px + env(safe-area-inset-bottom, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); right: auto; padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); }
+.flood-filter-control.is-collapsed { width: max-content; }
+.flood-filter-toggle { gap: 6px; }
+.flood-filter-title { flex: 1; margin: 0; text-align: left; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
+#floodFilterDetails { padding-top: 6px; }
 .flood-filter-buttons { display: flex; gap: 4px; }
 .flood-filter-buttons button { border: 1px solid var(--map-ui-border); border-radius: 6px; padding: 4px 7px; background: transparent; color: var(--map-ui-text); font: 700 .66rem var(--font-body); cursor: pointer; transition: border-color .16s ease, color .16s ease, background-color .16s ease, scale .12s ease; }
 .flood-filter-buttons button.active { background: var(--map-ui-accent); border-color: var(--map-ui-accent); color: var(--accent-ink); }
@@ -2172,7 +2178,7 @@ body.dark .safety-download-btn:hover { background: var(--green); color: var(--ac
   .route-modal-backdrop { padding: 10px; }
   .route-list-modal { max-height: 88vh; max-height: 88dvh; }
   .route-list-modal-head, .route-modal-foot { padding: 13px 14px; }
-  .flood-filter-control, .earthquake-view-switcher { top: 10px; left: 10px; right: auto; }
+  .earthquake-view-switcher { top: 10px; left: 10px; right: auto; }
 }
 
 /* Info dialog (the emergency contacts): clicking the dim backdrop closes it
@@ -2368,8 +2374,7 @@ body.dark .emergency-modal {
   display: none;
 }
 
-/* Map-overlay chip: the same slot and look as .flood-filter-control, since
-   the two never show together (flood vs. earthquake). */
+/* Earthquake keeps its lens in the top-left corner. */
 .earthquake-view-switcher { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); max-width: min(230px, calc(100% - 28px)); }
 .earthquake-view-title { margin: 0 2px 5px; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
 .earthquake-view-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -2395,7 +2400,7 @@ body.dark .emergency-modal {
 .eqtab.active {
   background: var(--map-ui-accent);
   border-color: var(--map-ui-accent);
-  color: var(--accent-ink);
+  color: #ffffff;
 }
 
 .card-action-btn:focus-visible,
@@ -2666,7 +2671,7 @@ body.dark .leaflet-popup-close-button {
 
   .leaflet-control-layers-base label:has(:checked) > span {
     background: var(--map-ui-accent);
-    color: var(--accent-ink);
+    color: #ffffff;
   }
 
   .leaflet-control-layers-base label:has(:focus-visible) > span {
@@ -2775,7 +2780,7 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
    and tap targets. */
 @media (max-width: 1023px) {
   /* The reopen tab is bigger here; keep the map chips below it. */
-  .app.sidebar-collapsed .flood-filter-control,
+  .sim-page[data-hazard-theme="flood"] .app.sidebar-collapsed .map-legend,
   .app.sidebar-collapsed .earthquake-view-switcher {
     top: 58px;
   }
@@ -2784,6 +2789,10 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
     left: calc(12px + env(safe-area-inset-left, 0px));
     bottom: calc(32px + env(safe-area-inset-bottom, 0px));
     max-width: min(220px, calc(100% - 24px));
+  }
+  .flood-filter-control {
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    bottom: calc(32px + env(safe-area-inset-bottom, 0px));
   }
   .legend-toggle { min-height: 44px; }
 
@@ -3037,6 +3046,10 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
     display: flex;
   }
 
+  .sim-page[data-hazard-theme="flood"] .flood-filter-control {
+    bottom: calc(var(--mobile-bar-h) + env(safe-area-inset-bottom, 0px));
+  }
+
   .safety-edit-setup-btn {
     display: block;
   }
@@ -3100,6 +3113,7 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
     max-width: none;
     padding: 6px 10px;
   }
+  .flood-filter-control { left: 10px; bottom: 24px; }
 
   .map-legend .legend-body {
     display: flex;
@@ -4165,7 +4179,7 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
 
 .mlens button.active {
   background: var(--accent);
-  color: var(--accent-ink);
+  color: #ffffff;
 }
 
 .mverdict {
@@ -4232,9 +4246,9 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
   color: var(--red);
 }
 
-/* Keep the full safety guidance above the result actions. */
+/* Separate the leading guidance from the route assessment below it. */
 .msheet-safety-action {
-  margin-top: 10px;
+  margin-block: 10px;
 }
 
 .msummary-route {
@@ -5128,6 +5142,7 @@ body.dark .aco-legend-stuck {
 
 /* The legend moves to the right of the card and keeps to the ants. */
 #appShell.aco-replay-card .map-legend {
+  top: auto;
   left: auto;
   right: calc(12px + env(safe-area-inset-right, 0px));
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));

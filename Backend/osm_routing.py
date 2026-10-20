@@ -49,9 +49,12 @@ PIN_STREET_LABEL_RADIUS_METERS = 30.0
 # With no named street that close, the nearest one within this distance still
 # gives the spot a recognisable name ("a spot near Davao Street").
 PIN_NEARBY_STREET_RADIUS_METERS = 300.0
-# Allow a small tapping/GPS tolerance, but never route from a remote river,
-# building or open lot. Accepted UI pins are placed on the returned road point.
-MAX_PIN_ROAD_DISTANCE_METERS = 12.0
+# Only mapped walkable bridges may accept pins over water. Keep the small
+# tolerance on the bridge itself, never on nearby riverbank roads.
+BRIDGE_PIN_TOLERANCE_METERS = 3.0
+# Site records are map points, not facility footprints. Allow a small tap/GPS
+# tolerance when recognizing the evacuation site where a run starts.
+EVACUATION_SITE_START_RADIUS_METERS = 25.0
 # A pin's route starts/ends where the pin meets the road (see
 # add_road_access_nodes); a meeting point this close to an existing
 # intersection just uses that intersection.
@@ -131,6 +134,7 @@ _FLOOD_ZONES_CACHE = None
 _FLOOD_LAYER_PAYLOAD_CACHE = {}
 _BARANGAY_BOUNDARIES_CACHE = None
 _FLOOD_EVACUATION_SITES_CACHE = None
+_WATER_AREAS_CACHE = None
 _STATIC_CACHE_LOCK = RLock()
 _GRAPH_BUILD_LOCK = RLock()
 _GRAPH_ANNOTATION_LOCK = RLock()
@@ -169,6 +173,7 @@ ox.settings.cache_folder = str(OSMNX_CACHE_DIR)
 FLOOD_CLASSES_DIR = Path(__file__).parent / "data" / "flood_classes"
 BOUNDARIES_DIR = Path(__file__).parent / "data" / "boundaries"
 GRAPHS_DIR = Path(__file__).parent / "data" / "graphs"
+WATER_AREAS_FILE = Path(__file__).parent / "data" / "water" / "waterbodies.geojson"
 FLOOD_EVACUATION_SITES_FILE = Path(__file__).parent / "data" / "flood" / "evacuation_sites.json"
 FLOOD_ZONE_FILES = [
     FLOOD_CLASSES_DIR / "flood_var_1.geojson",
@@ -484,6 +489,19 @@ def get_flood_evacuation_sites(barangay_name):
             "lng": float(site["lng"]),
         }
         for site in _FLOOD_EVACUATION_SITES_CACHE.get(canonical_name, [])
+    ]
+
+
+def exclude_start_evacuation_sites(evacuation_sites, start_lat, start_lng, start_node, site_nodes):
+    """Automatic evacuation runs must go to a different site.
+    Exclude sites within the point-location tolerance and sites sharing the
+    start's road access node, including duplicate/co-located site records.
+    Explicitly pinned destinations do not use this filter."""
+    return [
+        site for site in evacuation_sites
+        if coordinate_distance_meters(start_lat, start_lng, site["lat"], site["lng"])
+        > EVACUATION_SITE_START_RADIUS_METERS
+        and not (start_node is not None and site_nodes.get(site["id"]) == start_node)
     ]
 
 
@@ -929,9 +947,51 @@ def parse_route_pin(value, role):
     }, None
 
 
+def is_point_on_water(lat, lng):
+    """Check stored OSM water polygons, independently of road distance.
+    This is permanent mapped water, not a flood-hazard classification."""
+    global _WATER_AREAS_CACHE
+    if _WATER_AREAS_CACHE is None:
+        with _STATIC_CACHE_LOCK:
+            if _WATER_AREAS_CACHE is None:
+                try:
+                    payload = json.loads(WATER_AREAS_FILE.read_text(encoding="utf-8"))
+                    areas = [shape(feature["geometry"]) for feature in payload["features"]]
+                    if not areas or any(
+                        area.is_empty or not area.is_valid
+                        or area.geom_type not in ("Polygon", "MultiPolygon")
+                        for area in areas
+                    ):
+                        raise ValueError("Invalid water polygons")
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    raise ValueError("Water-area data is unavailable, so this location cannot be checked.") from exc
+                _WATER_AREAS_CACHE = prep(unary_union(areas))
+    return _WATER_AREAS_CACHE.covers(Point(float(lng), float(lat)))
+
+
+def is_point_on_walkable_bridge(G, lat, lng):
+    """Allow a point on a mapped bridge, without exempting riverbank roads."""
+    index = _get_edge_index(G)
+    point = Point(float(lng), float(lat))
+    radius = BRIDGE_PIN_TOLERANCE_METERS / METERS_PER_DEGREE / max(math.cos(math.radians(float(lat))), 0.1)
+    for edge_id in index["tree"].query(point.buffer(radius)):
+        u, v, _, data = index["edges"][edge_id]
+        if u == v or u not in index["main_nodes"] or is_blocked_endpoint_edge(data):
+            continue
+        if not any(tag not in {"no", "false", "0"} for tag in normalize_tag_values(data.get("bridge"))):
+            continue
+        geometry = index["geometries"][edge_id]
+        closest = geometry.interpolate(geometry.project(point))
+        if coordinate_distance_meters(lat, lng, closest.y, closest.x) <= BRIDGE_PIN_TOLERANCE_METERS:
+            return True
+    return False
+
+
 def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):
-    """Accept only covered points within tapping distance of a walkable road.
-    Shared by the instant pin check and both hazards' simulation endpoints."""
+    """Accept covered land locations, including homes away from mapped roads.
+    Mapped water is rejected unless the pin is on a walkable bridge. Pins
+    stay at their selected locations; routing uses the nearest walkable road.
+    Shared by the instant check and both hazards' simulation endpoints."""
     if not is_point_in_hazard_coverage(G, lat, lng):
         return {
             "valid": False,
@@ -942,20 +1002,19 @@ def check_route_pin(G, lat, lng, coverage_label, subject="That spot"):
             ),
         }
 
+    if is_point_on_water(lat, lng) and not is_point_on_walkable_bridge(G, lat, lng):
+        return {
+            "valid": False,
+            "reason": "on_water",
+            "message": "That spot is on a river or mapped water area. Pin a location on land.",
+        }
+
     road = find_nearest_road(G, lat, lng)
     if road is None:
         return {
             "valid": False,
             "reason": "no_road",
             "message": f"No walkable road was found in the area covered by {coverage_label}.",
-        }
-
-    if road["distance"] > MAX_PIN_ROAD_DISTANCE_METERS:
-        return {
-            "valid": False,
-            "reason": "too_far_from_road",
-            "message": "Choose a spot on a walkable road inside the barangay. River and off-road areas cannot be pinned.",
-            "max_road_distance": MAX_PIN_ROAD_DISTANCE_METERS,
         }
 
     if not is_point_in_hazard_coverage(G, road["lat"], road["lng"]):
@@ -2805,12 +2864,10 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         for site, node in zip(covered_sites, access_nodes[1:])
         if node is not None
     }
-    here = next((site for site in covered_sites if site_nodes.get(site["id"]) == start_node), None)
-    if here is not None:
-        return {
-            "error": True,
-            "message": f"The start point is already at {here['name']}, an evacuation site.",
-        }
+    eligible_sites = exclude_start_evacuation_sites(
+        covered_sites, start_lat, start_lng, start_node, site_nodes,
+    )
+    other = "other " if len(eligible_sites) < len(covered_sites) else ""
 
     try:
         road_distances = nx.single_source_dijkstra_path_length(G, start_node, weight="length")
@@ -2818,14 +2875,14 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         road_distances = {}
     reachable_sites = [
         dict(site, road_distance=round(float(road_distances[site_nodes[site["id"]]]), 2))
-        for site in covered_sites
+        for site in eligible_sites
         if site_nodes.get(site["id"]) in road_distances
     ]
     if not reachable_sites:
         return {
             "error": True,
             "message": (
-                "No evacuation site can be reached from this start point without "
+                f"No {other}evacuation site can be reached from this start point without "
                 "leaving the area covered by flood hazard data."
             ),
         }

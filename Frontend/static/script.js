@@ -101,13 +101,13 @@ const PIN_ROLE_COPY = {
   start: {
     empty: 'Your location',
     fallbackLabel: 'Your location',
-    hint: 'Tap a walkable road to pin where you are',
+    hint: 'Tap the map to pin where you are',
     popupRole: 'Start point',
   },
   end: {
     empty: 'Choose destination',
     fallbackLabel: 'Your destination',
-    hint: 'Now tap a walkable road to pin your destination',
+    hint: 'Now tap the map to pin your destination',
     popupRole: 'Destination',
   },
 };
@@ -343,18 +343,33 @@ function showLocationOutsideNotice() {
   );
 }
 
-// The pin hint sits bottom-center and the legend bottom-left; when the map is
-// too narrow for both, the legend steps aside while the hint shows.
+// The bottom-left control steps aside for a rejected pin when their boxes
+// overlap. Flood uses severity here; Earthquake keeps its legend here.
 function syncMapOverlayLayout() {
   const mapWrap = document.querySelector('.map-wrap');
   const hint = document.getElementById('mapPinHint');
   const legend = document.getElementById('mapLegend');
+  const control = document.getElementById(selectedHazard === 'Flood' ? 'floodFilterControl' : 'mapLegend');
   if (!mapWrap || !hint) return;
 
+  // Keep an expanded Flood legend above severity, including short screens.
+  // Its contents can scroll while both panel headers remain reachable.
+  if (selectedHazard === 'Flood' && legend?.getClientRects().length
+    && !document.getElementById('appShell')?.classList.contains('aco-replay-card')) {
+    const bottomEdge = control?.getClientRects().length
+      ? control.getBoundingClientRect().top - 12
+      : mapWrap.getBoundingClientRect().bottom - 24;
+    legend.style.maxHeight = `${Math.max(48, bottomEdge - legend.getBoundingClientRect().top)}px`;
+  } else {
+    legend?.style.removeProperty('max-height');
+  }
+
   let crowded = false;
-  if (!hint.hidden && legend && legend.style.display !== 'none') {
-    const hintLeft = (mapWrap.clientWidth - hint.offsetWidth) / 2;
-    crowded = hintLeft < legend.offsetLeft + legend.offsetWidth + 8;
+  if (!hint.hidden && control?.getClientRects().length) {
+    const hintRect = hint.getBoundingClientRect();
+    const controlRect = control.getBoundingClientRect();
+    crowded = hintRect.left < controlRect.right + 8 && hintRect.right + 8 > controlRect.left
+      && hintRect.top < controlRect.bottom + 8 && hintRect.bottom + 8 > controlRect.top;
   }
   mapWrap.classList.toggle('pin-hint-crowded', crowded);
 }
@@ -368,20 +383,28 @@ function setMapLegendVisible(visible) {
   window.mobileSim?.scheduleSync();
 }
 
-function toggleDesktopMapLegend() {
-  const legend = document.getElementById('mapLegend');
-  const body = document.getElementById('mapLegendDetails');
-  const toggle = document.getElementById('mapLegendToggle');
-  const action = document.getElementById('mapLegendToggleAction');
-  if (!legend || !body || !toggle || !action) return;
+function toggleMapOverlayPanel(panelId, bodyId, toggleId, actionId, label) {
+  const panel = document.getElementById(panelId);
+  const body = document.getElementById(bodyId);
+  const toggle = document.getElementById(toggleId);
+  const action = document.getElementById(actionId);
+  if (!panel || !body || !toggle || !action) return;
 
   const collapsed = toggle.getAttribute('aria-expanded') !== 'false';
-  legend.classList.toggle('is-collapsed', collapsed);
+  panel.classList.toggle('is-collapsed', collapsed);
   body.hidden = collapsed;
   toggle.setAttribute('aria-expanded', String(!collapsed));
-  toggle.setAttribute('aria-label', collapsed ? 'Show map legend' : 'Hide map legend');
+  toggle.setAttribute('aria-label', `${collapsed ? 'Show' : 'Hide'} ${label}`);
   action.textContent = collapsed ? 'Show' : 'Hide';
   syncMapOverlayLayout();
+}
+
+function toggleDesktopMapLegend() {
+  toggleMapOverlayPanel('mapLegend', 'mapLegendDetails', 'mapLegendToggle', 'mapLegendToggleAction', 'map legend');
+}
+
+function toggleFloodSeverityControl() {
+  toggleMapOverlayPanel('floodFilterControl', 'floodFilterDetails', 'floodFilterToggle', 'floodFilterToggleAction', 'flood severity');
 }
 
 function isHazardOnlyView() {
@@ -655,6 +678,7 @@ function syncFloodFilterControl() {
       ? `${overlayConfig.label} highlighted on the map. Routes still check every level. Click again to show all.`
       : 'Click a level to highlight it on the map. Routes always check every level.';
   }
+  syncMapOverlayLayout();
   window.mobileSim?.scheduleSync();
 }
 
@@ -1237,6 +1261,7 @@ function initMap() {
     const dy = rect.top - lastMapRect.top;
     lastMapRect = rect;
     gMap.invalidateSize({ pan: false, debounceMoveend: true });
+    syncMapOverlayLayout();
     if (dx || dy) gMap.panBy([dx, dy], { animate: false });
   };
   const mapResizeObserver = new ResizeObserver(() => {
@@ -3109,13 +3134,14 @@ async function placeRoutePin(role, lat, lng) {
   }
 
   routePins[role] = {
-    lat: Number(check.road_lat),
-    lng: Number(check.road_lng),
+    // Keep the chosen house/location. Only the route uses the road point.
+    lat,
+    lng,
     status: 'ready',
     street: check.street || null,
     nearbyStreet: check.nearby_street || null,
-    roadDistance: 0,
-    label: buildPinLabel(role, check.street, 0),
+    roadDistance: Number(check.road_distance),
+    label: buildPinLabel(role, check.street, check.road_distance),
   };
   // A pinned destination replaces the evacuation sites.
   if (role === 'end' && floodToEvacSite) {
@@ -3176,7 +3202,7 @@ function syncEarthquakeRouteUi() {
   if (pinFieldHelp) {
     pinFieldHelp.textContent = choicePending
       ? 'Drag a pin to adjust it.'
-      : 'Choose a road inside the barangay.';
+      : 'Pin a location inside the barangay. Routes use the nearest mapped road.';
   }
 
   syncRoutePinFields();
@@ -3263,10 +3289,23 @@ function buildBoundaryLegendRow() {
 // A small copy of a map marker for the legend: a teardrop in the marker's
 // colors with its letter (the S/E pins, makeRouteEndpointPinIcon) or a
 // house (evacuation sites, earthquake.js).
+function markerContrastInk(fill) {
+  // Marker fills are six-digit hex colors. Pick the more legible foreground
+  // from navy and white, independently of the surrounding page theme.
+  const luminance = hex => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255)
+    .map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+  const background = luminance(fill);
+  const dark = luminance('#000f22');
+  const darkContrast = (Math.max(background, dark) + 0.05) / (Math.min(background, dark) + 0.05);
+  return darkContrast >= 1.05 / (background + 0.05) ? '#000f22' : '#ffffff';
+}
+
 function buildLegendPinSvg(fill, stroke, glyph) {
+  const ink = glyph === 'S' || glyph === 'house' ? '#ffffff' : markerContrastInk(fill);
   const mark = glyph === 'house'
-    ? '<path d="M6.6 9.6 10 6.8l3.4 2.8M7.8 9v3.4h4.4V9" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
-    : `<text x="10" y="12.4" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="8.5" font-weight="800" fill="#fff" stroke="none">${glyph}</text>`;
+    ? `<path d="M6.6 9.6 10 6.8l3.4 2.8M7.8 9v3.4h4.4V9" fill="none" stroke="${ink}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
+    : `<text x="10" y="12.4" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="8.5" font-weight="800" fill="${ink}" stroke="none">${glyph}</text>`;
   return `<svg class="legend-pin" viewBox="0 0 20 24" aria-hidden="true"><path d="M10 1.5C5.6 1.5 2 5 2 9.4c0 5.6 6.3 9.4 8 13.1 1.7-3.7 8-7.5 8-13.1C18 5 14.4 1.5 10 1.5z" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>${mark}</svg>`;
 }
 
@@ -3435,9 +3474,7 @@ const MAP_FIT_MAX_ZOOM = 17;
 const MAP_FIT_MIN_ROUTE_SIZE = 64;
 
 // fitBounds options that keep fitted routes and pins out from under the
-// map's own overlays -- the flood filter / earthquake lens card and the
-// sidebar tab (top-left) and the legend (bottom) -- which on a phone cover a
-// large share of the map.
+// map's own corner controls, sidebar tab and mobile sheets.
 function getMapFitPadding(base = 24, { markers = true, bounds = null } = {}) {
   const mapEl = document.getElementById('map');
   if (!mapEl) return { padding: [base, base], maxZoom: MAP_FIT_MAX_ZOOM };
@@ -3449,12 +3486,15 @@ function getMapFitPadding(base = 24, { markers = true, bounds = null } = {}) {
   let right = base;
   const floatingOverlays = [];
 
-  ['floodFilterControl', 'earthquakeViewSelector', 'sidebarReopenBtn'].forEach(id => {
+  ['floodFilterControl', 'earthquakeViewSelector', 'sidebarReopenBtn', 'mapLegend'].forEach(id => {
     const el = document.getElementById(id);
     if (!el || !el.getClientRects().length) return;
     const rect = el.getBoundingClientRect();
     floatingOverlays.push(rect);
-    top = Math.max(top, rect.bottom - mapRect.top + 12);
+    const atBottom = id === 'floodFilterControl' || (id === 'mapLegend'
+      && (selectedHazard !== 'Flood' || document.getElementById('appShell')?.classList.contains('aco-replay-card')));
+    if (atBottom) bottom = Math.max(bottom, mapRect.bottom - rect.top + 12);
+    else top = Math.max(top, rect.bottom - mapRect.top + 12);
   });
 
   // Phone/tablet layout: its top bar, bottom sheet and legend chip, the map
@@ -3472,13 +3512,6 @@ function getMapFitPadding(base = 24, { markers = true, bounds = null } = {}) {
     top += MAP_FIT_MARKER_HEADROOM;
     left = Math.max(left, 40);
     right = Math.max(right, 40);
-  }
-
-  const legend = document.getElementById('mapLegend');
-  if (legend && legend.getClientRects().length) {
-    const rect = legend.getBoundingClientRect();
-    floatingOverlays.push(rect);
-    bottom = Math.max(bottom, mapRect.bottom - rect.top + 12);
   }
 
   if (!covered) {
@@ -3668,6 +3701,7 @@ function makeRouteEndpointPinIcon(kind = 'start') {
   const glyph = isStart ? 'S' : 'E';
   const outerGlow = isStart ? 'rgba(6,182,212,0.22)' : 'rgba(168,85,247,0.22)';
   const innerFill = isStart ? '#0891b2' : '#9333ea';
+  const ink = isStart ? '#ffffff' : markerContrastInk(innerFill);
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="72" height="88" viewBox="0 0 72 88">
       <defs>
@@ -3700,7 +3734,7 @@ function makeRouteEndpointPinIcon(kind = 'start') {
         <circle cx="36" cy="33" r="14.8" fill="#ffffff" opacity="0.99"/>
         <circle cx="36" cy="33" r="10.8" fill="${innerFill}" opacity="0.98"/>
         <circle cx="31.5" cy="24.5" r="4.1" fill="rgba(255,255,255,0.28)" />
-        <text x="36" y="38" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="12.8" font-weight="900" fill="#ffffff">${glyph}</text>
+        <text x="36" y="38" text-anchor="middle" font-family="Plus Jakarta Sans, Nunito, sans-serif" font-size="12.8" font-weight="900" fill="${ink}">${glyph}</text>
       </g>
     </svg>
   `;
@@ -3833,9 +3867,9 @@ function buildRouteInfoHtml() {
   }
   if (isAnyRoutePinChecking()) return 'Checking this spot…';
   if (canRunCurrentSimulation()) return '';
-  if (!getReadyPin('start')) return 'Pin your location on a walkable road.';
+  if (!getReadyPin('start')) return 'Pin your location on the map first.';
   if (isWaitingForEvacSites()) return 'Choose an evacuation site or pin a destination.';
-  return 'Pin your destination on a walkable road.';
+  return 'Pin your destination on the map.';
 }
 
 async function selectHazard(name, el) {
@@ -5212,7 +5246,8 @@ function buildCurrentRouteSummary(route, result) {
   const start = result.start || getReadyPin('start')?.label || PIN_ROLE_COPY.start.fallbackLabel;
   const end = route.destination_name || result.end || getReadyPin('end')?.label || PIN_ROLE_COPY.end.fallbackLabel;
   const comparison = getRouteComparisonText(route, view.best);
-  return `<div class="safety-section-label" data-current-route-context>${escapeHtml(view.context)}</div>
+  return `${buildSafetyActionCard(view.action)}
+    <div class="safety-section-label" data-current-route-context>${escapeHtml(view.context)}</div>
     <div class="safety-result-cards">
       <div class="safety-result-card result-route-assessment ${verdict.card}">
         <div class="safety-icon-box">${safetyIcon(verdict.icon)}</div>
@@ -5224,7 +5259,6 @@ function buildCurrentRouteSummary(route, result) {
         <div><dt>Estimated walk</dt><dd data-current-route-time>${escapeHtml(view.notWalkable ? 'Not walkable' : route.display_duration || formatRouteWalkingDuration(route))}</dd></div>
       </dl>
       ${buildSafetyHazardCard(view.peak, Number(route.max_hazard || 0), view.isEarthquake)}
-      ${buildSafetyActionCard(view.action)}
     </div>
     ${isFarFromOpenArea(route) ? `<p class="result-route-description">${escapeHtml(FAR_FROM_OPEN_AREA_NOTE)}</p>` : ''}
     ${!view.notWalkable && routeHasWadingTime(route) ? '<p class="result-walking-note">Slower pace through flood water</p>' : ''}

@@ -168,27 +168,53 @@ html[data-keyboard-open="true"] .fab-panel {
   min-height: 44px;
   padding: 8px 10px;
   border-width: 2px;
+  border-radius: 10px;
   font-size: .8125rem;
   font-weight: 700;
   line-height: 1.35;
   white-space: normal;
 }
-.sim-page :is(.safety-actions .reset-btn, #msimNewSimBtn, #msimDetailsBtn.mbtn--primary, .result-route-reset) {
+.sim-page :is(#msimDetailsBtn.mbtn--primary, .result-route-reset) {
   background: var(--hazard-panel-strong);
   border-color: var(--hazard-panel-strong);
-  color: var(--accent-ink);
+  color: var(--strong-ink);
+}
+.sim-page :is(.safety-actions .reset-btn, #msimNewSimBtn) {
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+  color: var(--strong-ink);
+}
+.sim-page[data-hazard-theme="earthquake"] :is(.safety-actions .reset-btn, #msimNewSimBtn) {
+  background: #84350e;
+  border-color: #84350e;
 }
 .sim-page :is(.safety-download-btn, #msimReportBtn) {
-  background: #15803d;
-  border-color: #15803d;
-  color: #fff;
+  gap: 6px;
+  background: var(--panel);
+  border-color: #dde1e6;
+  color: #2c3038;
 }
 .sim-page.dark :is(.safety-download-btn, #msimReportBtn) {
-  background: #86efac;
-  border-color: #86efac;
-  color: #052e16;
+  border-color: var(--border2);
+  color: var(--text);
 }
-.sim-page :is(.safety-actions button, #msimNewSimBtn, #msimReportBtn):hover:not(:disabled) { filter: brightness(1.08); }
+.sim-page :is(.safety-download-btn, #msimReportBtn) svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--green-ink);
+}
+.sim-page :is(.safety-download-btn, #msimReportBtn):hover:not(:disabled) {
+  background: var(--panel-strong);
+  filter: none;
+}
+.sim-page :is(.safety-download-btn, #msimReportBtn):disabled {
+  background: var(--panel-strong);
+  border-color: var(--border);
+  color: var(--muted);
+  filter: none;
+}
+.sim-page :is(.safety-actions .reset-btn, #msimNewSimBtn):hover:not(:disabled) { filter: brightness(1.04); }
 .result-route-nav {
   display: flex;
   flex-wrap: wrap;
@@ -231,7 +257,7 @@ html[data-keyboard-open="true"] .fab-panel {
   border: 2px solid var(--accent);
   border-radius: 8px;
   background: var(--hazard-panel-strong);
-  color: var(--accent-ink);
+  color: var(--strong-ink);
   font: 800 .8125rem var(--font-body);
   cursor: pointer;
 }

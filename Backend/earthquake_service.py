@@ -26,6 +26,7 @@ from osm_routing import (
     download_walk_graph,
     edge_traversal_cost,
     estimate_boundary_graph_radius,
+    exclude_start_evacuation_sites,
     get_barangay_base_graph,
     extract_route_street_path,
     extract_route_turn_steps,
@@ -680,8 +681,12 @@ def simulate_earthquake(start, barangay_name, end=None):
                 "error": True,
                 "message": "The start and destination meet the road at the same spot. Move one of the pins farther away.",
             }
+        eligible_sites = covered_sites if end_location else exclude_start_evacuation_sites(
+            covered_sites, start_location["lat"], start_location["lng"], start_node, site_nodes,
+        )
+        other = "other " if len(eligible_sites) < len(covered_sites) else ""
         evaluated_sites = (
-            _collect_road_reachable_evacuation_sites(routing_graph, start_node, covered_sites, site_nodes)
+            _collect_road_reachable_evacuation_sites(routing_graph, start_node, eligible_sites, site_nodes)
             if start_node is not None
             else []
         )
@@ -691,7 +696,7 @@ def simulate_earthquake(start, barangay_name, end=None):
                 "message": (
                     "No route can reach your destination without leaving the area covered by earthquake hazard data."
                 ) if end_location else (
-                    "No evacuation site can be reached from this start point without "
+                    f"No {other}evacuation site can be reached from this start point without "
                     "leaving the area covered by earthquake hazard data."
                 ),
             }

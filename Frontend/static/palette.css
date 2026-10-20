@@ -23,6 +23,7 @@ body.site-page, body.sim-page {
   --text: var(--blue-950); --muted: #466477; --dim: #53758a;
   --ink-strong: var(--blue-900); --ink-soft: #466477;
   --accent: var(--blue-500); --accent2: var(--blue-700); --accent-ink: #ffffff;
+  --strong-ink: #ffffff; --quake-text: var(--amber-900);
   --accent-soft-bg: #eaf6fb; --accent-soft-border: #b2d7e7; --accent-soft-shadow: transparent;
   --hazard-selected-bg: #eaf6fb; --hazard-selected-border: var(--blue-500);
   --hazard-selected-text: var(--blue-700);
@@ -44,6 +45,7 @@ body.site-page.dark, body.sim-page.dark {
   --text: #effaff; --muted: #b1d4e2; --dim: #96bfce;
   --ink-strong: #effaff; --ink-soft: #c2e0ed;
   --accent: var(--blue-300); --accent2: var(--blue-100); --accent-ink: var(--blue-950);
+  --strong-ink: var(--blue-950); --quake-text: var(--amber-100);
   --accent-soft-bg: #153b50; --accent-soft-border: #2a677f;
   --hazard-selected-bg: #153b50; --hazard-selected-border: var(--blue-300);
   --hazard-selected-text: var(--blue-100);
@@ -137,7 +139,8 @@ body.site-page.dark { --accent-text: var(--blue-300); }
 }
 .site-page .gtk-card { border-inline-start: 3px solid var(--card-accent); }
 .site-page .algo-step { border-top: 3px solid var(--card-accent); }
-.site-page .algo-step-no { color: var(--card-accent); }
+.site-page :is(.algo-step-no, .algo-step-zero) { color: var(--accent-text); }
+.site-page .algo-badge-label { fill: var(--blue-950); }
 .site-page .algo-diagram {
   border: 0; background: var(--accent-soft-bg); padding: 12px; border-radius: 12px;
 }
@@ -207,7 +210,7 @@ body.site-page.dark { --accent-text: var(--blue-300); }
 .site-page .hz-level[aria-pressed="true"], .site-page .hz-tile[aria-pressed="true"] {
   border-color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--c-ink);
 }
-.site-page .hz-sim-btn { color: var(--quake-theme-ink); border-color: var(--border2); }
+.site-page .hz-sim-btn { color: var(--quake-text); border-color: var(--border2); }
 .sim-page :is(.left-panel, .right-panel, .route-safety-panel, .topbar, .msheet) { background: var(--surface); }
 body.sim-page .workflow-card, body.sim-page.dark .workflow-card {
   background: var(--panel); box-shadow: none;
@@ -221,6 +224,8 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
 .sim-page #hEarthquake .hazard-icon {
   color: var(--quake-theme-ink); background: color-mix(in srgb, var(--amber-400) 18%, var(--panel));
 }
+.sim-page .hazard-icon .disaster-icon { width: 28px; height: 28px; }
+.sim-page .mhazard-name .disaster-icon { flex-shrink: 0; }
 .sim-page [data-msim-hazard="Flood"] svg { color: var(--flood-theme-ink); }
 .sim-page [data-msim-hazard="Earthquake"] svg { color: var(--quake-theme-ink); }
 .sim-page :is(.run-btn, .evac-btn) {
@@ -234,6 +239,75 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
 .sim-page #loaderProgress.loader-progress--earthquake {
   --accent: var(--amber-700); --accent2: var(--amber-400);
 }
+/* Default/light palette: steel blue and Sunset Orange from the chosen swatches. */
+body.site-page:not(.dark), body.sim-page:not(.dark) {
+  --blue-100: #c0e6fd; --blue-300: #80aad3; --blue-500: #5b86b6;
+  --blue-700: #3f6593; --blue-900: #1b3554; --blue-950: #000f22;
+  --amber-100: #ffd9a3; --amber-200: #ffb45c;
+  --amber-300: #f28b2c; --amber-400: #f28b2c;
+  --amber-600: #c35a1a; --amber-700: #c35a1a;
+  --amber-900: #7a2e0b; --amber-950: #1a0d06;
+  --accent: var(--blue-500); --accent2: var(--blue-700);
+  --accent-ink: var(--blue-950); --accent-text: var(--blue-700);
+  --panel-strong: #f0f4f8; --border: #d1ddea; --border2: #9db5cf;
+  --accent-soft-bg: #eef3f9; --accent-soft-border: #c3d3e5;
+  --hazard-selected-bg: #eef3f9; --hazard-selected-border: var(--blue-500);
+  --hazard-selected-text: var(--blue-700);
+  --hazard-chip-bg: #eef3f9; --hazard-chip-border: #c3d3e5; --hazard-chip-text: var(--blue-700);
+  --hazard-panel-bg: #eef3f9; --hazard-panel-border: #c3d3e5; --hazard-panel-strong: var(--blue-700);
+  --hazard-button-start: var(--blue-500); --hazard-button-end: var(--blue-500);
+  --map-ui-accent: var(--blue-500);
+  --flood-theme-ink: var(--blue-500); --quake-theme-ink: var(--amber-400);
+  --quake-card-line: color-mix(in srgb, var(--amber-400) 50%, var(--surface));
+}
+body.sim-page:not(.dark)[data-hazard-theme="earthquake"] {
+  --accent: var(--amber-400); --accent2: var(--amber-600);
+  --accent-ink: var(--amber-950); --accent-text: var(--amber-900);
+  --map-ui-accent: var(--amber-400);
+  --accent-soft-bg: #fff3e7; --accent-soft-border: #f3c9a3;
+  --hazard-selected-bg: #fff3e7; --hazard-selected-border: var(--amber-400);
+  --hazard-selected-text: var(--amber-900);
+  --hazard-chip-bg: #fff3e7; --hazard-chip-border: #f3c9a3; --hazard-chip-text: var(--amber-900);
+  --hazard-panel-bg: #fff3e7; --hazard-panel-border: #f3c9a3; --hazard-panel-strong: var(--amber-900);
+  --hazard-button-start: var(--amber-400); --hazard-button-end: var(--amber-400);
+}
+body.site-page:not(.dark) :is(.nav-btn:is(:active, .is-active), .nav-pill,
+  .cta, .fab, .fab-send, .tutorial-btn.primary, .skip-link) {
+  background: var(--blue-500);
+}
+body.site-page:not(.dark) .dashboard-nav-drawer .nav-links.has-pill .nav-btn.is-active {
+  background: var(--blue-500);
+}
+body.site-page:not(.dark) .qs-cta:hover { background: var(--blue-300); color: var(--accent-ink); }
+body.site-page:not(.dark) .theme-switch-btn.is-active { color: var(--accent-text); }
+body.site-page:not(.dark) .wave-zone::after { background: var(--amber-400); }
+body.sim-page:not(.dark) :is(.run-btn, .evac-btn) { background: var(--hazard-button-start); }
+/* Use the darker supporting swatches for small text on pale surfaces. */
+body.sim-page:not(.dark) :is(.panel-barangay-label, .panel-barangay-seg button[aria-pressed="true"],
+  .panel-back-btn:hover:not(:disabled), .card-action-btn:hover:not(:disabled), .sec-label,
+  .pin-input-menu-item, .safety-eyebrow, .src-name, .mslot-edit, .msheet-label,
+  .legend-title,
+  .aco-replay-skip:hover, .msheet .aco-replay-more, .safety-all-routes-btn:not(:hover),
+  .route-modal-btn:not(.primary):hover, .safety-edit-setup-btn:hover) { color: var(--accent-text); }
+body.sim-page:not(.dark) .leaflet-control-attribution { --map-ui-accent: var(--accent-text); }
+body.sim-page:not(.dark) .loader-visual--flood .loader-graph,
+body.sim-page:not(.dark) #loaderProgress.loader-progress--flood { --accent: var(--blue-500); }
+body.sim-page:not(.dark) .loader-visual--earthquake .loader-graph,
+body.sim-page:not(.dark) #loaderProgress.loader-progress--earthquake { --accent: var(--amber-400); }
+
+/* Keep secondary and inactive text readable as the theme colors change. */
+body:is(.site-page, .sim-page) :is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
+.sim-page .mslot.is-disabled { opacity: 1; background: var(--panel-strong); }
+.sim-page .mslot.is-disabled :is(.mslot-label, .mslot-value) { color: var(--muted); }
+.sim-page .mslot.is-disabled .mslot-badge { opacity: .6; }
+body:is(.site-page, .sim-page) :is(.run-btn, .evac-btn, .mbtn, .tutorial-btn,
+  .fab-send, .hz-sim-btn, .pin-input, .card-action-btn, .safety-download-btn):disabled {
+  opacity: 1; color: var(--muted); background: var(--panel-strong);
+  border-color: var(--border); box-shadow: none;
+}
+.sim-page .safety-disclaimer-link { color: var(--danger-ink); }
+.sim-page .safety-disclaimer-link:is(:hover, :focus-visible) { opacity: 1; }
+
 @media (max-width: 999px) {
   .site-page .hero-split { grid-template-columns: 1fr; gap: 28px; }
   .site-page .hero-inner { padding-block: 36px; }
@@ -307,4 +381,18 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
 }
 @media (max-width: 359px) {
   .site-page .nav-btn { padding-inline: 7px; font-size: 12px; }
+}
+
+/* White labels on filled actions; keep each component's existing surface. */
+body:is(.site-page, .sim-page) :is(.cta, .fab, .fab-send, .skip-link,
+  .tutorial-btn.primary, .run-btn, .evac-btn, .mbtn--primary,
+  .route-modal-btn.primary, .result-route-reset, .safety-actions .reset-btn,
+  #msimNewSimBtn):not(:disabled):not([aria-disabled="true"]) {
+  --accent-ink: #ffffff;
+  --strong-ink: #ffffff;
+  color: #ffffff;
+}
+.sim-page :is(.safety-all-routes-btn, .safety-card-action):hover:not(:disabled) {
+  --accent-ink: #ffffff;
+  color: #ffffff;
 }

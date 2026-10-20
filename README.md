@@ -9,7 +9,7 @@ AGNAS is a planning tool for use *before* a disaster. It works from stored hazar
 
 ## What It Does
 
-The visitor picks a barangay and a hazard, pins a start point and optionally a destination on a walkable road inside the barangay, and runs a simulation. Taps within 12 metres of a valid road snap onto it; river and off-road selections farther away are rejected. AGNAS then shows the safest walking routes it found, with the hazard each one crosses.
+The visitor picks a barangay and a hazard, pins a start point and optionally a destination inside the covered area, and runs a simulation. Pins stay at the selected locations, including houses away from mapped roads. Stored OpenStreetMap water polygons block river and other mapped water locations, except on mapped walkable bridges. Routes start and end on the nearest walkable roads; access between a house and the road is not assessed. AGNAS then shows the safest walking routes it found, with the hazard each one crosses.
 
 - **Flood** — point to point. Uses Project NOAH flood hazard classes (`Var 1`/`2`/`3` → Low up to 0.5 m / Medium 0.5–1.5 m / High over 1.5 m).
 - **Earthquake** — from the start point to an automatically selected evacuation site or a destination pinned by the visitor. Uses liquefaction and ground-shaking levels (PHIVOLCS, through HazardHunterPH), with three result views: Overall, Liquefaction and Ground Shaking.
@@ -21,7 +21,8 @@ The visitor picks a barangay and a hazard, pins a start point and optionally a d
 - **Three flood verdicts** — High water (over 1.5 m) rules a route out. Medium water (0.5–1.5 m) is unsafe for children and older adults and, past 1.2 m, for anyone (AIDR Flood Hazard Guideline 7-3, 2017), so a route through it is shown as a "Risky route" with the metres of Medium water it crosses, drawn as an amber line, never as safe. Only a route entirely in Low water (up to 0.5 m) is a "Safe route found", and such a route always ranks first.
 - **Missing data is never "safe"** — routes stay on roads inside the area the hazard data covers; a road without a hazard reading is treated as high hazard.
 - **Routes on the street** — routes start and end where each pin meets the nearest road, never drawn through buildings.
-- **English/Tagalog throughout** — the language choice follows the visitor across the homepage, About page and simulator, including setup, results, directions, hazard layers and dialogs.
+- **Starting at an evacuation site** — automatic evacuation routing skips sites within 25 metres of the start or sharing its road access point, then ranks the other reachable sites by safety. A destination explicitly pinned by the visitor stays as selected.
+- **English/Tagalog website** — the homepage and About page offer a language choice; the simulator uses English.
 - **Results** — a verdict (safe route found or not), each route's distance, estimated walking time (at 5 km/h), highest hazard level crossed and turn-by-turn steps, up to five routes on the map, and a downloadable PDF report.
 - **Repeatable and fair** — the same pins always give the same routes, and visitors' simulations run one at a time in a queue (a second visitor waits in line instead of being turned away).
 - **Interactive map** — built on Leaflet (served by the app itself) with OpenStreetMap tiles and an optional Esri World Imagery satellite layer, no API key required. A recenter button glides back to the route (or the whole barangay before a run), a My location button shows where you are as a blue dot (only when you are inside the barangay), and the barangay can be switched in place (the setup panel's toggle, or the top bar's barangay name on phones and tablets).

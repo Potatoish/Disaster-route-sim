@@ -804,7 +804,7 @@
     if (isEarthquakeMode() && !isEarthquakeBarangaySupported()) {
       return `Earthquake routing is currently available only for ${EARTHQUAKE_SUPPORTED_BARANGAY_SCOPE}.`;
     }
-    if (checking) return 'Checking that the pinned spot can be reached by road…';
+    if (checking) return 'Checking the nearest mapped road…';
     // An empty slot being set already says what to do ("Move the map, then
     // tap ..."; syncPinSlot), so the sheet says it once.
     if (role) return routePins[role] ? `Drag the map so the pin sits on the ${role === 'start' ? 'start' : 'end'} point.` : '';
@@ -1311,14 +1311,14 @@
 
   async function downloadReport(button) {
     if (!button || button.disabled) return;
-    const label = button.textContent;
+    const label = button.innerHTML;
     button.disabled = true;
     button.textContent = 'Preparing report…';
     try {
       await downloadSimulationReport();
     } finally {
       button.disabled = false;
-      button.textContent = label;
+      button.innerHTML = label;
     }
   }
 

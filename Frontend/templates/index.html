@@ -1,3 +1,4 @@
+{% from '_hazard_icons.html' import hazard_icon %}
 <!DOCTYPE html>
 <html lang="en" translate="no" class="notranslate">
 <head>
@@ -97,7 +98,7 @@
         <div class="workflow-card-body">
           <div class="hazard-grid">
             <button type="button" class="hazard-card flood" id="hFlood" aria-pressed="false" onclick="selectHazard('Flood', this)">
-              <span class="hazard-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><path d="M3 19.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><circle cx="12" cy="6.5" r="2"/><path d="M12 8.5v3.8"/></svg></span>
+              <span class="hazard-icon" aria-hidden="true">{{ hazard_icon('Flood') }}</span>
               <span>
                 <span class="hazard-name">Flood</span>
                 <span class="hazard-sub">Water level</span>
@@ -105,7 +106,7 @@
             </button>
 
             <button type="button" class="hazard-card" id="hEarthquake" aria-pressed="false" onclick="selectHazard('Earthquake', this)">
-              <span class="hazard-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12h4l2-5 3.5 10 3-8 2 3h4.5"/></svg></span>
+              <span class="hazard-icon" aria-hidden="true">{{ hazard_icon('Earthquake') }}</span>
               <span>
                 <span class="hazard-name">Earthquake</span>
                 <span class="hazard-sub">Liquefaction / Ground shaking</span>
@@ -185,7 +186,7 @@
               </button>
             </div>
 
-            <div class="pin-field-help" id="pinFieldHelp">Choose a road inside the barangay.</div>
+            <div class="pin-field-help" id="pinFieldHelp">Pin a location inside the barangay. Routes use the nearest mapped road.</div>
           </div>
         </div>
       </div>
@@ -221,15 +222,21 @@
         <div class="earthquake-view-hint" id="earthquakeViewCopy">Earthquake result lens</div>
       </div>
 
-      <div class="flood-filter-control" id="floodFilterControl" hidden>
-        <div class="flood-filter-title">Flood severity</div>
-        <div class="flood-filter-buttons" role="group" aria-label="Highlight flood severity">
-          <button type="button" data-flood-filter="low" onclick="setFloodHazardOverlayMode('low')"><span class="swatch" style="background:rgba(250,204,21,.86)"></span>Low</button>
-          <button type="button" data-flood-filter="moderate" onclick="setFloodHazardOverlayMode('moderate')"><span class="swatch" style="background:rgba(249,115,22,.90)"></span>Medium</button>
-          <button type="button" data-flood-filter="high" onclick="setFloodHazardOverlayMode('high')"><span class="swatch" style="background:rgba(225,29,72,.94)"></span>High</button>
-          <button type="button" data-flood-filter="all" onclick="setFloodHazardOverlayMode('all')">All</button>
+      <div class="flood-filter-control is-collapsed" id="floodFilterControl" hidden>
+        <button class="legend-toggle flood-filter-toggle" id="floodFilterToggle" type="button" onclick="toggleFloodSeverityControl()" aria-expanded="false" aria-controls="floodFilterDetails" aria-label="Show flood severity">
+          <span class="flood-filter-title">Flood severity</span>
+          <span class="legend-toggle-action" id="floodFilterToggleAction">Show</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="floodFilterDetails" hidden>
+          <div class="flood-filter-buttons" role="group" aria-label="Highlight flood severity">
+            <button type="button" data-flood-filter="low" onclick="setFloodHazardOverlayMode('low')"><span class="swatch" style="background:rgba(250,204,21,.86)"></span>Low</button>
+            <button type="button" data-flood-filter="moderate" onclick="setFloodHazardOverlayMode('moderate')"><span class="swatch" style="background:rgba(249,115,22,.90)"></span>Medium</button>
+            <button type="button" data-flood-filter="high" onclick="setFloodHazardOverlayMode('high')"><span class="swatch" style="background:rgba(225,29,72,.94)"></span>High</button>
+            <button type="button" data-flood-filter="all" onclick="setFloodHazardOverlayMode('all')">All</button>
+          </div>
+          <div class="flood-filter-hint" id="floodFilterHint">Click a level to highlight it on the map. Routes always check every level.</div>
         </div>
-        <div class="flood-filter-hint" id="floodFilterHint">Click a level to highlight it on the map. Routes always check every level.</div>
       </div>
 
       <div class="map-pin-hint" id="mapPinHint" role="status" aria-live="polite" hidden>
@@ -257,16 +264,16 @@
         })();
       </script>
 
-      <div class="map-badge map-legend" id="mapLegend" style="display:none;">
+      <div class="map-badge map-legend is-collapsed" id="mapLegend" style="display:none;">
         <div class="legend-head">
-          <button class="legend-toggle" id="mapLegendToggle" type="button" onclick="toggleDesktopMapLegend()" aria-expanded="true" aria-controls="mapLegendDetails" aria-label="Hide map legend">
+          <button class="legend-toggle" id="mapLegendToggle" type="button" onclick="toggleDesktopMapLegend()" aria-expanded="false" aria-controls="mapLegendDetails" aria-label="Show map legend">
             <span class="legend-title">Legend</span>
-            <span class="legend-toggle-action" id="mapLegendToggleAction">Hide</span>
+            <span class="legend-toggle-action" id="mapLegendToggleAction">Show</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
           </button>
         </div>
 
-        <div id="mapLegendDetails">
+        <div id="mapLegendDetails" hidden>
           <div class="legend-body" id="mapLegendBody"></div>
           <div class="legend-map-view">
             <button type="button" class="legend-hazard-toggle" data-hazards-only aria-pressed="false" onclick="toggleHazardOnlyView()">
@@ -401,14 +408,14 @@
                 <div class="mhazard-grid">
                   <button type="button" class="mhazard" data-msim-hazard="Flood" aria-pressed="false" onclick="chooseMobileHazard('Flood')">
                     <span class="mhazard-name">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><path d="M3 19.5c1.5 0 1.5-1.2 3-1.2s1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2 1.5-1.2 3-1.2 1.5 1.2 3 1.2"/><circle cx="12" cy="6.5" r="2"/><path d="M12 8.5v3.8"/></svg>
+                      {{ hazard_icon('Flood') }}
                       Flood
                     </span>
                     <span class="mhazard-sub">Water level</span>
                   </button>
                   <button type="button" class="mhazard" data-msim-hazard="Earthquake" aria-pressed="false" onclick="chooseMobileHazard('Earthquake')">
                     <span class="mhazard-name">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12h4l2-5 3.5 10 3-8 2 3h4.5"/></svg>
+                      {{ hazard_icon('Earthquake') }}
                       Earthquake
                     </span>
                     <span class="mhazard-sub">Ground shaking, liquefaction</span>
@@ -434,6 +441,8 @@
               <button type="button" data-msim-eq-view="liquefaction" aria-pressed="false" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
               <button type="button" data-msim-eq-view="ground_shaking" aria-pressed="false" onclick="switchEarthquakeView('ground_shaking')">Ground shaking</button>
             </div>
+            {# Put the full "What to do" guidance before the route assessment. #}
+            <div class="safety-result-cards msheet-safety-action" id="msimSafetyAction" hidden></div>
             <div class="mverdict" id="msimVerdict" data-sheet-drag>
               <h2 class="mverdict-title" id="msimVerdictTitle" tabindex="-1"></h2>
               <p class="mverdict-sub" id="msimVerdictSub"></p>
@@ -444,8 +453,6 @@
             </div>
             <p class="msummary-dest" id="msimSummaryDest" hidden></p>
             <p class="msummary-far" id="msimFarNote" hidden></p>
-            {# Show the full "What to do" guidance once, above the result actions. #}
-            <div class="safety-result-cards msheet-safety-action" id="msimSafetyAction" hidden></div>
             <div class="msheet-actions" id="msimResultActions">
               <button class="mbtn" type="button" onclick="showMobileSetup()">Edit setup</button>
               <button class="mbtn mbtn--primary" id="msimDetailsBtn" type="button" onclick="toggleMobileResultDetails()" aria-controls="msimResultDetails" aria-expanded="false">Routes &amp; directions</button>
@@ -459,7 +466,10 @@
 
               <div class="msheet-actions" id="msimDetailActions">
                 <button class="mbtn mbtn--primary" id="msimNewSimBtn" type="button" onclick="startNewSimulation()">New simulation</button>
-                <button class="mbtn" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">Download PDF</button>
+                <button class="mbtn" id="msimReportBtn" type="button" onclick="downloadMobileReport(this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 18v1.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
+                  Download PDF
+                </button>
               </div>
 
               <p class="msheet-source" id="msimSource"></p>
@@ -622,7 +632,6 @@
 </div>
 
 {% include "_tutorial_modal.html" %}
-{% include "_language_menu.html" %}
 
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 
@@ -643,8 +652,6 @@
    image and CDN script, so the map tiles began loading late. #}
 <script>initTheme(); initMap();</script>
 <script src="{{ url_for('static', filename='visitor-count.js') }}"></script>
-<script src="{{ url_for('static', filename='simulator-language.js') }}"></script>
-<script src="{{ url_for('static', filename='site-language.js') }}"></script>
 
 </body>
 </html>

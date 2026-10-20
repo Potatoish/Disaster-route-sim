@@ -217,7 +217,7 @@
     ['Ground shaking intensity', 'Tindi ng pagyanig ng lupa'],
     ['maps on', 'mga mapa sa'],
     [', traced for Sta. Lucia and used for map display only. Reference:', ', na kinopya para sa Sta. Lucia at ginagamit lamang sa pagpapakita ng mapa. Sanggunian:'],
-    ['Road network', 'Koneksiyon ng mga kalsada'],
+    ['Road network and water areas', 'Mga kalsada at anyong tubig'],
     ['contributors, under the', 'mga tagapag-ambag, sa ilalim ng'],
     ['. Downloaded with', '. Na-download gamit ang'],
     ['Walking limits in flood water', 'Mga limitasyon sa paglalakad sa baha'],
