@@ -37,3 +37,6 @@ Backend/tools/confirm_objective1.py
 
 # Original Project NOAH flood shapefile (36 MB), used only by confirm_objective1.py
 Backend/tools/noah/
+
+# Local thesis defense reviewer
+/output/pdf/AGNAS_Thesis_Defense_Reviewer.*
