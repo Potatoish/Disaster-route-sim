@@ -29,8 +29,8 @@ _LAYER_FILES = {
     "ground_shaking": EARTHQUAKE_DATA_ROOT / "ground_shaking.geojson",
 }
 _EVACUATION_SITES_FILE = EARTHQUAKE_DATA_ROOT / "evacuation_sites.json"
-# Display only: the intensity zones a barangay's map and the earthquake intro
-# show (PHIVOLCS via HazardHunterPH). Routing reads _LAYER_FILES alone.
+# Display only: the intensity a barangay's map, legend and earthquake intro
+# name (PHIVOLCS via HazardHunterPH). Routing reads _LAYER_FILES alone.
 _INTENSITY_FILE = EARTHQUAKE_DATA_ROOT / "ground_shaking_intensity.geojson"
 _FAULT_FILE = EARTHQUAKE_DATA_ROOT / "west_valley_fault.geojson"
 # The scenario the hazard maps are drawn for.
@@ -245,24 +245,39 @@ def _clip_to_barangay(geometry_data, area):
     return None if clipped.is_empty else mapping(clipped)
 
 
-def _load_intensity_zones(canonical_barangay, area):
-    """The barangay's ground shaking intensity zones, strongest first; none
-    for a barangay without an intensity map (its map shows the routing
-    layer's level instead)."""
+def _load_intensity_zones(canonical_barangay, shaking_payload):
+    """The barangay's ground shaking intensity as one zone: the flat ground
+    shaking area the map already shows, labelled with the intensity of the
+    traced zones. Their own outlines are not drawn: they all round to the
+    same numeral, and the hand-traced border between them cuts across blocks
+    and leaves specks. None for a barangay without an intensity map (its map
+    shows the routing layer's level instead)."""
     if not _INTENSITY_FILE.exists():
         return []
-    features = []
-    for feature in _load_feature_collection(_INTENSITY_FILE).get("features", []):
-        properties = dict(feature.get("properties") or {})
-        if normalize_barangay_name(properties.get("barangay")) != canonical_barangay:
-            continue
-        geometry = feature.get("geometry") and _clip_to_barangay(feature["geometry"], area)
-        if not geometry:
-            continue
-        properties["barangay"] = DISPLAY_BARANGAY_NAMES[canonical_barangay]
-        features.append({"type": "Feature", "properties": properties, "geometry": geometry})
-    features.sort(key=lambda feature: -float(feature["properties"].get("mmi_max") or 0))
-    return features
+    traced = [
+        feature.get("properties") or {}
+        for feature in _load_feature_collection(_INTENSITY_FILE).get("features", [])
+        if normalize_barangay_name((feature.get("properties") or {}).get("barangay")) == canonical_barangay
+    ]
+    shown = [shape(feature["geometry"]) for feature in shaking_payload.get("features", [])]
+    if not traced or not shown:
+        return []
+    strongest = max(traced, key=lambda properties: float(properties.get("mmi_max") or 0))
+    readings = [
+        float(properties[key])
+        for properties in traced
+        for key in ("mmi_min", "mmi_max")
+        if properties.get(key) is not None
+    ]
+    properties = {
+        "barangay": DISPLAY_BARANGAY_NAMES[canonical_barangay],
+        "intensity": strongest.get("intensity"),
+        "source": strongest.get("source"),
+    }
+    if readings:
+        properties["mmi_min"] = min(readings)
+        properties["mmi_max"] = max(readings)
+    return [{"type": "Feature", "properties": properties, "geometry": mapping(unary_union(shown))}]
 
 
 def _build_scenario(canonical_barangay):
@@ -358,7 +373,7 @@ def get_earthquake_dataset(barangay_name):
         "layer_extents": layer_extents,
         "shaking_intensity": {
             "type": "FeatureCollection",
-            "features": _load_intensity_zones(canonical_name, barangay_area),
+            "features": _load_intensity_zones(canonical_name, layer_payloads["ground_shaking"]),
         },
         "scenario": _build_scenario(canonical_name),
     }

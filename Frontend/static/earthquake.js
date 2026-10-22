@@ -171,8 +171,9 @@
 
   // The ground shaking classes a result's map shows, strongest first. A
   // barangay with an intensity map (hazard_layers.shaking_intensity, display
-  // only) shows its zones in Roman numerals; one without shows the routing
-  // layer's own level ("High"). polygons: GeoJSON geometries.
+  // only: the flat shaking area under one Roman numeral) shows it as that
+  // intensity; one without shows the routing layer's own level ("High").
+  // polygons: GeoJSON geometries.
   function getShakingClasses(hazardLayers) {
     const zones = hazardLayers?.shaking_intensity?.features || [];
     if (zones.length) {

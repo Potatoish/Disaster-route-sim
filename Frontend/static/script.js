@@ -2263,15 +2263,13 @@ function buildHazardSourceNoteHtml(isEarthquake) {
 // (a source with none online has no link line).
 function getReportDataSources(isEarthquake, result = simData) {
   const { noah, hazardHunter, aidr, osm } = DATA_SOURCES;
-  const intensitySource = result?.hazard_layers?.shaking_intensity?.features?.length
-    ? 'PHIVOLCS via HazardHunterPH'
-    : '';
+  const intensity = result?.hazard_layers?.shaking_intensity?.features?.[0]?.properties?.intensity;
   const hazardRows = isEarthquake
     ? [
       { label: 'Liquefaction & ground shaking', text: 'PHIVOLCS hazard maps on HazardHunterPH, traced by the team', url: hazardHunter.url },
-      ...(intensitySource ? [{
+      ...(intensity ? [{
         label: 'Ground shaking intensity',
-        text: `${intensitySource} ground shaking map of Barangay ${result.barangay || selectedBarangay} (M7.2 West Valley Fault scenario), traced by the team; shown on the map only`,
+        text: `PHIVOLCS via HazardHunterPH intensity map of Barangay ${result.barangay || selectedBarangay} (M7.2 West Valley Fault scenario): intensity ${intensity} across the barangay`,
         url: '',
       }] : []),
     ]
