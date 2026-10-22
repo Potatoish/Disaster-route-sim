@@ -185,8 +185,8 @@ html[data-keyboard-open="true"] .fab-panel {
   color: var(--strong-ink);
 }
 .sim-page[data-hazard-theme="earthquake"] :is(.safety-actions .reset-btn, #msimNewSimBtn) {
-  background: #84350e;
-  border-color: #84350e;
+  background: var(--amber-700);
+  border-color: var(--amber-700);
 }
 .sim-page :is(.safety-download-btn, #msimReportBtn) {
   gap: 6px;

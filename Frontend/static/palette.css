@@ -7,13 +7,13 @@
   --blue-700: #2c76a5;
   --blue-900: #164362;
   --blue-950: #0b263b;
-  --amber-100: #ffe599;
-  --amber-200: #ffd966;
-  --amber-300: #ffcc33;
-  --amber-400: #ffbf00;
-  --amber-600: #cc9900;
-  --amber-700: #997300;
-  --amber-900: #664c00;
+  /* The earthquake theme, light and dark: the Sunset Orange swatches (Soft
+     Amber, Golden Hour, Sunset Orange, Burnt Sienna, Deep Amber, Rich
+     Espresso). */
+  --amber-100: #ffd9a3; --amber-200: #ffb45c;
+  --amber-300: #f28b2c; --amber-400: #f28b2c;
+  --amber-600: #c35a1a; --amber-700: #c35a1a;
+  --amber-900: #7a2e0b; --amber-950: #1a0d06;
 }
 
 body.site-page, body.sim-page {
@@ -66,13 +66,13 @@ body.sim-page[data-hazard-theme="earthquake"] {
   --hazard-button-start: var(--amber-900); --hazard-button-end: var(--amber-900);
 }
 body.sim-page.dark[data-hazard-theme="earthquake"] {
-  --accent: var(--amber-300); --accent2: var(--amber-100);
+  --accent: var(--amber-300); --accent2: var(--amber-200); --accent-ink: var(--amber-950);
   --map-ui-accent: var(--amber-300);
-  --accent-soft-bg: #332b15; --accent-soft-border: #665422;
-  --hazard-selected-bg: #332b15; --hazard-selected-border: var(--amber-400);
+  --accent-soft-bg: #3a2213; --accent-soft-border: #7a4a26;
+  --hazard-selected-bg: #3a2213; --hazard-selected-border: var(--amber-400);
   --hazard-selected-text: var(--amber-100);
-  --hazard-chip-bg: #332b15; --hazard-chip-border: #665422; --hazard-chip-text: var(--amber-100);
-  --hazard-panel-bg: #332b15; --hazard-panel-border: #665422; --hazard-panel-strong: var(--amber-300);
+  --hazard-chip-bg: #3a2213; --hazard-chip-border: #7a4a26; --hazard-chip-text: var(--amber-100);
+  --hazard-panel-bg: #3a2213; --hazard-panel-border: #7a4a26; --hazard-panel-strong: var(--amber-300);
   --hazard-button-start: var(--amber-300); --hazard-button-end: var(--amber-300);
 }
 
@@ -239,14 +239,10 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
 .sim-page #loaderProgress.loader-progress--earthquake {
   --accent: var(--amber-700); --accent2: var(--amber-400);
 }
-/* Default/light palette: steel blue and Sunset Orange from the chosen swatches. */
+/* Default/light palette: steel blue from the chosen swatches. */
 body.site-page:not(.dark), body.sim-page:not(.dark) {
   --blue-100: #c0e6fd; --blue-300: #80aad3; --blue-500: #5b86b6;
   --blue-700: #3f6593; --blue-900: #1b3554; --blue-950: #000f22;
-  --amber-100: #ffd9a3; --amber-200: #ffb45c;
-  --amber-300: #f28b2c; --amber-400: #f28b2c;
-  --amber-600: #c35a1a; --amber-700: #c35a1a;
-  --amber-900: #7a2e0b; --amber-950: #1a0d06;
   --accent: var(--blue-500); --accent2: var(--blue-700);
   --accent-ink: var(--blue-950); --accent-text: var(--blue-700);
   --panel-strong: #f0f4f8; --border: #d1ddea; --border2: #9db5cf;
