@@ -194,6 +194,10 @@ html[data-keyboard-open="true"] .fab-panel {
   border-color: #dde1e6;
   color: #2c3038;
 }
+.sim-page[data-hazard-theme="earthquake"]:not(.dark) :is(.safety-download-btn, #msimReportBtn) {
+  border-color: var(--border);
+  color: var(--text);
+}
 .sim-page.dark :is(.safety-download-btn, #msimReportBtn) {
   border-color: var(--border2);
   color: var(--text);

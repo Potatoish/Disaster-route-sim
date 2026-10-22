@@ -75,6 +75,29 @@ body.sim-page.dark[data-hazard-theme="earthquake"] {
   --hazard-panel-bg: #3a2213; --hazard-panel-border: #7a4a26; --hazard-panel-strong: var(--amber-300);
   --hazard-button-start: var(--amber-300); --hazard-button-end: var(--amber-300);
 }
+/* With Earthquake picked the whole simulator turns warm, panels included:
+   the page, surfaces, edges and text move from the steel blues to tints of
+   the same swatches. Map pins and the barangay line keep their own colors. */
+body.sim-page:not(.dark)[data-hazard-theme="earthquake"] {
+  --page-top: #fdf8f3; --page-bottom: #fdf8f3; --bg: #fdf8f3;
+  --surface: #ffffff; --panel: #ffffff; --panel-strong: #fbf0e4;
+  --border: #ecd6c2; --border2: #d4a57e;
+  --text: var(--amber-950); --muted: #75553f; --dim: #8a6a52;
+  --ink-strong: #54210a; --ink-soft: #75553f;
+  --glow-a: transparent; --glow-b: transparent;
+  --shadow: 0 8px 24px #3d1d0b0d; --shadow-sm: 0 3px 10px #3d1d0b08;
+}
+body.sim-page.dark[data-hazard-theme="earthquake"] {
+  --page-top: #120904; --page-bottom: #120904; --bg: #120904;
+  --surface: var(--amber-950); --panel: #241309; --panel-strong: #2f1a0d;
+  --border: #4d2c17; --border2: #7a4a26;
+  --text: #fff3e8; --muted: #e2c2a6; --dim: #c9a283;
+  --ink-strong: #fff3e8; --ink-soft: #ecd0b6;
+  --glow-a: transparent; --glow-b: transparent;
+  --shadow: 0 8px 24px #00000059; --shadow-sm: 0 3px 10px #00000040;
+}
+/* Before a disaster is picked, each card previews its own theme on hover. */
+.sim-page #hEarthquake:hover { border-color: var(--amber-400); }
 
 /* Solid, theme-aware card edges; hazard colors keep their existing meaning. */
 body.site-page, body.site-page.dark {
