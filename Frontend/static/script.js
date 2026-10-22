@@ -1838,7 +1838,7 @@ const FLOOD_DEPTH_RANGE_BY_VAR = {
 };
 
 // The same classes against a person, as on the homepage's flood-depth scene
-// (a 163 cm adult: knees at about 0.46 m, neck at about 1.42 m).
+// (a 167 cm adult: knees at about 0.47 m, neck at about 1.45 m).
 const FLOOD_DEPTH_ON_ADULT_BY_VAR = {
   1: 'Up to knee-deep on an adult',
   2: 'Knee- to neck-deep on an adult',

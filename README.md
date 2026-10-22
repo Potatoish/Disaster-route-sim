@@ -49,7 +49,6 @@ The visitor picks a barangay and a hazard, pins a start point and optionally a d
 | Evacuation sites | Pinagbuhatan (4), Sta. Lucia (3) | `Backend/data/earthquake/evacuation_sites.json` |
 | Road network | [OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL), via [OSMnx](https://osmnx.readthedocs.io/) | `Backend/data/graphs/` |
 | Walking limits in flood water | [AIDR Flood Hazard Guideline 7-3](https://knowledge.aidr.org.au/media/3518/adr-guideline-7-3.pdf) | — |
-| Body heights in the flood scene | [DOST-FNRI](https://www.fnri.dost.gov.ph/) | — |
 | Barangay boundaries | — | `Backend/data/boundaries/` |
 
 The About page lists the same sources (`#data-sources`); the homepage and the PDF report link to it, and the simulator results link to their own source.

@@ -253,7 +253,7 @@
     };
 
     // The depth gauge's scale: 32 units a metre, the street at y 78 (0.5 m
-    // at 62, 1.5 m at 30). The adult is the homepage's 163 cm figure; the
+    // at 62, 1.5 m at 30). The adult is the homepage's 167 cm figure; the
     // bar beside it, the depth classes.
     const GAUGE = { ground: 78, perM: 32, left: 16, right: 92 };
     const gy = meters => GAUGE.ground - meters * GAUGE.perM;
@@ -311,7 +311,7 @@
 
     // ---- the depth gauge ----
     function sceneSvg() {
-      const s = GAUGE.perM / 96.93;
+      const s = GAUGE.perM / 94.61;
       const tx = 52 - 170 * s;
       const ty = GAUGE.ground - 198 * s;
       const bar = (k, from, to) => `<rect class="fs-bar" data-level="${k}" x="6" y="${gy(to).toFixed(1)}" width="5" height="${(gy(from) - gy(to)).toFixed(1)}" fill="${rgb(COLORS[k])}"/>`;

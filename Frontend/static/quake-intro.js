@@ -229,7 +229,7 @@
       const rounding = numerals.length === 1 && Number.isFinite(low) && Number.isFinite(high)
         ? `; its values here, ${low.toFixed(2)} to ${high.toFixed(2)}, all round to ${numerals[0]}`
         : '';
-      return `Intensity: ${source} map of ${barangay} (Modified Mercalli scale)${rounding}.`;
+      return `Intensity: ${source} map of ${barangay}${rounding}.`;
     }
 
     const STEPS = [
