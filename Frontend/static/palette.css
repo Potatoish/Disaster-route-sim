@@ -392,6 +392,12 @@ body:is(.site-page, .sim-page) :is(.cta, .fab, .fab-send, .skip-link,
   --strong-ink: #ffffff;
   color: #ffffff;
 }
+/* The selected nav item: the sliding pill's label copies, the no-JS fill, and
+   the phone drawer's filled row. The links under the pill keep their muted
+   color, or they would vanish on the panel while the pill slides away. */
+.site-page .nav-pill .nav-pill-label,
+.site-page .nav-links:not(.has-pill) .nav-btn:is(:active, .is-active),
+.site-page .dashboard-nav-drawer .nav-links.has-pill .nav-btn.is-active { color: #ffffff; }
 .sim-page :is(.safety-all-routes-btn, .safety-card-action):hover:not(:disabled) {
   --accent-ink: #ffffff;
   color: #ffffff;
