@@ -3,7 +3,7 @@
 **Ant Guided Navigation And Safety System** is a disaster-aware evacuation route simulator for **Barangay Pinagbuhatan** and **Barangay Sta. Lucia** in **Pasig City**.
 It finds walking routes with **Ant Colony Optimization (ACO)** and ranks them with a **lexicographic safety-first rule**: route safety always comes before travel distance.
 
-Live site: agnas-nav.up.railway.app
+Live site: agnas-nav.onrender.com
 
 AGNAS is a planning tool for use *before* a disaster. It works from stored hazard maps, not live feeds, so it is not an emergency alert service.
 
@@ -72,7 +72,7 @@ The About page lists the same sources (`#data-sources`); the homepage and the PD
 - **Frontend:** HTML, CSS, JavaScript (no build step), Leaflet 1.9.4 served from `Frontend/static/vendor/`, OpenStreetMap / Esri tiles, jsPDF for client-side PDF reports
 - **Backend:** Python, Flask, Flask-CORS
 - **Routing/Data:** OSMnx, NetworkX, Shapely, GeoPandas
-- **Hosting:** Docker on Railway (gunicorn, one worker with eight threads)
+- **Hosting:** Docker on Render (gunicorn, one worker with eight threads)
 - **Contact/feedback:** Resend (email over HTTPS), Google Apps Script + Google Sheets
 
 ## Project Structure
@@ -159,7 +159,7 @@ For deployment, the app entrypoint (run from `Backend/`) is:
 gunicorn app:app
 ```
 
-On Railway the service's **Root Directory** must be `/` (the repository root): the `Dockerfile` there
+On Render the service's **Root Directory** must stay blank (the repository root): the `Dockerfile` there
 copies both `Backend/` and `Frontend/`. The app refuses to start if `Frontend/` is missing.
 
 Batch-test routing without the UI (each pair's start and end are lat/lng points, like pins on the map):
@@ -172,7 +172,7 @@ py Backend/tools/route_batch_test.py Backend/tools/route_pairs.example.json
 
 The About page's contact form emails the team inbox through [Resend](https://resend.com), and the
 feedback button saves each response as a row in a Google Sheet. Both are set with environment
-variables (Railway → service → Variables); until they are set, the forms answer "isn't set up yet".
+variables (Render → service → Environment); until they are set, the forms answer "isn't set up yet".
 Email goes through Resend's HTTPS API, not SMTP, because Railway's Free/Hobby plans block outbound
 SMTP.
 
@@ -202,7 +202,7 @@ local visits aren't counted.
 
 The detailed simulation logs print each run's pins (coordinates and labels). They are off on the
 server, so the live site keeps no record of where visitors pinned, and on for the local dev server
-(`py Backend/app.py`). Do not set `AGNAS_DEBUG=1` on Railway: it turns them on there too.
+(`py Backend/app.py`). Do not set `AGNAS_DEBUG=1` on Render: it turns them on there too.
 
 ## Supported Scope
 
@@ -215,7 +215,7 @@ server, so the live site keeps no record of where visitors pinned, and on for th
 - `GET /` — homepage
 - `GET /about` — About page (with the contact form)
 - `GET /app` — the route simulator
-- `GET /health` — health check (used by Railway)
+- `GET /health` — health check (used by Render)
 - `POST /check-pin` — checks a start/destination tapped on the map before a run
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`

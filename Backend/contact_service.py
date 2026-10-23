@@ -94,11 +94,11 @@ VISITOR_COUNT_CACHE_SECONDS = 120
 # so the homepage isn't left without a number for the whole cache time.
 VISITOR_COUNT_RETRY_SECONDS = 5
 
-# A local dev server has no FEEDBACK_SHEET_URL (it lives in Railway's
-# variables), so app.py turns this on when run directly and the homepage there
+# A local dev server has no FEEDBACK_SHEET_URL (it lives in Render's
+# environment), so app.py turns this on when run directly and the homepage there
 # shows the live site's count instead of a dash. Only read: local visits never
 # count.
-LIVE_VISITOR_COUNT_URL = "https://agnas-nav.up.railway.app/visitors"
+LIVE_VISITOR_COUNT_URL = "https://agnas-nav.onrender.com/visitors"
 USE_LIVE_VISITOR_COUNT = False
 
 FEEDBACK_RATINGS = {1: "Confusing", 2: "Okay", 3: "Clear"}

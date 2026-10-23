@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 # Built from the repository root: the app needs both Backend/ (Python, data)
-# and Frontend/ (templates, static files). Railway's Root Directory must be /.
+# and Frontend/ (templates, static files). The host's Root Directory must be the repo root.
 WORKDIR /app
 
 COPY Backend/requirements.txt Backend/
