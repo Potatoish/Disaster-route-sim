@@ -401,6 +401,22 @@ def health():
     return jsonify({"status": "ok"})
 
 
+# Temporary: shows the caller only their own proxy headers, to find which
+# X-Forwarded-For entry Render's edge appends (see _client_ip). Nothing is
+# logged or stored.
+@app.route("/whoami", methods=["GET"])
+def whoami():
+    headers = ("X-Forwarded-For", "True-Client-IP", "CF-Connecting-IP", "X-Real-IP")
+    response = jsonify({
+        "error": False,
+        "remote_addr": request.remote_addr,
+        "client_ip_used": _client_ip(),
+        "headers": {name: request.headers.get(name) for name in headers},
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/simulation-status", methods=["GET"])
 def simulation_status():
     return jsonify({
