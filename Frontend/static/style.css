@@ -256,11 +256,10 @@ body.dark .left-panel {
 
 .panel-barangay-label {
   flex: none;
-  font-family: 'DM Mono', monospace;
-  font-size: .7rem;
-  letter-spacing: 1.5px;
+  font-family: var(--font-meta);
+  font-size: .8rem;
+  font-weight: 600;
   color: var(--accent);
-  text-transform: uppercase;
 }
 
 .panel-barangay-seg {
@@ -404,7 +403,7 @@ body.dark .workflow-card {
   color: var(--text);
   border-radius: 999px;
   padding: 7px 12px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-meta);
   font-size: .77rem;
   cursor: pointer;
   transition: border-color .2s ease, color .2s ease, background-color .2s ease, transform .2s ease, scale .12s ease;
@@ -549,11 +548,10 @@ body.dark .workflow-card.active {
 #cardHazard:not(.collapsed) .workflow-card-actions { display: none; }
 
 .sec-label {
-  font-family: 'DM Mono', monospace;
-  font-size: .76rem;
-  letter-spacing: 2px;
+  font-family: var(--font-meta);
+  font-size: .8rem;
+  font-weight: 600;
   color: var(--accent);
-  text-transform: uppercase;
   margin-bottom: 8px;
 }
 
@@ -816,7 +814,7 @@ body.dark .pin-input-row-end.is-evac .pin-input-icon {
 }
 
 .pin-field-meta {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-meta);
   font-size: .7rem;
   color: var(--muted);
   letter-spacing: .2px;
@@ -922,7 +920,7 @@ body.dark .pin-input-menu {
 
 .info-box strong {
   color: var(--accent2);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-meta);
 }
 
 .run-btn {
@@ -970,7 +968,7 @@ body.dark .pin-input-menu {
   border: 1.5px solid var(--border2);
   border-radius: 8px;
   color: var(--muted);
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-meta);
   font-size: .82rem;
   cursor: pointer;
   transition: border-color .2s ease, color .2s ease, scale .12s ease;
@@ -1023,7 +1021,7 @@ body.dark .pin-input-menu {
   border: 1px solid var(--map-ui-border);
   border-radius: 14px;
   padding: 8px 10px;
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-meta);
   font-size: .76rem;
   pointer-events: none;
   backdrop-filter: blur(8px);
@@ -1079,11 +1077,10 @@ body.dark .pin-input-menu {
 .legend-toggle[aria-expanded="false"] svg { transform: rotate(180deg); }
 
 .legend-title {
-  font-family: 'DM Mono', monospace;
-  font-size: .76rem;
+  font-family: var(--font-meta);
+  font-size: .8rem;
+  font-weight: 700;
   color: var(--map-ui-accent);
-  letter-spacing: 1px;
-  text-transform: uppercase;
 }
 
 .legend-body {
@@ -1440,10 +1437,9 @@ body.dark .empty-map {
 }
 
 .empty-map-txt {
-  font-family: 'DM Mono', monospace;
+  font-family: var(--font-meta);
   font-size: .83rem;
   color: var(--muted);
-  letter-spacing: 1px;
 }
 
 .empty-map-spinner {
@@ -1525,10 +1521,8 @@ body.dark .empty-map {
 
 .loader-kicker {
   font-family: var(--font-meta);
-  font-size: .78rem;
+  font-size: .82rem;
   font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
   color: color-mix(in srgb, var(--accent) 70%, var(--muted) 30%);
   text-align: center;
   margin-top: 6px;
@@ -1875,7 +1869,7 @@ body.dark .empty-map {
   font-family: var(--font-meta);
   font-size: .82rem;
   font-weight: 700;
-  letter-spacing: .08em;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 
@@ -1997,7 +1991,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-brand { display: flex; align-items: center; gap: 12px; padding: 1px 5px 12px; border-bottom: 1px solid var(--border); }
 .route-safety-panel > .safety-brand { position: static; background: var(--surface); }
 .safety-brand-copy { flex: 1; min-width: 0; }
-.safety-eyebrow { color: var(--accent); font-family: var(--font-meta); font-size: .77rem; font-weight: 700; letter-spacing: .14em; }
+.safety-eyebrow { color: var(--accent); font-family: var(--font-heading); font-size: 1.3rem; font-weight: 700; line-height: 1; letter-spacing: .02em; }
 .safety-brand h2, .route-list-modal h2 { margin-top: 4px; color: var(--text); font-size: .92rem; line-height: 1.32; font-weight: 800; }
 .safety-route-hint { margin: 13px 2px 6px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
 .safety-route-chip { display: flex; align-items: center; gap: 8px; width: 100%; margin: 12px 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); font: 700 .76rem var(--font-body); color: var(--ink-strong); overflow: hidden; appearance: none; text-align: left; }
@@ -2015,7 +2009,7 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .turn-step-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding-top: 2px; }
 .turn-step-instruction { font-weight: 700; color: var(--ink-strong); line-height: 1.35; word-break: break-word; }
 .turn-step-distance { font-size: .74rem; font-weight: 500; color: var(--muted); }
-.safety-section-label { margin: 13px 4px 7px; color: var(--muted); font-family: var(--font-meta); font-size: .77rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.safety-section-label { margin: 13px 4px 7px; color: var(--muted); font-family: var(--font-body); font-size: .8rem; font-weight: 600; }
 .safety-result-cards { display: grid; gap: 8px; }
 .safety-result-card { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
 .safety-icon-box { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border2); border-radius: 8px; color: var(--muted); }
@@ -2092,7 +2086,7 @@ body.dark .safety-download-btn:hover { background: var(--green); color: var(--ac
 .flood-filter-control { position: absolute; z-index: 6; top: auto; bottom: calc(34px + env(safe-area-inset-bottom, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); right: auto; padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); }
 .flood-filter-control.is-collapsed { width: max-content; }
 .flood-filter-toggle { gap: 6px; }
-.flood-filter-title { flex: 1; margin: 0; text-align: left; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
+.flood-filter-title { flex: 1; margin: 0; text-align: left; color: var(--map-ui-text); font: 700 .78rem var(--font-body); }
 #floodFilterDetails { padding-top: 6px; }
 .flood-filter-buttons { display: flex; gap: 4px; }
 .flood-filter-buttons button { border: 1px solid var(--map-ui-border); border-radius: 6px; padding: 4px 7px; background: transparent; color: var(--map-ui-text); font: 700 .66rem var(--font-body); cursor: pointer; transition: border-color .16s ease, color .16s ease, background-color .16s ease, scale .12s ease; }
@@ -2325,9 +2319,6 @@ body.dark .emergency-modal {
   box-shadow: 0 30px 68px rgba(0, 0, 0, .5), 0 0 0 1px color-mix(in srgb, var(--red) 22%, transparent) inset;
 }
 
-.emergency-eyebrow {
-  color: var(--red);
-}
 
 .emergency-contact-list {
   list-style: none;
@@ -2378,7 +2369,7 @@ body.dark .emergency-modal {
 .earthquake-view-switcher { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); max-width: min(230px, calc(100% - 28px)); }
 .earthquake-view-switcher.is-collapsed { width: max-content; }
 .earthquake-view-toggle { gap: 6px; }
-.earthquake-view-title { flex: 1; margin: 0; text-align: left; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
+.earthquake-view-title { flex: 1; margin: 0; text-align: left; color: var(--map-ui-text); font: 700 .78rem var(--font-body); }
 #earthquakeViewDetails { padding-top: 6px; }
 .earthquake-view-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .earthquake-view-hint { margin: 6px 2px 0; color: var(--map-ui-muted); font-size: .75rem; line-height: 1.45; }
@@ -2508,15 +2499,15 @@ body.dark .emergency-modal {
   font-size: .7rem;
 }
 
-/* "Route 2" / "Route 1 · Best" over the time (buildRouteEtaLabel). */
+/* "Route 2" / "Route 1 Best" over the time (buildRouteEtaLabel); the tag
+   set apart by weight, not a separator. */
 .route-eta-text .route-eta-name {
   font-style: normal;
-  font-size: .64rem;
+  font-size: .7rem;
   font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
   color: var(--map-ui-muted);
 }
+.route-eta-name .route-eta-tag { margin-left: 2px; font-weight: 500; }
 .route-eta-text .route-eta-depth { margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--map-ui-border); color: var(--map-ui-text); }
 .route-eta-depth b { font-weight: 800; }
 
@@ -3621,10 +3612,8 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--map-ui-muted);
-  font: 800 .64rem/1 var(--font-body);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  color: var(--map-ui-text);
+  font: 700 .78rem/1 var(--font-body);
   cursor: pointer;
 }
 
@@ -3699,9 +3688,7 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
 .msim-legend-caption {
   margin-top: 2px;
   color: var(--map-ui-muted);
-  font: 800 .6rem/1.4 var(--font-body);
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font: 700 .68rem/1.4 var(--font-body);
 }
 
 .msim-maplegend .msim-legend-levels .legend-row {
@@ -3944,9 +3931,7 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
 
 .mslot-label {
   color: var(--muted);
-  font: 700 .66rem var(--font-meta);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  font: 600 .75rem var(--font-body);
 }
 
 .mslot-value {
@@ -4082,9 +4067,7 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
 .msheet-label {
   margin: 0 0 10px;
   color: var(--accent);
-  font: 700 .74rem var(--font-meta);
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  font: 700 .8rem var(--font-body);
 }
 
 .mhazard-grid {
@@ -5388,10 +5371,8 @@ body.dark .aco-legend-stuck {
 .quake-levels b {
   display: block;
   margin-bottom: 3px;
-  color: var(--map-ui-muted);
-  font: 500 .66rem var(--font-meta);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  color: var(--map-ui-text);
+  font: 700 .74rem var(--font-body);
 }
 
 .mmi-legend {
@@ -5550,9 +5531,7 @@ body.dark .aco-legend-stuck {
 .quake-summary b {
   display: block;
   color: var(--muted);
-  font: 500 .7rem var(--font-meta);
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font: 600 .75rem var(--font-body);
 }
 
 /* On the map, which stays light: names with a white halo, and the callout

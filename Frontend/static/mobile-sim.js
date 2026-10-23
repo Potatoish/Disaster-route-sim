@@ -604,15 +604,15 @@
       || new URLSearchParams(window.location.search).get('barangay')
       || 'Simulator';
     setText($('msimTitle'), barangay);
-    // Which disaster and which step: "Flood · Setup", "Flood · Simulation",
-    // "Flood · Results".
+    // Which disaster and which step: "Flood setup", "Flood simulation",
+    // "Flood results".
     const results = state.mode === 'results' && simData;
     const hazard = results
       ? (isEarthquakeSimulationResult(simData) ? 'Earthquake' : 'Flood')
       : selectedHazard;
-    const stepName = results ? 'Results' : state.mode === 'replay' ? 'Simulation' : 'Setup';
+    const stepName = results ? 'results' : state.mode === 'replay' ? 'simulation' : 'setup';
     setText($('msimSubtitle'), hazard
-      ? `${hazard} · ${stepName}`
+      ? `${hazard} ${stepName}`
       : 'Choose a disaster');
 
     // The title opens the barangay switcher, except mid-run.
@@ -854,8 +854,8 @@
     const distance = route.display_distance || formatDistanceCompact(route.distance);
     renderSafetyDetails(route, peak, action, isEarthquake);
     $('msimSummaryMain').innerHTML = notWalkable
-      ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong> · not walkable</span>`
-      : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong> · <strong>${escapeHtml(distance)}</strong></span>`;
+      ? `${safetyIcon('alert')}<span><strong>${escapeHtml(distance)}</strong>, not walkable</span>`
+      : `${safetyIcon('walk')}<span><strong>${escapeHtml(duration)}</strong>, <strong>${escapeHtml(distance)}</strong></span>`;
     $('msimSummaryMain').classList.toggle('is-danger', notWalkable);
     // One primary action at a time: safety guidance, else the details.
     $('msimDetailsBtn').classList.toggle('mbtn--primary', !action);

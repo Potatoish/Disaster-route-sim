@@ -162,7 +162,7 @@ body.site-page.dark { --accent-text: var(--blue-300); }
 }
 .site-page .gtk-card { border-inline-start: 3px solid var(--card-accent); }
 .site-page .algo-step { border-top: 3px solid var(--card-accent); }
-.site-page :is(.algo-step-no, .algo-step-zero) { color: var(--accent-text); }
+.site-page .algo-step-no { color: var(--accent-text); }
 .site-page .algo-badge-label { fill: var(--blue-950); }
 .site-page .algo-diagram {
   border: 0; background: var(--accent-soft-bg); padding: 12px; border-radius: 12px;
@@ -178,8 +178,7 @@ body.site-page.dark { --accent-text: var(--blue-300); }
 .site-page .hero-inner { padding-block: 60px 48px; }
 .site-page .hero h1 { font-size: clamp(36px, 4.2vw, 54px); line-height: 1.08; letter-spacing: -.02em; }
 .site-page .hero-copy { gap: 20px; }
-.site-page .hero-accent { color: var(--blue-500); }
-.site-page.dark :is(.hero-accent, .stat b, #hzFlood .hz-icon) { color: var(--blue-300); }
+.site-page.dark :is(.stat b, #hzFlood .hz-icon) { color: var(--blue-300); }
 .site-page .stats {
   border-color: var(--card-line); background: var(--card-line); border-radius: 12px; box-shadow: none;
 }

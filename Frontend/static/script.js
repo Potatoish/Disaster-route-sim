@@ -455,7 +455,7 @@ function renderHazardOnlyLegend() {
         `<div class="legend-row"><i class="hazard-view-swatch" style="background:${color}"></i><span>${label}</span></div>`
       )).join('');
   }
-  body.innerHTML = `<div class="hazard-view-scope">${escapeHtml(selectedBarangay)} · ${escapeHtml(selectedHazard)}</div>
+  body.innerHTML = `<div class="hazard-view-scope">${escapeHtml(selectedHazard)} in ${escapeHtml(selectedBarangay)}</div>
     ${buildBoundaryLegendRow()}${hazards}`;
   setMapLegendVisible(true);
 }
@@ -1782,8 +1782,8 @@ function buildRouteEtaLabel(route) {
   const isBest = route === getBestRoute(Array.isArray(simData?.routes) ? simData.routes : []);
   const tag = isBest ? getTopRouteName(route) : category === 'eliminated' ? 'Unsafe' : '';
   const name = route?.display_route_no != null
-    ? `Route ${route.display_route_no}${tag ? ` · ${tag}` : ''}`
-    : tag;
+    ? `Route ${escapeHtml(route.display_route_no)}${tag ? ` <span class="route-eta-tag">${escapeHtml(tag)}</span>` : ''}`
+    : escapeHtml(tag);
   const caution = isBest && getRouteSafetyTier(route) === 'caution' ? ' route-eta--caution' : '';
   const floodDepth = selectedHazard === 'Flood'
     ? getFloodPeakVar(route) === 0 ? 'No flooding shown' : getFloodPeakDepthRange(route)
@@ -1791,7 +1791,7 @@ function buildRouteEtaLabel(route) {
   return `<div class="route-eta route-eta--${category}${caution}">
     ${safetyIcon('walk')}
     <div class="route-eta-text">
-      ${name ? `<em class="route-eta-name">${escapeHtml(name)}</em>` : ''}
+      ${name ? `<em class="route-eta-name">${name}</em>` : ''}
       <strong>${escapeHtml(duration)}</strong><span>${escapeHtml(route?.display_distance || '')}</span>
       ${floodDepth !== null ? `<span class="route-eta-depth">Peak flood depth: <b>${escapeHtml(floodDepth)}</b></span>` : ''}
     </div>
@@ -5286,7 +5286,7 @@ function getResultRouteDetails(route, result = simData) {
       : '';
   return {
     route, best, isBest, isEarthquake, tier, peak, warning,
-    context: `Route ${route.display_route_no} · ${isBest ? 'best-ranked' : route.category === 'eliminated' ? 'eliminated' : 'alternative'}`,
+    context: `Route ${route.display_route_no} (${isBest ? 'best-ranked' : route.category === 'eliminated' ? 'eliminated' : 'alternative'})`,
     // "No safe route" describes the whole search only for its best result.
     title: isBest ? getRouteVerdictTitle(route)
       : isFloodFreeRoute(route) ? 'No flood zone along this route' : getTopRouteTitle(route),
@@ -5350,7 +5350,7 @@ function buildSafetyHazardCard(peak, peakScore, isEarthquake) {
   return `<div class="safety-result-card ${peakClass}">
     <div class="safety-icon-box">${safetyIcon(isEarthquake ? 'quake' : 'droplet')}</div>
     <div><div class="safety-card-label">${escapeHtml(peak.label)}</div>${peak.items
-      ? `<ul class="safety-hazard-list">${peak.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong class="is-${item.level.toLowerCase()}">${escapeHtml([item.level, item.extent].filter(Boolean).join(' · '))}</strong></li>`).join('')}</ul>`
+      ? `<ul class="safety-hazard-list">${peak.items.map(item => `<li><span>${escapeHtml(item.name)}</span><strong class="is-${item.level.toLowerCase()}"><span>${[item.level, item.extent].filter(Boolean).map(part => `<span>${escapeHtml(part)}</span>`).join(', ')}</span></strong></li>`).join('')}</ul>`
       : `<div class="safety-card-value">${escapeHtml(peak.value)}</div>${peak.detail ? `<div class="safety-card-sub">${escapeHtml(peak.detail)}</div>` : ''}`}</div>
   </div>`;
 }
@@ -5366,7 +5366,7 @@ function renderRouteSafetyPanel(result) {
   const isEarthquake = isEarthquakeSimulationResult(result);
   const fullySafeCount = routes.filter(route => getRouteSafetyTier(route) === 'safe').length;
   const antSearchNote = buildAntSearchNote(result);
-  const notes = [`${routes.length} route${routes.length === 1 ? '' : 's'} checked · ${formatGreenRouteTally(fullySafeCount, isEarthquake)}.`];
+  const notes = [`${routes.length} route${routes.length === 1 ? '' : 's'} checked, ${formatGreenRouteTally(fullySafeCount, isEarthquake)}.`];
   if (antSearchNote) notes.push(antSearchNote);
   if (isEarthquake && result.active_view_label) {
     notes.push(`Based on ${String(result.active_view_label).toLowerCase()} risk.`);
@@ -5530,7 +5530,7 @@ function buildRouteModalCard(route, index) {
       data-focus-route="${escapeHtml(routeNo)}" data-focus-category="${escapeHtml(route.category || '')}">
       <div>
         <div class="route-modal-card-title">Route ${escapeHtml(routeNo)}</div>
-        <div class="route-modal-card-stats">${stats.map(escapeHtml).join(' &middot; ')}</div>
+        <div class="route-modal-card-stats">${stats.map(stat => `<span>${escapeHtml(stat)}</span>`).join(', ')}</div>
       </div>
     </article>`;
 }
@@ -5565,7 +5565,8 @@ function openRouteListModal() {
       formatGreenRouteTally(countTier('safe'), isEarthquakeSimulationResult(simData)),
     ];
     if (countTier('caution')) parts.push(`${countTier('caution')} risky`);
-    count.textContent = parts.join(' · ');
+    // One span per part, so each translates on its own.
+    count.innerHTML = parts.map(part => `<span>${escapeHtml(part)}</span>`).join(', ');
   }
 
   routeListModalReturnFocus = document.activeElement;

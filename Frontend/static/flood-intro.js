@@ -265,7 +265,7 @@
     panel.setAttribute('aria-label', 'Flood scenario');
     panel.innerHTML = `
       <div class="safety-section-label aco-replay-label">Flood scenario</div>
-      <div class="safety-route-chip aco-replay-chip">${safetyIcon('droplet')}<span>${scenario.return_period_years || 25}-year flood · Heavy rain</span></div>
+      <div class="safety-route-chip aco-replay-chip">${safetyIcon('droplet')}<span><span>${scenario.return_period_years || 25}-year flood</span>, <span>heavy rain</span></span></div>
       <ol class="aco-steps">
         ${STEPS.map(step => `
           <li class="aco-step">
@@ -286,7 +286,7 @@
         <div class="flood-meter-foot"><b>${scenario.return_period_years || 25}-year flood</b><span>Walking: <span class="flood-meter-walk" data-flood="walk">—</span></span></div>
       </div>
       <div class="aco-replay-foot">
-        <p class="aco-replay-meta"><span class="aco-meta-long">How the water spreads is drawn for illustration and sped up. Where it ends and how deep it gets come from the ${source} ${scenario.return_period_years || 25}-year flood map of ${escapeHtml(barangay)}.</span><span class="aco-meta-short">Sped up · ${source} map</span></p>
+        <p class="aco-replay-meta"><span class="aco-meta-long">How the water spreads is drawn for illustration and sped up. Where it ends and how deep it gets come from the ${source} ${scenario.return_period_years || 25}-year flood map of ${escapeHtml(barangay)}.</span><span class="aco-meta-short"><span>Sped up</span>, <span>${source} map</span></span></p>
         <button type="button" class="aco-replay-skip">Skip to ant search</button>
       </div>
       <p class="sr-only" aria-live="polite" data-flood="caption"></p>`;
@@ -305,7 +305,7 @@
       summary.className = 'quake-summary';
       const at = START_LEVEL ? `${LEVELS[START_LEVEL].name} water at` : 'no flooding at';
       summary.innerHTML = `<span class="aco-step-icon" aria-hidden="true">${CHECK}</span>
-        <span><b>Flood scenario</b>${scenario.return_period_years || 25}-year flood · ${escapeHtml(at)} ${escapeHtml(startLabel)}</span>`;
+        <span><b>Flood scenario</b><span>${scenario.return_period_years || 25}-year flood</span>, <span>${escapeHtml(at)} ${escapeHtml(startLabel)}</span></span>`;
       return summary;
     }
 
@@ -389,7 +389,7 @@
       } else if (!level) {
         texts = ['Dry so far', 'No water here yet', '—'];
       } else {
-        texts = [`${LEVELS[level].name} flood`, `${LEVELS[level].range} · ${lowerFirst(FLOOD_DEPTH_ON_ADULT_BY_VAR[level])}`, LEVELS[level].walk];
+        texts = [`${LEVELS[level].name} flood`, `${LEVELS[level].range}, ${lowerFirst(FLOOD_DEPTH_ON_ADULT_BY_VAR[level])}`, LEVELS[level].walk];
       }
       field('value').textContent = texts[0];
       field('sub').textContent = texts[1];

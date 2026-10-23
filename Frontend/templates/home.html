@@ -11,9 +11,8 @@
   <div class="wrap hero-inner hero-split">
 
     <div class="hero-copy">
-      <span class="eyebrow">Ant Guided Navigation And Safety System</span>
-      <h1>Disaster Preparedness<br><span class="hero-accent">for safer communities</span></h1>
-      <p class="lede">AGNAS is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios, filtering out hazard-prone routes before evaluating path distance.</p>
+      <h1>Disaster Preparedness<br>for safer communities</h1>
+      <p class="lede">AGNAS (Ant Guided Navigation and Safety System) is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios, filtering out hazard-prone routes before evaluating path distance.</p>
     </div>
 
     <section class="hero-quickstart" aria-labelledby="qsTitle">
@@ -37,7 +36,7 @@
       <p class="qs-error" id="qsBarangayError" role="alert" hidden>Select a barangay first to start the simulation.</p>
 
       <a class="cta big full qs-cta" id="quickStartLaunch" href="#" data-base-href="{{ url_for('simulator_app') }}" onclick="handleQuickStartLaunch(event)">
-        Open simulator <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        Open simulator
       </a>
       <p class="qs-note" id="quickStartNote">Choose your barangay, then set your route on the map.</p>
     </section>
@@ -72,7 +71,6 @@
 <section class="block hz-section" id="hazards">
   <div class="wrap">
     <div class="block-head center-head">
-      <span class="eyebrow center">Hazards</span>
       <h2>See what each hazard does on the street</h2>
       <p>Pick a flood level, or turn on an earthquake layer and press Simulate.</p>
     </div>
@@ -161,7 +159,7 @@
                 </g>
               </g>
               <rect y="200" width="520" height="30" style="fill: var(--street)"/>
-              <g class="hz-svg-street" font-family="DM Mono, monospace" font-size="9" text-anchor="middle" style="fill: var(--street-text)">
+              <g class="hz-svg-street" font-family="Plus Jakarta Sans, sans-serif" font-size="9" text-anchor="middle" style="fill: var(--street-text)">
                 <text x="145" y="213">Adult</text><text x="145" y="226">167 cm</text>
                 <text x="197" y="213">Child</text><text x="197" y="226">130 cm</text>
               </g>
@@ -171,7 +169,7 @@
                 <rect x="52" y="110" width="6" height="60" style="fill: var(--med)"/>
                 <rect x="52" y="80" width="6" height="30" style="fill: var(--high)"/>
                 <path d="M46 200 H60 M48 170 H60 M48 140 H60 M48 110 H60 M48 80 H60" stroke-width="1.2" style="stroke: var(--muted)"/>
-                <g class="hz-svg-ruler" font-family="DM Mono, monospace" font-size="10" text-anchor="end" style="fill: var(--text)">
+                <g class="hz-svg-ruler" font-family="Plus Jakarta Sans, sans-serif" font-size="10" text-anchor="end" style="fill: var(--text)">
                   <text x="43" y="203">0</text>
                   <text x="43" y="173">0.5</text>
                   <text x="43" y="143">1.0</text>
@@ -182,7 +180,7 @@
               <g class="hz-depth-marker" id="hzDepthMarker" style="transform: translateY(200px)" aria-hidden="true">
                 <path d="M61 0 L67 -5 V5 Z" style="fill: var(--lvl, var(--low))"/>
                 <rect x="67" y="-9" width="62" height="18" rx="9" style="fill: var(--lvl, var(--low))"/>
-                <text class="hz-svg-marker" id="hzDepthMarkerText" x="98" y="0" dominant-baseline="central" text-anchor="middle" font-family="DM Mono, monospace" font-size="10.5" font-weight="500" style="fill: var(--lvl-on, #1c1917)">0.30 m</text>
+                <text class="hz-svg-marker" id="hzDepthMarkerText" x="98" y="0" dominant-baseline="central" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-size="10.5" font-weight="500" style="fill: var(--lvl-on, #1c1917)">0.30 m</text>
               </g>
             </svg>
           </div>
@@ -396,7 +394,6 @@
 <section class="block gtk-section">
   <div class="wrap">
     <div class="block-head center-head">
-      <span class="eyebrow center">Good to know</span>
       <h2>Before you start</h2>
       <p>A few things worth knowing before you plan a route.</p>
     </div>
@@ -437,13 +434,12 @@
 <section class="block">
   <div class="wrap">
     <div class="block-head center-head">
-      <span class="eyebrow center">How it works</span>
       <h2>How our ants work for you</h2>
-      <p>Simulated ants map local streets — strengthening digital signals on safe roads while fading out paths with hazards.</p>
+      <p>Simulated ants map local streets, strengthening digital signals on safe roads while fading out paths with hazards.</p>
     </div>
     <div class="algo-flow">
       <div class="algo-step">
-        <span class="algo-step-no"><span class="algo-step-zero">0</span>1</span>
+        <span class="algo-step-no">1</span>
         <h3>Ants explore the graph</h3>
         <div class="algo-diagram" aria-hidden="true">
           <svg viewBox="0 0 220 100" fill="none">
@@ -463,7 +459,7 @@
       </div>
 
       <div class="algo-step">
-        <span class="algo-step-no"><span class="algo-step-zero">0</span>2</span>
+        <span class="algo-step-no">2</span>
         <h3>Pheromone reinforces safe, short trails</h3>
         <div class="algo-diagram" aria-hidden="true">
           <svg viewBox="0 0 220 100" fill="none">
@@ -479,11 +475,11 @@
           </svg>
           <span class="algo-diagram-caption">Safer + shorter trails strengthen</span>
         </div>
-        <p>Every run, the ants leave a stronger trail on safe roads and a fading trail on unsafe ones — like a scent trail that only lasts on the good paths.</p>
+        <p>Every run, the ants leave a stronger trail on safe roads and a fading trail on unsafe ones, like a scent trail that only lasts on the good paths.</p>
       </div>
 
       <div class="algo-step">
-        <span class="algo-step-no"><span class="algo-step-zero">0</span>3</span>
+        <span class="algo-step-no">3</span>
         <h3>Routes are ranked safety-first</h3>
         <div class="algo-diagram" aria-hidden="true">
           <svg viewBox="0 0 220 100" fill="none">

@@ -373,8 +373,8 @@
       : `A sped-up replay of this run's search: all ${formatCountText(mainAnts)} ants.`;
     // The phone sheet's one-line version (style.css).
     panel.querySelector('.aco-meta-short').textContent = someAnts
-      ? `Sped-up replay · ${formatCountText(mainAnts)} of ${formatCountText(options.antsTotal)} ants`
-      : `Sped-up replay · all ${formatCountText(mainAnts)} ants`;
+      ? `Sped-up replay of ${formatCountText(mainAnts)} of ${formatCountText(options.antsTotal)} ants`
+      : `Sped-up replay of all ${formatCountText(mainAnts)} ants`;
     panel.querySelector('.aco-replay-skip').addEventListener('click', () => finish());
 
     const sites = Number(replay.sites_searched) || 0;
@@ -1049,7 +1049,7 @@
       }
       return [
         level,
-        `Liquefaction ${liquefactionLabel.toLowerCase()} · ground shaking ${shakingLabel.toLowerCase()}`,
+        `Liquefaction ${liquefactionLabel.toLowerCase()}, ground shaking ${shakingLabel.toLowerCase()}`,
       ];
     }
 
@@ -1161,8 +1161,8 @@
       panel.querySelector('[data-aco-cards="search"]').hidden = true;
       panel.querySelector('[data-aco-cards="walk"]').hidden = false;
       panel.classList.add('is-walking');
-      setText('route', previewOnly ? formatKm(route1Info.distance) : `${formatKm(route1Info.distance)} · ${route1Info.durationText} walk`);
-      setText('routeSub', previewOnly ? 'Preview only — unsafe to walk' : route1Info.name);
+      setText('route', previewOnly ? formatKm(route1Info.distance) : `${formatKm(route1Info.distance)}, ${route1Info.durationText} walk`);
+      setText('routeSub', previewOnly ? 'Preview only: unsafe to walk' : route1Info.name);
       renderLegend(true);
       options.onWalkChange?.(true);
       syncWalkCards(0);

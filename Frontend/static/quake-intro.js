@@ -265,7 +265,7 @@
     panel.setAttribute('aria-label', 'Earthquake scenario');
     panel.innerHTML = `
       <div class="safety-section-label aco-replay-label">Earthquake scenario</div>
-      <div class="safety-route-chip aco-replay-chip">${safetyIcon('quake')}<span>Magnitude ${magnitude.toFixed(1)} · ${escapeHtml(faultName)}</span></div>
+      <div class="safety-route-chip aco-replay-chip">${safetyIcon('quake')}<span>Magnitude ${magnitude.toFixed(1)} on the ${escapeHtml(faultName)}</span></div>
       <ol class="aco-steps">
         ${STEPS.map(step => `
           <li class="aco-step">
@@ -289,8 +289,8 @@
       <p class="sr-only" aria-live="polite" data-quake="caption"></p>`;
     panel.querySelector('.aco-meta-long').textContent = `The waves are slowed down so you can follow them. ${sourceText()}`;
     panel.querySelector('.aco-meta-short').textContent = isIntensity
-      ? `Slowed down · ${source} map`
-      : `Slowed down · ${startClass.level} shaking`;
+      ? `Slowed down, ${source} map`
+      : `Slowed down, ${String(startClass.level).toLowerCase()} shaking`;
     panel.querySelector('.aco-replay-skip').addEventListener('click', () => skip());
     // Looked up once: the meter is redrawn every frame.
     const fields = {};
@@ -304,7 +304,7 @@
       const summary = document.createElement('div');
       summary.className = 'quake-summary';
       summary.innerHTML = `<span class="aco-step-icon" aria-hidden="true">${CHECK}</span>
-        <span><b>Earthquake scenario</b>M${magnitude.toFixed(1)} ${escapeHtml(faultName)} · ${escapeHtml(isIntensity ? `intensity ${startClass.numeral}` : `${String(startClass.level).toLowerCase()} shaking`)} at ${escapeHtml(startLabel)}</span>`;
+        <span><b>Earthquake scenario</b>M${magnitude.toFixed(1)} ${escapeHtml(faultName)}, ${escapeHtml(isIntensity ? `intensity ${startClass.numeral}` : `${String(startClass.level).toLowerCase()} shaking`)} at ${escapeHtml(startLabel)}</span>`;
       return summary;
     }
 

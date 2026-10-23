@@ -250,8 +250,8 @@
     const rows = shaking.classes.map(cls => {
       const swatch = `<i style="background:${rgb(onMap(cls.color, alpha))}"></i>`;
       if (shaking.kind === 'intensity') {
-        const text = [cls.word, cls.part].filter(Boolean).join(' · ');
-        return `<span>${swatch}<span class="mmi-roman">${escapeHtml(cls.numeral)}</span>${escapeHtml(text)}</span>`;
+        const text = [cls.word, cls.part].filter(Boolean).map(part => `<span>${escapeHtml(part)}</span>`).join(', ');
+        return `<span>${swatch}<span class="mmi-roman">${escapeHtml(cls.numeral)}</span>${text}</span>`;
       }
       return `<span>${swatch}${escapeHtml(cls.level)}</span>`;
     }).join('');

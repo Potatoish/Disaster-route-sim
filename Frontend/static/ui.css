@@ -3,7 +3,9 @@
 :root {
   --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-heading: 'Rajdhani', system-ui, sans-serif;
-  --font-meta: 'DM Mono', ui-monospace, monospace;
+  /* Small labels and readouts share the body face: a code font on them read
+     as template chrome. Figures stay even-width where they line up. */
+  --font-meta: var(--font-body);
   --space-2: .5rem;
   --space-4: 1rem;
   --space-5: 1.5rem;
