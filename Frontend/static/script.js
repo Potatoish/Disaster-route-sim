@@ -26,6 +26,8 @@ let floodToEvacSite = false;
 let mapLayers = { boundaries: [], routes: [], routeGroups: [] };
 let activeInfoWindow = null;
 let selectedRouteFocus = null;
+// The hovered turn-by-turn step's stretch on the map (showRouteStepHighlight).
+let routeStepHighlight = null;
 let workflowFocusSection = null;
 let simulationInProgress = false;
 let floodHazardOverlayMode = 'all';
@@ -1639,6 +1641,7 @@ function clearRoutePreview(group) {
 function clearRouteAnimation() {
   const groups = Array.isArray(mapLayers.routeGroups) ? mapLayers.routeGroups : [];
   groups.forEach(clearRoutePreview);
+  clearRouteStepHighlight();
 }
 
 function clearBoundaryLayers() {
@@ -5246,8 +5249,8 @@ function formatTurnStepInstruction(step, index) {
 function buildRouteDirectionsMarkup(route) {
   const steps = getRouteTurnSteps(route);
   if (!steps.length) return '';
-  return `<ol class="mroute-steps" aria-label="Directions for route ${escapeHtml(route.display_route_no)}">
-    ${steps.map((step, index) => `<li class="turn-step">
+  return `<ol class="mroute-steps" aria-label="Directions for route ${escapeHtml(route.display_route_no)}" data-route-steps="${escapeHtml(route.display_route_no)}">
+    ${steps.map((step, index) => `<li class="turn-step"${Array.isArray(step.coords) && step.coords.length > 1 ? ` data-route-step="${index}"` : ''}>
       <span class="turn-step-icon">${turnStepIcon(step.turn)}</span>
       <span class="turn-step-text"><span class="turn-step-instruction">${escapeHtml(formatTurnStepInstruction(step, index))}</span>
       ${Number(step.distance) > 0 ? `<span class="turn-step-distance">${escapeHtml(formatDistanceCompact(step.distance))}</span>` : ''}</span>
@@ -5257,6 +5260,65 @@ function buildRouteDirectionsMarkup(route) {
     </li>
   </ol>`;
 }
+
+// Pointing at a turn-by-turn step (a tap on touch screens, which have no
+// hover) lifts that step's stretch of road over the routes, which fade back
+// meanwhile (#map.route-step-focus), so it reads at a glance where it is.
+function clearRouteStepHighlight() {
+  if (routeStepHighlight) {
+    routeStepHighlight.remove();
+    routeStepHighlight = null;
+  }
+  document.getElementById('map')?.classList.remove('route-step-focus');
+  document.querySelectorAll('.turn-step.is-highlighted').forEach(item => item.classList.remove('is-highlighted'));
+}
+
+function showRouteStepHighlight(item) {
+  const routeNo = Number(item.closest('[data-route-steps]')?.dataset.routeSteps);
+  const route = simData?.routes?.find(candidate => Number(candidate.display_route_no) === routeNo);
+  const coords = getRouteTurnSteps(route)[Number(item.dataset.routeStep)]?.coords;
+  clearRouteStepHighlight();
+  if (!gMap || !Array.isArray(coords) || coords.length < 2) return;
+
+  // The route's own color, as its line is drawn, cased like a picked route.
+  const group = (mapLayers.routeGroups || []).find(candidate => candidate.route === route
+    || (candidate.routeNo === route.display_route_no && candidate.category === (route.category || '')));
+  const scale = getRouteZoomScale(gMap);
+  const weight = (ROUTE_BEST_WEIGHT + 2) * scale;
+  const line = { noClip: true, lineCap: 'round', lineJoin: 'round', interactive: false, className: 'route-step-highlight' };
+  routeStepHighlight = L.layerGroup([
+    L.polyline(coords, { ...line, color: ROUTE_RIM_COLOR, opacity: 0.9, weight: weight + (ROUTE_HALO_EXTRA_WEIGHT + ROUTE_EDGE_EXTRA_WEIGHT) * scale }),
+    L.polyline(coords, { ...line, color: ROUTE_HALO_COLOR, opacity: 1, weight: weight + ROUTE_HALO_EXTRA_WEIGHT * scale }),
+    L.polyline(coords, { ...line, color: getRouteLineColors(group?.color || route.color).line, opacity: 1, weight }),
+  ]).addTo(gMap);
+  document.getElementById('map')?.classList.add('route-step-focus');
+  item.classList.add('is-highlighted');
+}
+
+document.addEventListener('pointerover', event => {
+  if (event.pointerType === 'touch') return;
+  const item = event.target.closest?.('[data-route-step]');
+  if (item && !item.classList.contains('is-highlighted')) showRouteStepHighlight(item);
+});
+
+document.addEventListener('pointerout', event => {
+  if (event.pointerType === 'touch') return;
+  const item = event.target.closest?.('[data-route-step]');
+  if (item && !item.contains(event.relatedTarget)) clearRouteStepHighlight();
+});
+
+document.addEventListener('click', event => {
+  if (event.pointerType === 'mouse') return;
+  const item = event.target.closest?.('[data-route-step]');
+  if (!item) return;
+  if (item.classList.contains('is-highlighted')) clearRouteStepHighlight();
+  else showRouteStepHighlight(item);
+});
+
+// Folding the directions hides the step under the pointer without a pointerout.
+document.addEventListener('toggle', event => {
+  if (event.target.matches?.('[data-result-directions]') && !event.target.open) clearRouteStepHighlight();
+}, true);
 
 function getBestRoute(routes) {
   return routes.find(route => route.category === 'best')
@@ -5467,6 +5529,7 @@ function syncResultRouteNavigation() {
   document.querySelectorAll('[data-result-directions]').forEach(directions => {
     if (directions._routeRecord === current) return;
     directions._routeRecord = current;
+    clearRouteStepHighlight();
     directions.hidden = !hasDirections;
     directions.open = false;
     directions.querySelector('[data-result-directions-body]').innerHTML = buildRouteDirectionsMarkup(current);

@@ -1423,6 +1423,31 @@ def edge_geometry_to_coords(G, u, v, edge):
     return edge_coords
 
 
+# The route's line as one list of points, edge after edge, plus where each
+# edge starts in it. Joins within the snap tolerance share their point, so
+# an edge there starts on the previous edge's last point.
+def stitch_route_edge_coords(G, resolved_edges):
+    coords = []
+    edge_starts = []
+    for u, v, key, edge in resolved_edges:
+        edge_coords = edge_geometry_to_coords(G, u, v, edge)
+        if not edge_coords:
+            edge_starts.append(max(len(coords) - 1, 0))
+            continue
+
+        if (
+            coords
+            and point_distance_meters(coords[-1], edge_coords[0]) <= ROUTE_STITCH_SNAP_TOLERANCE_METERS
+        ):
+            edge_starts.append(len(coords) - 1)
+            edge_coords[0] = coords[-1]
+            coords.extend(edge_coords[1:])
+        else:
+            edge_starts.append(len(coords))
+            coords.extend(edge_coords)
+    return coords, edge_starts
+
+
 # A route's line runs along its roads only: it starts and ends where each
 # pin meets the road (add_road_access_nodes), never drawn on to the pin.
 def path_to_coords(G, route, resolved_edges=None):
@@ -1436,25 +1461,10 @@ def path_to_coords(G, route, resolved_edges=None):
             "lng": float(node_data["x"])
         }]
 
-    coords = []
-
     if resolved_edges is None:
         resolved_edges = resolve_route_edge_records(G, route)
 
-    for u, v, key, edge in resolved_edges:
-        edge_coords = edge_geometry_to_coords(G, u, v, edge)
-        if not edge_coords:
-            continue
-
-        if (
-            coords
-            and point_distance_meters(coords[-1], edge_coords[0]) <= ROUTE_STITCH_SNAP_TOLERANCE_METERS
-        ):
-            edge_coords[0] = coords[-1]
-            coords.extend(edge_coords[1:])
-        else:
-            coords.extend(edge_coords)
-
+    coords, _edge_starts = stitch_route_edge_coords(G, resolved_edges)
     if coords:
         return coords
 
@@ -1539,17 +1549,20 @@ def _turn_step_exit_bearing(coords):
 
 def extract_route_turn_steps(G, route, resolved_edges=None):
     """Collapse the route into per-street walking-direction steps: a name,
-    the distance walked on it, and the turn onto it from the previous step.
-    There is no maneuver data in the source graph, so the turn is derived
-    from the bearing change between consecutive streets' geometry."""
+    the distance walked on it, the turn onto it from the previous step, and
+    where it starts in path_coordinates (the results highlight a step's
+    stretch on the map). There is no maneuver data in the source graph, so
+    the turn is derived from the bearing change between consecutive streets'
+    geometry."""
     if resolved_edges is None:
         resolved_edges = resolve_route_edge_records(G, route)
 
     if not resolved_edges:
         return []
 
+    _route_coords, edge_starts = stitch_route_edge_coords(G, resolved_edges)
     steps = []
-    for u, v, key, edge in resolved_edges:
+    for edge_index, (u, v, key, edge) in enumerate(resolved_edges):
         name = _edge_street_name(edge) or ""
         coords = edge_geometry_to_coords(G, u, v, edge)
         if len(coords) < 2:
@@ -1567,7 +1580,12 @@ def extract_route_turn_steps(G, route, resolved_edges=None):
             steps[-1]["length"] += length
             steps[-1]["coords"].extend(coords[1:])
         else:
-            steps.append({"name": name, "length": length, "coords": list(coords)})
+            steps.append({
+                "name": name,
+                "length": length,
+                "coords": list(coords),
+                "start_index": edge_starts[edge_index],
+            })
 
     turn_steps = []
     prev_exit_bearing = None
@@ -1585,6 +1603,7 @@ def extract_route_turn_steps(G, route, resolved_edges=None):
             "name": step["name"],
             "distance": round(step["length"], 1),
             "turn": turn,
+            "start_index": step["start_index"],
         })
         prev_exit_bearing = _turn_step_exit_bearing(step["coords"]) or prev_exit_bearing
 

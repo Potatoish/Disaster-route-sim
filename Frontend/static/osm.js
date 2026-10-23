@@ -391,6 +391,22 @@ function getSegmentCount(route, normalizedPath, normalizedCoords) {
   return 0;
 }
 
+// Each turn step's stretch of the line, from its start_index in the backend's
+// path_coordinates to the next step's (the directions highlight it on the
+// map). Sliced before the line is deduped, which would shift the indexes;
+// steps that already carry their stretch keep it.
+function attachTurnStepCoords(steps, rawCoords) {
+  if (!Array.isArray(steps)) return [];
+  const last = rawCoords.length - 1;
+  return steps.map((step, index) => {
+    if (Array.isArray(step?.coords)) return step;
+    const from = Number(step?.start_index);
+    const to = index + 1 < steps.length ? Number(steps[index + 1]?.start_index) : last;
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to > last || to <= from) return step;
+    return { ...step, coords: normalizePathCoordinates(rawCoords.slice(from, to + 1)) };
+  });
+}
+
 // A route's line is exactly its path_coordinates: the backend starts and
 // ends it where each pin meets the street, and nothing joins it to the pins.
 function normalizeRoutes(routes) {
@@ -408,7 +424,9 @@ function normalizeRoutes(routes) {
       segments: getSegmentCount(route, normalizedPath, normalizedCoords),
       path_label: route.path_label || '',
       color: route.color || getRouteColor(route.category),
-      street_path: Array.isArray(route.street_path) ? route.street_path : []
+      street_path: Array.isArray(route.street_path) ? route.street_path : [],
+      turn_steps: attachTurnStepCoords(route.turn_steps,
+        Array.isArray(route.path_coordinates) ? route.path_coordinates : []),
     };
   });
 }

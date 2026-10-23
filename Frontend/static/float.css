@@ -966,6 +966,38 @@ body.sim-page #routeSafetyContent .result-route-directions .mroute-steps {
   padding: 0 2px 8px;
 }
 
+/* A step whose stretch shows on the map while pointed at
+   (showRouteStepHighlight): a tint a little wider than the row, so the
+   dashed rules between steps keep their width. */
+body.sim-page .turn-step[data-route-step] {
+  position: relative;
+  isolation: isolate;
+}
+
+body.sim-page .turn-step[data-route-step]::before {
+  content: "";
+  position: absolute;
+  inset: 3px -8px;
+  z-index: -1;
+  border-radius: 10px;
+  background: transparent;
+  transition: background-color .12s ease;
+}
+
+body.sim-page .turn-step[data-route-step]:hover::before,
+body.sim-page .turn-step.is-highlighted::before {
+  background: var(--float-chip);
+}
+
+/* Meanwhile the routes fade back so the stretch stands out. */
+body.sim-page #map .leaflet-overlay-pane .route-line {
+  transition: opacity .15s ease;
+}
+
+body.sim-page #map.route-step-focus .leaflet-overlay-pane .route-line {
+  opacity: .3;
+}
+
 body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-label {
   display: flex;
   flex-direction: column;
