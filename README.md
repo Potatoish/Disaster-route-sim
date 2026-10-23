@@ -121,7 +121,6 @@ Disaster-route-sim/
 |       |-- reduce_flood_layers.py
 |       `-- feedback_sheet.gs   # Apps Script for the feedback sheet (and visitor count)
 |-- Dockerfile                  # built from the repo root (copies Backend/ and Frontend/)
-|-- railway.json
 `-- README.md
 ```
 
@@ -173,8 +172,8 @@ py Backend/tools/route_batch_test.py Backend/tools/route_pairs.example.json
 The About page's contact form emails the team inbox through [Resend](https://resend.com), and the
 feedback button saves each response as a row in a Google Sheet. Both are set with environment
 variables (Render → service → Environment); until they are set, the forms answer "isn't set up yet".
-Email goes through Resend's HTTPS API, not SMTP, because Railway's Free/Hobby plans block outbound
-SMTP.
+Email goes through Resend's HTTPS API, not SMTP, because hosting plans often block outbound SMTP
+(Railway's Free/Hobby plans did).
 
 | Variable | Value |
 |---|---|

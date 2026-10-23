@@ -401,21 +401,6 @@ def health():
     return jsonify({"status": "ok"})
 
 
-# Temporary: shows the caller only their own proxy headers, to check which
-# IP _client_ip picks on Render. Nothing is logged or stored.
-@app.route("/whoami", methods=["GET"])
-def whoami():
-    headers = ("X-Forwarded-For", "True-Client-IP", "CF-Connecting-IP", "X-Real-IP")
-    response = jsonify({
-        "error": False,
-        "remote_addr": request.remote_addr,
-        "client_ip_used": _client_ip(),
-        "headers": {name: request.headers.get(name) for name in headers},
-    })
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
 @app.route("/simulation-status", methods=["GET"])
 def simulation_status():
     return jsonify({
@@ -724,8 +709,8 @@ def _client_ip():
         connecting = request.headers.get("CF-Connecting-IP", "").strip()
         if connecting:
             return connecting
-    # Railway's edge appends the connecting IP to X-Forwarded-For, so there
-    # the rightmost entry is the one a client can't forge.
+    # Elsewhere, an edge proxy that appends the connecting IP to
+    # X-Forwarded-For makes the rightmost entry the one a client can't forge.
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded.strip():
         return forwarded.split(",")[-1].strip()
@@ -793,7 +778,7 @@ def simulator_app():
 def _warm_caches():
     """Builds, right after startup, what the first visitor would otherwise
     wait for: each barangay's flood map layer and the graphs behind the pin
-    check (seconds each on Railway, after every deploy)."""
+    check (seconds each on the server, after every deploy)."""
     started = time.time()
     for name in BARANGAY_BOUNDARY_FILES:
         boundary = get_barangay_boundary(name)

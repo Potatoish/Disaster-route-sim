@@ -1,6 +1,6 @@
 ﻿// Flask serves this page and the API together, so the API is always on the
 // page's own origin -- whatever host/port the app runs on (dev server,
-// gunicorn, Docker, Railway).
+// gunicorn, Docker, Render).
 window.BACKEND_BASE = window.location.origin;
 
 function uiCopy(message) {

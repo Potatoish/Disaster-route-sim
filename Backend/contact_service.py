@@ -2,8 +2,9 @@
 homepage's visitor count.
 
 Contact messages are emailed to the team inbox through Resend's HTTPS API.
-Railway's Free/Hobby plans block outbound SMTP, so Flask-Mail with Gmail SMTP
-would work locally and then fail silently once deployed.
+Hosting plans often block outbound SMTP (Railway's Free/Hobby plans did), so
+Flask-Mail with Gmail SMTP would work locally and then fail silently once
+deployed.
 
 Feedback is anonymous evaluation data, so it goes to a Google Sheet (one row
 per response) through an Apps Script web app -- tools/feedback_sheet.gs --
@@ -11,7 +12,7 @@ instead of one email each. The sheet's URL stays on the server, so the page
 cannot be used to write to the sheet directly.
 
 The visitor count lives in the same sheet (its "Visitors" tab), because
-Railway wipes the server's files on every deploy.
+the host wipes the server's files on every deploy.
 
 Configuration comes from the environment, so nothing secret is committed:
 
