@@ -401,9 +401,8 @@ def health():
     return jsonify({"status": "ok"})
 
 
-# Temporary: shows the caller only their own proxy headers, to find which
-# X-Forwarded-For entry Render's edge appends (see _client_ip). Nothing is
-# logged or stored.
+# Temporary: shows the caller only their own proxy headers, to check which
+# IP _client_ip picks on Render. Nothing is logged or stored.
 @app.route("/whoami", methods=["GET"])
 def whoami():
     headers = ("X-Forwarded-For", "True-Client-IP", "CF-Connecting-IP", "X-Real-IP")
@@ -715,10 +714,18 @@ def run_earthquake():
         }), 500
 
 def _client_ip():
-    # Behind Railway's edge proxy remote_addr is the proxy, which would put
-    # every visitor in one rate-limit bucket. The edge appends the connecting
-    # IP to X-Forwarded-For, so the rightmost entry is the one a client can't
-    # forge.
+    # Behind a host's edge proxy remote_addr is the proxy, which would put
+    # every visitor in one rate-limit bucket. Render (which sets RENDER on its
+    # services) sits behind Cloudflare: X-Forwarded-For keeps whatever the
+    # client sent and ends in a Render-internal 10.x hop that changes per
+    # request, while Cloudflare overwrites CF-Connecting-IP with the
+    # connecting address and refuses a request that forges it.
+    if os.environ.get("RENDER"):
+        connecting = request.headers.get("CF-Connecting-IP", "").strip()
+        if connecting:
+            return connecting
+    # Railway's edge appends the connecting IP to X-Forwarded-For, so there
+    # the rightmost entry is the one a client can't forge.
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded.strip():
         return forwarded.split(",")[-1].strip()
