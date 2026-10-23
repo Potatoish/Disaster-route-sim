@@ -280,12 +280,6 @@ body.sim-page #appShell .earthquake-view-switcher:not(.is-collapsed) .earthquake
   padding: 0 2px 0 4px;
 }
 
-body.sim-page #appShell .earthquake-view-title {
-  color: var(--accent-text, var(--accent));
-  font: 500 .6875rem var(--font-meta);
-  letter-spacing: .14em;
-}
-
 body.sim-page #appShell .earthquake-view-tabs {
   flex-wrap: nowrap;
   gap: 2px;
@@ -324,6 +318,20 @@ body.sim-page #appShell .earthquake-view-hint {
 body.sim-page #appShell .map-legend {
   padding: 10px 14px;
   border-radius: 14px;
+  font-family: var(--font-body);
+}
+
+/* The legend's own headings and numerals in the body face too. */
+body.sim-page :is(#appShell .map-legend, .msim-maplegend) .quake-levels b {
+  color: var(--text);
+  font: 700 .75rem var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body.sim-page :is(#appShell .map-legend, .msim-maplegend) .mmi-roman {
+  font-family: var(--font-body);
+  font-weight: 700;
 }
 
 /* Folded: a pill, "LEGEND  Show ^". */
@@ -332,10 +340,12 @@ body.sim-page #appShell .map-legend.is-collapsed {
   border-radius: 999px;
 }
 
-body.sim-page #appShell .map-legend .legend-title {
-  color: var(--accent-text, var(--accent));
-  font: 500 .6875rem var(--font-meta);
-  letter-spacing: .14em;
+/* Card titles in plain sentence case, like the panels' own text. */
+body.sim-page #appShell :is(.earthquake-view-title, .map-legend .legend-title, .flood-filter-title) {
+  color: var(--text);
+  font: 700 .8125rem var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 body.sim-page #appShell .legend-toggle {
@@ -437,10 +447,17 @@ body.sim-page #setupPanel .panel-barangay {
 
 body.sim-page #setupPanel :is(.panel-barangay-label, .sec-label) {
   margin: 0;
-  color: var(--float-faint);
-  font: 500 .6875rem var(--font-meta);
-  letter-spacing: .14em;
-  text-transform: uppercase;
+  color: var(--muted);
+  font: 600 .8125rem var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Coordinates in the body face with even-width figures, not a code font. */
+body.sim-page #setupPanel .pin-field-meta {
+  font: 500 .75rem var(--font-body);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 body.sim-page #setupPanel .panel-barangay-seg {
@@ -841,16 +858,17 @@ body.sim-page #routeSafetyPanel > .safety-brand {
   background: transparent;
 }
 
+/* The name as a wordmark over its long form, not a label over a title. */
 body.sim-page #routeSafetyPanel .safety-eyebrow {
   color: var(--accent-text, var(--accent));
-  font: 500 .72rem var(--font-meta);
-  letter-spacing: .16em;
+  font: 700 1.625rem/1 var(--font-heading);
+  letter-spacing: .02em;
 }
 
 body.sim-page #routeSafetyPanel .safety-brand h2 {
-  margin-top: 4px;
-  color: var(--text);
-  font: 700 1.25rem/1.15 var(--font-heading);
+  margin-top: 3px;
+  color: var(--muted);
+  font: 500 .8125rem/1.35 var(--font-body);
 }
 
 /* Short screens only: back to setup. */
@@ -994,6 +1012,13 @@ body.sim-page .result-route-swatch.mroute-swatch--eliminated {
   height: 4px;
 }
 
+/* Route 1's risk name, set apart by weight and color. */
+body.sim-page .result-route-tag {
+  margin-left: 3px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-options {
   border-color: var(--float-line);
   border-radius: 12px;
@@ -1091,10 +1116,16 @@ body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyA
 }
 
 body.sim-page #routeSafetyContent .safety-section-label {
-  margin: 22px 0 14px;
-  color: var(--float-faint);
-  font: 500 .6875rem var(--font-meta);
-  letter-spacing: .14em;
+  margin: 22px 0 12px;
+  color: var(--muted);
+  font: 600 .8125rem var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* The route picker above already names the route these details are for. */
+body.sim-page #routeSafetyContent [data-current-route-context] {
+  display: none;
 }
 
 body.sim-page #routeSafetyContent [data-current-route-summary] > .safety-section-label:first-child {
@@ -1424,9 +1455,10 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
 
   #msim .msim-maplegend-toggle {
     min-height: 42px;
-    color: var(--accent-text, var(--accent));
-    font: 500 .6875rem/1 var(--font-meta);
-    letter-spacing: .14em;
+    color: var(--text);
+    font: 700 .8125rem/1 var(--font-body);
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   #msim .msim-maplegend-toggle svg {
@@ -1506,9 +1538,10 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
   }
 
   #msim .msheet-label {
-    color: var(--float-faint);
-    font: 500 .66rem var(--font-meta);
-    letter-spacing: .14em;
+    color: var(--muted);
+    font: 600 .8125rem var(--font-body);
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   /* Start / End: rows with a thin rule between them, not boxes. */
@@ -1566,9 +1599,10 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
   }
 
   #msim .mslot-label {
-    color: var(--float-faint);
-    font: 500 .66rem var(--font-meta);
-    letter-spacing: .14em;
+    color: var(--muted);
+    font: 600 .75rem var(--font-body);
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   #msim .mslot-value {
@@ -1647,13 +1681,14 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
 
   #msim #msimResults .safety-eyebrow {
     color: var(--accent-text, var(--accent));
-    font: 500 .6875rem var(--font-meta);
-    letter-spacing: .16em;
+    font: 700 1.5rem/1 var(--font-heading);
+    letter-spacing: .02em;
   }
 
   #msim #msimResults .safety-brand h2 {
     margin-top: 3px;
-    font: 700 1.1875rem/1.15 var(--font-heading);
+    color: var(--muted);
+    font: 500 .8125rem/1.35 var(--font-body);
   }
 
   #msim .mlens {

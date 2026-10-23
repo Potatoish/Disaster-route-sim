@@ -5391,10 +5391,11 @@ function renderRouteSafetyPanel(result) {
 
 // A route's tag in the picker: route 1 by its risk name ("Best" only for a
 // flood route clear of every flood zone, "High risk" when none is safe),
-// like its line and verdict.
-function getResultRouteTag(route, best) {
-  if (route === best) return ` · ${getTopRouteName(route)}`;
-  return route.category === 'eliminated' ? ' · Eliminated' : '';
+// like its line and verdict. Set apart by type, not a separator.
+function getResultRouteLabelHtml(route, best, number = route.display_route_no) {
+  const tag = route === best ? getTopRouteName(route)
+    : route.category === 'eliminated' ? 'Eliminated' : '';
+  return `Route ${escapeHtml(number)}${tag ? ` <span class="result-route-tag">${escapeHtml(tag)}</span>` : ''}`;
 }
 
 // Both layouts use the existing ranked routes and map focus; no new ranking.
@@ -5411,8 +5412,7 @@ function buildResultRouteNavigation(routes) {
         <div class="result-route-options" role="group" aria-label="Routes">
         ${routes.map((route, index) => {
           const number = route.display_route_no ?? index + 1;
-          const tag = getResultRouteTag(route, best);
-          return `<button type="button" data-result-route-option="${escapeHtml(number)}" aria-current="false" aria-pressed="false">Route ${escapeHtml(number)}${tag}</button>`;
+          return `<button type="button" data-result-route-option="${escapeHtml(number)}" aria-current="false" aria-pressed="false">${getResultRouteLabelHtml(route, best, number)}</button>`;
         }).join('')}
         </div>
       </details>
@@ -5434,9 +5434,12 @@ function syncResultRouteNavigation() {
     button.hidden = hasSafetyAction;
   });
   const animationOn = !!selectedRouteFocus && selectedRouteFocus.animate !== false;
-  const tag = getResultRouteTag(current, best);
+  const labelHtml = getResultRouteLabelHtml(current, best);
   document.querySelectorAll('[data-result-route-label]').forEach(label => {
-    label.textContent = `Route ${current.display_route_no}${tag}`;
+    if (label._html !== labelHtml) {
+      label.innerHTML = labelHtml;
+      label._html = labelHtml;
+    }
   });
   // The picked route's line as the map draws it (the .mroute-swatch styles).
   const swatchClass = `result-route-swatch mroute-swatch mroute-swatch--${isBest
