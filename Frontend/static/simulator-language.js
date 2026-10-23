@@ -245,7 +245,6 @@ window.agnasSimulatorCopy = [
 ];
 
 window.agnasSimulatorCopy.push(
-  ['Chosen', 'Napili'],
   ['Evac site', 'Evacuation site'], ['Layers', 'Mga layer'],
   ['up to 0.5 m deep', 'hanggang 0.5 m ang lalim'], ['0.5 to 1.5 m deep', '0.5 hanggang 1.5 m ang lalim'],
   ['over 1.5 m deep', 'higit sa 1.5 m ang lalim'],

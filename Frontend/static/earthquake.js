@@ -89,10 +89,10 @@
     state.hazardLayers = null;
   }
 
-  // "OPEN AREA" is wider than "CHOSEN", so its text is a point smaller.
+  // The site a run picks keeps its "OPEN AREA" name; only green marks it.
   function buildEvacMarkerIcon(isHighlighted) {
     return buildEvacSiteMarkerIcon(isHighlighted
-      ? { fill: '#22c55e', stroke: '#14532d', accent: '#166534', label: 'CHOSEN', badgeWidth: 56, labelSize: 11, halo: true }
+      ? { fill: '#22c55e', stroke: '#14532d', accent: '#166534', label: 'OPEN AREA', badgeWidth: 80, labelSize: 10, halo: true }
       : { fill: '#f59e0b', stroke: '#9a3412', accent: '#b45309', label: 'OPEN AREA', badgeWidth: 80, labelSize: 10 });
   }
 
@@ -497,7 +497,7 @@
     const hazardLegend = showHazardLayers ? buildHazardLegendHtml(hazardLayers, activeView) : '';
 
     // Pin icons match the markers (buildEvacMarkerIcon): after a run the
-    // chosen site is the green "CHOSEN" one.
+    // chosen site is the green one.
     const pinRow = (fill, stroke, glyph, label) => (
       `<div class="legend-row">${window.buildLegendPinSvg(fill, stroke, glyph)}<span style="font-size:.78rem;">${label}</span></div>`
     );

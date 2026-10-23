@@ -13,7 +13,7 @@
 
   // Blue, not the earthquake open areas' amber: amber and orange are the
   // Low/Medium flood fills these pins sit on after a run. The site a run
-  // picks is the earthquake mode's green "CHOSEN" pin.
+  // picks keeps its "EVAC SITE" name in the earthquake mode's chosen green.
   const EVAC_MARKER_STYLES = {
     site: {
       fill: '#2563eb',
@@ -27,9 +27,9 @@
       fill: '#22c55e',
       stroke: '#14532d',
       accent: '#166534',
-      label: 'CHOSEN',
-      badgeWidth: 56,
-      labelSize: 11,
+      label: 'EVAC SITE',
+      badgeWidth: 76,
+      labelSize: 10,
       halo: true,
     },
   };

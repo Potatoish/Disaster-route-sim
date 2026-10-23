@@ -3053,7 +3053,7 @@ function syncRoutePinMarkers() {
 }
 
 // The flood evacuation sites on the map while they are the destination, the
-// one a run picked marked "CHOSEN".
+// one a run picked marked green.
 function syncFloodEvacMarkers() {
   if (!gMap) return;
   window.floodHazardUI?.drawEvacuationSites({
@@ -5796,7 +5796,7 @@ const REPORT_MAP_TILE_URL_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}
 const REPORT_MAP_TILE_TIMEOUT_MS = 8000;
 const REPORT_MAP_ATTRIBUTION = 'Map data © OpenStreetMap contributors';
 // The report map's pins, in the live map's colors (the S/E pins, and the green
-// "CHOSEN" evacuation site); the edge colors are for the legend's dots.
+// chosen evacuation site); the edge colors are for the legend's dots.
 const REPORT_PIN_COLORS = {
   start: { color: '#06b6d4', edge: '#155e75' },
   end: { color: '#a855f7', edge: '#6b21a8' },
@@ -6226,7 +6226,7 @@ async function downloadSimulationReport() {
     const peak = getPeakRiskRow(best, isEq);
 
     // An evacuation site the run chose (earthquake, or flood's default) is the
-    // green CHOSEN pin, as on the live map; a destination of one's own is E.
+    // green pin, as on the live map; a destination of one's own is E.
     const endIsChosenSite = isEq ? !isCustomEarthquakeResult() : !!simData.to_evacuation_site;
     const endPin = endIsChosenSite ? REPORT_PIN_COLORS.chosenSite : REPORT_PIN_COLORS.end;
     const mapLabels = { start, end: endLabel, endPin };
