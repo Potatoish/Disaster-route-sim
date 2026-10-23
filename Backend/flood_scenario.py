@@ -1,15 +1,3 @@
-"""The flood scenario a flood run opens with (flood-intro.js): Project NOAH's
-25-year flood rising over the barangay before the ants' replay.
-
-The intro shows rainwater gathering on the lowest ground first and spreading
-until the barangay's flood map is complete. Nothing here models how water
-flows: each 5 m cell of the map gets a "fill time" from the flood map alone.
-Water starts in the middle of the deepest zones (the cells farthest inside
-each patch's deepest level) and spreads outward through the flooded cells,
-slower into shallower water, so the High zones fill first, then Medium, then
-Low. Where the water ends and how deep it gets is the map itself; the panel
-says the spreading is an illustration.
-"""
 
 import base64
 import math
