@@ -579,6 +579,9 @@ function applySetupSidebarState(shouldCollapse) {
   if (!shouldCollapse && MOBILE_PANEL_QUERY.matches) {
     setRouteSafetyPanelVisible(false);
   }
+  // Short screens close the panel to pin, so the choice may have appeared
+  // while it was away.
+  if (!shouldCollapse) requestAnimationFrame(revealEvacChoicePanel);
 
   // No invalidateSize() here: the ResizeObserver in initMap() watches #map's
   // box and settles once the transition ends.
@@ -3183,6 +3186,10 @@ function syncEarthquakeRouteUi() {
   const choicePending = isEvacChoicePending() && !unsupportedEarthquake;
 
   if (earthquakeRoutePanel) {
+    if (choicePending && earthquakeRoutePanel.hidden) {
+      // After the rest of this pin change has laid out the panel.
+      requestAnimationFrame(revealEvacChoicePanel);
+    }
     earthquakeRoutePanel.hidden = !choicePending;
   }
 
@@ -3206,6 +3213,30 @@ function syncEarthquakeRouteUi() {
   syncRoutePinFields();
   setRunButtonLabel();
   syncSimulationConfigLock();
+}
+
+// On a laptop-height window the destination choice lands below the setup
+// panel's fold, under the fields, so the panel scrolls it into view. Only
+// the panel's own scroller moves: scrollIntoView would also scroll the
+// overflow-hidden shell while the panel slides in.
+function revealEvacChoicePanel() {
+  const choice = document.getElementById('earthquakeRoutePanel');
+  if (!choice || choice.hidden || window.mobileSim?.isActive()) return;
+  // The panel body scrolls on desktop; the whole panel on short screens.
+  const scroller = [choice.closest('.panel-body'), document.getElementById('setupPanel')]
+    .find(el => el && el.scrollHeight > el.clientHeight + 1);
+  if (!scroller) return;
+  const box = choice.getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  // Short screens' bottom bar lies over the panel's last stretch. Its
+  // height, not its rect: the panel may still be sliding in under it.
+  const bar = document.getElementById('mobilePanelBar');
+  const below = box.bottom + 12 + (bar?.offsetHeight || 0) - view.bottom;
+  if (below <= 0) return;
+  scroller.scrollBy({
+    top: Math.min(below, box.top - view.top),
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+  });
 }
 
 function syncEarthquakeViewSelector() {
