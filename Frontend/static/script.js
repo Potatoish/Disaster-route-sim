@@ -2868,8 +2868,8 @@ function syncRoutePinFields() {
         : escapeHtml(uiCopy(getResultEvacSite()?.name || 'Evacuation sites'));
       summary.innerHTML = `<p class="setup-route-description">${escapeHtml(uiCopy(getSetupRouteDescription()))}</p>
         <dl class="setup-route-points">
-          <div><dt>${escapeHtml(uiCopy('Start'))}</dt><dd>${buildSetupPinName(start)}</dd></div>
-          <div><dt>${escapeHtml(uiCopy('Destination'))}</dt><dd>${destination}</dd></div>
+          <div class="setup-route-start"><dt>${escapeHtml(uiCopy('Start'))}</dt><dd>${buildSetupPinName(start)}</dd></div>
+          <div class="setup-route-end${end ? '' : ' is-evac'}"><dt>${escapeHtml(uiCopy('Destination'))}</dt><dd>${destination}</dd></div>
         </dl>`;
     } else {
       summary.textContent = selectedHazard ? uiCopy('Set your start and destination.') : '';
@@ -3471,17 +3471,37 @@ const MAP_FIT_MARKER_HEADROOM = 64;
 const MAP_FIT_MAX_ZOOM = 17;
 const MAP_FIT_MIN_ROUTE_SIZE = 64;
 
+// Desktop: the setup and results panels float over the map's left and right
+// sides (float.css), so how much of the map each one covers, or 0 while it
+// is hidden. Phones and short screens cover the map in their own ways.
+function getFloatingPanelInsets(mapRect = document.getElementById('map')?.getBoundingClientRect()) {
+  const insets = { left: 0, right: 0 };
+  const shell = document.getElementById('appShell');
+  if (!mapRect || !shell || window.mobileSim?.isActive() || MOBILE_PANEL_QUERY.matches) return insets;
+  const setup = document.getElementById('setupPanel');
+  const results = document.getElementById('routeSafetyPanel');
+  if (setup && !shell.classList.contains('sidebar-collapsed') && setup.getClientRects().length) {
+    insets.left = Math.max(0, setup.getBoundingClientRect().right - mapRect.left);
+  }
+  if (results && shell.classList.contains('safety-open') && results.getClientRects().length) {
+    insets.right = Math.max(0, mapRect.right - results.getBoundingClientRect().left);
+  }
+  return insets;
+}
+
 // fitBounds options that keep fitted routes and pins out from under the
-// map's own corner controls, sidebar tab and mobile sheets.
+// map's own corner controls, sidebar tab, floating panels and mobile sheets.
 function getMapFitPadding(base = 24, { markers = true, bounds = null } = {}) {
   const mapEl = document.getElementById('map');
   if (!mapEl) return { padding: [base, base], maxZoom: MAP_FIT_MAX_ZOOM };
 
   const mapRect = mapEl.getBoundingClientRect();
+  const panels = getFloatingPanelInsets(mapRect);
   let top = base;
   let bottom = base;
-  let left = base;
-  let right = base;
+  // A pin is 48px wide, so beside a panel half of it needs room too.
+  let left = panels.left ? panels.left + Math.max(base, 32) : base;
+  let right = panels.right ? panels.right + Math.max(base, 32) : base;
   const floatingOverlays = [];
 
   ['floodFilterControl', 'earthquakeViewSelector', 'sidebarReopenBtn', 'mapLegend'].forEach(id => {
@@ -3998,8 +4018,19 @@ function getWorkflowCard(sectionKey) {
 function syncWorkflowSummaries() {
   const summaryHazard = document.getElementById('summaryHazard');
 
+  // The picked disaster as its card shows it: icon, name and what it checks.
+  // Rewritten only when the disaster (or the language) changes.
   if (summaryHazard) {
-    summaryHazard.textContent = uiCopy(selectedHazard || '');
+    const card = selectedHazard ? document.getElementById(selectedHazard === 'Flood' ? 'hFlood' : 'hEarthquake') : null;
+    const name = uiCopy(selectedHazard || '');
+    if (summaryHazard.dataset.summaryKey !== name) {
+      summaryHazard.dataset.summaryKey = name;
+      summaryHazard.innerHTML = card
+        ? `<span class="summary-hazard-icon" aria-hidden="true">${card.querySelector('.hazard-icon')?.innerHTML || ''}</span>
+          <span class="summary-hazard-copy"><span class="summary-hazard-name">${escapeHtml(name)}</span>
+          <span class="summary-hazard-sub">${escapeHtml(uiCopy(card.querySelector('.hazard-sub')?.textContent.trim() || ''))}</span></span>`
+        : '';
+    }
   }
 
   const changeHazardBtn = document.getElementById('changeHazardBtn');
@@ -5323,6 +5354,14 @@ function renderRouteSafetyPanel(result) {
   syncResultRouteNavigation();
 }
 
+// A route's tag in the picker: route 1 by its risk name ("Best" only for a
+// flood route clear of every flood zone, "High risk" when none is safe),
+// like its line and verdict.
+function getResultRouteTag(route, best) {
+  if (route === best) return ` · ${getTopRouteName(route)}`;
+  return route.category === 'eliminated' ? ' · Eliminated' : '';
+}
+
 // Both layouts use the existing ranked routes and map focus; no new ranking.
 function buildResultRouteNavigation(routes) {
   const best = getBestRoute(routes);
@@ -5333,11 +5372,11 @@ function buildResultRouteNavigation(routes) {
     </details>
     <div class="result-route-label">Route on map
       <details class="result-route-picker" data-result-route-picker>
-        <summary><span data-result-route-label></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <summary><span class="result-route-swatch" data-result-route-swatch aria-hidden="true"></span><span data-result-route-label></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
         <div class="result-route-options" role="group" aria-label="Routes">
         ${routes.map((route, index) => {
           const number = route.display_route_no ?? index + 1;
-          const tag = route === best ? ' · Best' : route.category === 'eliminated' ? ' · Eliminated' : '';
+          const tag = getResultRouteTag(route, best);
           return `<button type="button" data-result-route-option="${escapeHtml(number)}" aria-current="false" aria-pressed="false">Route ${escapeHtml(number)}${tag}</button>`;
         }).join('')}
         </div>
@@ -5360,9 +5399,16 @@ function syncResultRouteNavigation() {
     button.hidden = hasSafetyAction;
   });
   const animationOn = !!selectedRouteFocus && selectedRouteFocus.animate !== false;
-  const tag = isBest ? ' · Best' : current.category === 'eliminated' ? ' · Eliminated' : '';
+  const tag = getResultRouteTag(current, best);
   document.querySelectorAll('[data-result-route-label]').forEach(label => {
     label.textContent = `Route ${current.display_route_no}${tag}`;
+  });
+  // The picked route's line as the map draws it (the .mroute-swatch styles).
+  const swatchClass = `result-route-swatch mroute-swatch mroute-swatch--${isBest
+    ? `best-${getRouteSafetyTier(current)}`
+    : current.category === 'eliminated' ? 'eliminated' : 'available'}`;
+  document.querySelectorAll('[data-result-route-swatch]').forEach(swatch => {
+    if (swatch.className !== swatchClass) swatch.className = swatchClass;
   });
   document.querySelectorAll('[data-result-route-option]').forEach(button => {
     const isCurrent = Number(button.dataset.resultRouteOption) === Number(current.display_route_no);

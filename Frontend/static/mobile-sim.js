@@ -147,6 +147,13 @@
     return readEdge('topBarBottom', () => $('msimTopbar')?.getBoundingClientRect().bottom || 0);
   }
 
+  // The phone sheet's frame ends this far above the screen's bottom edge
+  // (float.css), so the map shows below the sheet too.
+  function getSheetGap() {
+    if (isSide()) return 0;
+    return readEdge('sheetGap', () => parseFloat(getComputedStyle($('msimSheetFrame') || sheet).bottom) || 0);
+  }
+
   // Where the map stops being covered on the left: the docked panel's right
   // edge on a tablet, nothing on a phone.
   function getSideCover() {
@@ -157,14 +164,14 @@
   // phone, the whole height beside the docked panel on a tablet.
   function getMapRoom(height = state.height) {
     if (isSide()) return viewport.height - getMapTop();
-    return viewport.height - height - getTopBarBottom();
+    return viewport.height - height - getSheetGap() - getTopBarBottom();
   }
 
   // Map-container y of the center pin's tip for a given sheet height: the
   // middle of the visible strip, not of the whole map (the sheet covers that).
   function getPinY(height = state.height) {
     if (isSide()) return viewport.height / 2 - getMapTop();
-    return (getTopBarBottom() + viewport.height - height) / 2 - getMapTop();
+    return (getTopBarBottom() + viewport.height - getSheetGap() - height) / 2 - getMapTop();
   }
 
   // Map-container x of the center pin: the middle of the map beside the
@@ -261,12 +268,12 @@
     }
     // Measured in the snap's own layout (the replay shows more when open).
     sheet.dataset.snap = state.snap;
-    const full = Math.max(160, Math.round(viewport.height - getTopBarBottom() - FULL_SHEET_TOP_GAP));
+    const full = Math.max(160, Math.round(viewport.height - getSheetGap() - getTopBarBottom() - FULL_SHEET_TOP_GAP));
     let peek = Math.min(full, measurePeek() || 200);
     // Long risk guidance on a short phone must leave a usable map. The
     // result can scroll here or expand with the handle for all its details.
     if (state.mode === 'results') {
-      const available = viewport.height - getTopBarBottom();
+      const available = viewport.height - getSheetGap() - getTopBarBottom();
       const maxPeek = Math.max(160, Math.min(available * RESULTS_PEEK_MAX_FRACTION, available - CONTROLS_MIN_ROOM));
       peek = Math.min(peek, Math.round(maxPeek));
     }

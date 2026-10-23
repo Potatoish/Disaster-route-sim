@@ -226,19 +226,27 @@ function mapMoveOptions(options = {}) {
 
 // Where a site's popup may auto-pan to: clear of the phone's top bar, sheet
 // and map buttons (mobile-sim.js getCoveredInsets), or on desktop of the
-// controls on the map's top edge, as for the route pins' popups. A popup
-// taller than the gap keeps its top (the site's name) in view.
+// floating panels and the controls on the map's top edge, as for the route
+// pins' popups. A popup taller than the gap keeps its top (the site's name)
+// in view.
 function getEvacSitePopupPanOptions() {
   const covered = window.mobileSim?.getCoveredInsets();
   const room = gMap.getSize().y - (covered?.top || 130) - (covered?.bottom || 16);
-  return covered
-    ? {
+  if (covered) {
+    return {
       className: 'location-photo-popup',
       autoPanPaddingTopLeft: [(covered.left || 0) + 12, covered.top + 12],
       autoPanPaddingBottomRight: [(covered.right || 0) + 12, covered.bottom + 12],
       maxHeight: Math.max(140, Math.min(320, room - 92)),
-    }
-    : { className: 'location-photo-popup', autoPanPaddingTopLeft: [16, 130], maxHeight: 320 };
+    };
+  }
+  const panels = getFloatingPanelInsets();
+  return {
+    className: 'location-photo-popup',
+    autoPanPaddingTopLeft: [panels.left + 16, 130],
+    autoPanPaddingBottomRight: [panels.right + 16, 16],
+    maxHeight: 320,
+  };
 }
 
 // Static place photos from reviewed Google Maps overviews. An arbitrary pin

@@ -1,0 +1,1863 @@
+/* The simulator's floating panels (the user's approved design preview,
+   2026-10-23). On a desktop the map fills the window and setup (left) and
+   results (right) float over it as cards, the map's own controls beside
+   them; on phones and tablets the top bar, map buttons, legend and sheet
+   float with a gap all round. Loaded after palette.css: it keeps the
+   theme's colors and changes shape, spacing and type only. Rules are
+   scoped by id so they win over the older layers without !important. */
+
+body.sim-page {
+  --float-inset: 16px;
+  --float-gap: 12px;
+  --float-radius: 18px;
+  --float-setup-w: 336px;
+  --float-results-w: 372px;
+  --float-line: color-mix(in srgb, var(--border) 62%, var(--surface));
+  --float-chip: var(--panel-strong);
+  --float-faint: var(--dim);
+  --float-edge: color-mix(in srgb, var(--blue-950) 10%, transparent);
+  --float-shadow: 0 1px 2px #0b263b0f, 0 12px 32px #0b263b24;
+  --float-ctrl-shadow: 0 1px 2px #0b263b14, 0 6px 16px #0b263b1f;
+  --float-sheet-shadow: 0 1px 2px #0b263b0f, 0 -2px 24px #0b263b29;
+  --float-danger-bg: #fdf2f2;
+  --float-danger-line: #f0bcbc;
+}
+
+body.sim-page[data-hazard-theme="earthquake"] {
+  --float-edge: #7a2e0b1a;
+  --float-shadow: 0 1px 2px #3d1d0b0f, 0 12px 32px #3d1d0b24;
+  --float-ctrl-shadow: 0 1px 2px #3d1d0b14, 0 6px 16px #3d1d0b1f;
+  --float-sheet-shadow: 0 1px 2px #3d1d0b0f, 0 -2px 24px #3d1d0b29;
+}
+
+body.sim-page.dark {
+  --float-edge: color-mix(in srgb, var(--accent2) 14%, transparent);
+  --float-shadow: 0 1px 2px #00000066, 0 16px 40px #00000080;
+  --float-ctrl-shadow: 0 1px 2px #00000066, 0 8px 20px #00000073;
+  --float-sheet-shadow: 0 1px 2px #00000066, 0 -2px 32px #00000080;
+  --float-danger-bg: #fda4af17;
+  --float-danger-line: #fda4af52;
+}
+
+/* ---------- DESKTOP LAYOUT (>= 1024px wide, >= 500px tall) ----------
+   --float-left / --float-right are where the map's free strip starts and
+   ends, beside whichever panel is open; the map chrome keeps to it. The
+   fits keep clear of the panels too (getFloatingPanelInsets in script.js). */
+@media (min-width: 1024px) and (min-height: 500px) {
+  body.sim-page #appShell {
+    display: block;
+    --float-left: var(--float-inset);
+    /* Top-left chips sit beside the 40px "Show setup" button. */
+    --float-left-top: calc(var(--float-inset) + 50px);
+    --float-right: var(--float-inset);
+  }
+
+  body.sim-page #appShell:not(.sidebar-collapsed) {
+    --float-left: calc(var(--float-inset) + var(--float-setup-w) + var(--float-gap));
+    --float-left-top: var(--float-left);
+  }
+
+  body.sim-page #appShell.safety-open {
+    --float-right: calc(var(--float-inset) + var(--float-results-w) + var(--float-gap));
+  }
+
+  body.sim-page #appShell > .right-panel {
+    position: absolute;
+    inset: 0;
+  }
+
+  body.sim-page #setupPanel,
+  body.sim-page #routeSafetyPanel {
+    position: absolute;
+    z-index: 20;
+    top: var(--float-inset);
+    bottom: var(--float-inset);
+    overflow: hidden;
+    border: 1px solid var(--float-edge);
+    border-radius: var(--float-radius);
+    background: var(--surface);
+    box-shadow: var(--float-shadow);
+  }
+
+  body.sim-page #setupPanel {
+    left: var(--float-inset);
+    width: var(--float-setup-w);
+  }
+
+  body.sim-page #routeSafetyPanel {
+    right: var(--float-inset);
+    width: var(--float-results-w);
+    flex-direction: column;
+    padding: 0;
+  }
+
+  body.sim-page #appShell.safety-open #routeSafetyPanel {
+    display: flex;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    body.sim-page #appShell.safety-open #routeSafetyPanel {
+      animation: floatPanelIn .22s ease both;
+    }
+  }
+
+  /* The way back to a hidden setup: a small card in the map's corner. */
+  body.sim-page #sidebarReopenBtn {
+    top: var(--float-inset);
+    left: var(--float-inset);
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--float-edge);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--float-ctrl-shadow);
+  }
+
+  body.sim-page #sidebarReopenBtn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  body.sim-page #sidebarReopenBtn:hover {
+    color: var(--accent);
+  }
+
+  /* Map chrome beside the panels: the lens (or flood's legend) top-left,
+     the legend or severity filter bottom-left, Leaflet's buttons top-right
+     and its credit bottom-right. */
+  body.sim-page #appShell .earthquake-view-switcher,
+  body.sim-page[data-hazard-theme="flood"] #appShell .map-legend {
+    top: var(--float-inset);
+    bottom: auto;
+    left: var(--float-left-top);
+  }
+
+  body.sim-page #appShell .map-legend,
+  body.sim-page #appShell .flood-filter-control {
+    left: var(--float-left);
+    bottom: var(--float-inset);
+  }
+
+  body.sim-page #appShell :is(.earthquake-view-switcher, .map-legend, .flood-filter-control) {
+    transition: left .22s ease, opacity .18s ease;
+  }
+
+  body.sim-page #appShell .map-pin-hint {
+    left: calc((var(--float-left) + 100% - var(--float-right)) / 2);
+    bottom: calc(var(--float-inset) + 8px);
+    max-width: min(440px, calc(100% - var(--float-left) - var(--float-right)));
+  }
+
+  body.sim-page #appShell .empty-map {
+    padding-left: var(--float-left);
+    padding-right: var(--float-right);
+  }
+
+  body.sim-page #map .leaflet-top.leaflet-right {
+    top: calc(var(--float-inset) - 10px);
+    right: calc(var(--float-right) - 10px);
+    transition: right .22s ease;
+  }
+
+  body.sim-page #map .leaflet-bottom.leaflet-right {
+    right: 0;
+    bottom: 0;
+  }
+
+  body.sim-page #map .leaflet-control-attribution {
+    padding: 2px 8px;
+    border-top-left-radius: 8px;
+  }
+
+  body.sim-page #appShell.safety-open #map .leaflet-bottom.leaflet-right {
+    right: var(--float-right);
+    bottom: var(--float-inset);
+  }
+
+  body.sim-page #appShell.safety-open #map .leaflet-control-attribution {
+    border-radius: 8px;
+  }
+
+  /* Leaflet's buttons as floating cards: zoom, then Fit and My location,
+     and Map | Satellite as a pill. */
+  body.sim-page #map :is(.leaflet-control-zoom, .map-recenter-control) {
+    overflow: hidden;
+    border: 1px solid var(--float-edge);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--float-ctrl-shadow);
+  }
+
+  body.sim-page #map .leaflet-control-zoom a {
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    border-radius: 0;
+    background: transparent !important;
+    border-bottom-color: var(--float-line) !important;
+    font-size: 20px;
+  }
+
+  body.sim-page #map .leaflet-control-zoom a:hover {
+    background: var(--float-chip) !important;
+  }
+
+  body.sim-page #map .map-recenter-btn {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+  }
+
+  body.sim-page #map .map-recenter-btn:hover {
+    background: var(--float-chip);
+  }
+
+  body.sim-page #map .map-recenter-btn + .map-recenter-btn {
+    border-top-color: var(--float-line);
+  }
+
+  body.sim-page #map .map-recenter-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  body.sim-page #map .leaflet-control-layers-expanded {
+    padding: 3px !important;
+    border: 1px solid var(--float-edge) !important;
+    border-radius: 999px !important;
+    background: var(--surface) !important;
+    box-shadow: var(--float-ctrl-shadow) !important;
+    backdrop-filter: none;
+  }
+
+  body.sim-page #map .leaflet-control-layers-base label > span {
+    min-height: 30px;
+    padding: 0 14px;
+    border-radius: 999px;
+    font: 600 .78rem var(--font-body);
+  }
+
+  body.sim-page #map .leaflet-control-layers-base label:has(:checked) > span {
+    font-weight: 700;
+  }
+}
+
+/* Narrower desktops: slimmer panels, so the map keeps a usable strip with
+   both open. */
+@media (min-width: 1024px) and (max-width: 1279px) and (min-height: 500px) {
+  body.sim-page {
+    --float-setup-w: 304px;
+    --float-results-w: 336px;
+  }
+}
+
+@keyframes floatPanelIn {
+  from { opacity: 0; transform: translateX(8px); }
+}
+
+/* ---------- MAP CARDS (desktop and short screens) ---------- */
+body.sim-page #appShell :is(.earthquake-view-switcher, .map-legend, .flood-filter-control) {
+  border: 1px solid var(--float-edge);
+  background: var(--surface);
+  box-shadow: var(--float-ctrl-shadow);
+  backdrop-filter: none;
+}
+
+body.sim-page #appShell .earthquake-view-switcher {
+  max-width: calc(100% - 32px);
+  padding: 8px 10px 9px;
+  border-radius: 14px;
+}
+
+body.sim-page #appShell .earthquake-view-title {
+  margin: 0 4px 6px;
+  color: var(--float-faint);
+  font: 500 .66rem var(--font-meta);
+  letter-spacing: .14em;
+}
+
+body.sim-page #appShell .earthquake-view-tabs {
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--float-chip);
+}
+
+body.sim-page #appShell .eqtab {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 .78rem var(--font-body);
+  white-space: nowrap;
+}
+
+body.sim-page #appShell .eqtab:hover {
+  color: var(--text);
+}
+
+body.sim-page #appShell .eqtab.active {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+body.sim-page #appShell .earthquake-view-hint {
+  margin: 6px 4px 0;
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+body.sim-page #appShell .map-legend {
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+
+/* Folded: a pill, "LEGEND  Show ^". */
+body.sim-page #appShell .map-legend.is-collapsed {
+  padding: 4px 12px 4px 14px;
+  border-radius: 999px;
+}
+
+body.sim-page #appShell .map-legend .legend-title {
+  color: var(--accent-text, var(--accent));
+  font: 500 .6875rem var(--font-meta);
+  letter-spacing: .14em;
+}
+
+body.sim-page #appShell .legend-toggle {
+  color: var(--muted);
+}
+
+body.sim-page #appShell .flood-filter-control {
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+
+body.sim-page #appShell .flood-filter-control.is-collapsed {
+  padding: 4px 12px 4px 14px;
+  border-radius: 999px;
+}
+
+body.sim-page #appShell .map-pin-hint {
+  border: 1px solid var(--float-edge);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--float-ctrl-shadow);
+  backdrop-filter: none;
+}
+
+body.sim-page #appShell .map-pin-hint.is-error {
+  border-color: color-mix(in srgb, var(--red) 50%, transparent);
+}
+
+/* Desktop: the lens keeps to the strip between the panels, its tabs
+   wrapping there. */
+@media (min-width: 1024px) and (min-height: 500px) {
+  body.sim-page #appShell .earthquake-view-switcher {
+    max-width: calc(100% - var(--float-left-top) - var(--float-right) - 60px);
+  }
+
+  body.sim-page #appShell .earthquake-view-tabs {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- SETUP PANEL ----------
+   Sections divided by thin lines instead of boxed cards; a section's
+   "Change" is a text button. */
+body.sim-page #setupPanel .panel-head {
+  padding: 22px 16px 0 24px;
+  border-bottom: 0;
+}
+
+body.sim-page #setupPanel .panel-head-title-row {
+  align-items: flex-start;
+  gap: 4px;
+}
+
+body.sim-page #setupPanel .panel-head-title {
+  color: var(--text);
+  font: 700 1.5rem/1.1 var(--font-heading);
+  letter-spacing: .01em;
+}
+
+body.sim-page #setupPanel .panel-head-sub {
+  margin: 6px 8px 0 0;
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.45;
+}
+
+body.sim-page #setupPanel .panel-head-brand-actions {
+  gap: 2px;
+  margin-top: -5px;
+}
+
+body.sim-page #setupPanel .panel-head .sidebar-toggle {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+}
+
+body.sim-page #setupPanel .panel-head .sidebar-toggle:hover {
+  background: var(--float-chip);
+  color: var(--text);
+}
+
+body.sim-page #setupPanel .panel-head .sidebar-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+body.sim-page #setupPanel .panel-barangay {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 18px 8px 0 0;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--float-line);
+}
+
+body.sim-page #setupPanel :is(.panel-barangay-label, .sec-label) {
+  margin: 0;
+  color: var(--float-faint);
+  font: 500 .6875rem var(--font-meta);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+body.sim-page #setupPanel .panel-barangay-seg {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--float-chip);
+}
+
+body.sim-page #setupPanel .panel-barangay-seg button {
+  min-height: 36px;
+  border-radius: 9px;
+  color: var(--muted);
+  font: 600 .84rem/1.2 var(--font-body);
+}
+
+body.sim-page #setupPanel .panel-barangay-seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+body.sim-page.dark #setupPanel .panel-barangay-seg button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+  box-shadow: none;
+}
+
+body.sim-page #setupPanel .panel-body {
+  gap: 0;
+  padding: 22px 24px 16px;
+}
+
+body.sim-page #setupPanel .workflow-main {
+  gap: 22px;
+}
+
+body.sim-page #setupPanel .workflow-card,
+body.sim-page #setupPanel .workflow-card.active {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.sim-page #setupPanel .workflow-card + .workflow-card {
+  padding-top: 22px;
+  border-top: 1px solid var(--float-line);
+}
+
+body.sim-page #setupPanel .workflow-card-head {
+  align-items: center;
+  flex-wrap: nowrap;
+  min-height: 24px;
+}
+
+/* The step being set says so with the theme color. */
+body.sim-page #setupPanel .workflow-card.active .sec-label {
+  color: var(--accent-text, var(--accent));
+}
+
+body.sim-page #setupPanel .card-action-btn {
+  min-height: 0;
+  margin: -6px -8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  font: 700 .8125rem var(--font-body);
+  letter-spacing: 0;
+  transform: none;
+}
+
+body.sim-page #setupPanel .card-action-btn:hover:not(:disabled) {
+  background: var(--float-chip);
+  transform: none;
+}
+
+body.sim-page #setupPanel .card-action-btn:disabled {
+  color: var(--muted);
+  background: transparent;
+}
+
+body.sim-page #setupPanel .workflow-card-body {
+  margin-top: 14px;
+}
+
+/* Disaster, once picked: its icon, name and what it checks. */
+body.sim-page #setupPanel #summaryHazard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+body.sim-page #setupPanel #summaryHazard:empty {
+  display: none;
+}
+
+body.sim-page #setupPanel .summary-hazard-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--float-chip);
+  color: var(--accent);
+}
+
+body.sim-page #setupPanel .summary-hazard-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+body.sim-page #setupPanel .summary-hazard-copy {
+  min-width: 0;
+}
+
+body.sim-page #setupPanel .summary-hazard-name {
+  display: block;
+  color: var(--text);
+  font: 700 1.1875rem/1.1 var(--font-heading);
+}
+
+body.sim-page #setupPanel .summary-hazard-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font: 500 .78rem/1.4 var(--font-body);
+}
+
+/* The Disaster summary runs under its label, so Change keeps to the
+   label's line. */
+body.sim-page #setupPanel #cardHazard {
+  position: relative;
+}
+
+body.sim-page #setupPanel #cardHazard .workflow-card-head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+body.sim-page #setupPanel #cardHazard .workflow-card-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+body.sim-page #setupPanel .hazard-grid {
+  gap: 8px;
+}
+
+body.sim-page #setupPanel .hazard-card {
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--float-line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+body.sim-page #setupPanel .hazard-card:hover {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+body.sim-page #setupPanel #hEarthquake:hover {
+  border-color: var(--amber-400);
+}
+
+body.sim-page #setupPanel .hazard-card .hazard-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+body.sim-page #setupPanel .hazard-name {
+  font: 700 1.0625rem/1.15 var(--font-heading);
+}
+
+body.sim-page #setupPanel .hazard-sub {
+  margin-top: 2px;
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+/* Start and destination fields while they are being set. */
+body.sim-page #setupPanel .pin-input {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--float-line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+body.sim-page #setupPanel .pin-input:disabled {
+  background: var(--float-chip);
+}
+
+body.sim-page #setupPanel .pin-input:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--float-line));
+}
+
+body.sim-page #setupPanel .pin-input-row.is-placing .pin-input,
+body.sim-page #setupPanel .pin-input[aria-expanded="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+body.sim-page #setupPanel .pin-input-menu {
+  border-color: var(--float-edge);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--float-shadow);
+}
+
+body.sim-page #setupPanel .earthquake-route-panel {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+body.sim-page #setupPanel .evac-btn {
+  min-height: 44px;
+  border-radius: 12px;
+  font: 700 .875rem var(--font-body);
+  letter-spacing: 0;
+}
+
+body.sim-page #setupPanel .pin-input-menu-item.evac-choice-own {
+  min-height: 44px;
+  border: 1px solid var(--float-line);
+  border-radius: 12px;
+  background: transparent;
+  font: 700 .875rem var(--font-body);
+  letter-spacing: 0;
+}
+
+body.sim-page #setupPanel .pin-input-menu-item.evac-choice-own:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+body.sim-page #setupPanel .pin-field-help {
+  padding: 0;
+}
+
+/* Start and destination once set: a small route line (start ring, dotted
+   path, destination icon), then the line on what the run checks. */
+body.sim-page #setupPanel #summaryRoute.has-route-review {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+body.sim-page #setupPanel .setup-route-points {
+  gap: 0;
+  margin: 0;
+}
+
+body.sim-page #setupPanel .setup-route-points > div {
+  position: relative;
+  min-height: 40px;
+  padding: 0 0 0 32px;
+  border-left: 0;
+}
+
+body.sim-page #setupPanel .setup-route-points > div + div {
+  margin-top: 18px;
+}
+
+body.sim-page #setupPanel .setup-route-points > div::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  background: var(--accent);
+  -webkit-mask: var(--float-point-icon) center / contain no-repeat;
+  mask: var(--float-point-icon) center / contain no-repeat;
+}
+
+/* The dotted path from the start down to the destination. */
+body.sim-page #setupPanel .setup-route-start::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 27px;
+  bottom: -14px;
+  border-left: 2px dotted var(--border2);
+}
+
+body.sim-page #setupPanel .setup-route-start {
+  --float-point-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='7.5' fill='none' stroke='%23000' stroke-width='2.4'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E");
+}
+
+body.sim-page #setupPanel .setup-route-end {
+  --float-point-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linejoin='round'%3E%3Cpath d='M12 21.5s-6.5-6.2-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11.5-6.5 11.5Z'/%3E%3Ccircle cx='12' cy='10' r='2.4'/%3E%3C/svg%3E");
+}
+
+/* Evacuation sites: a house, in the blue of their pins on the map. */
+body.sim-page #setupPanel .setup-route-end.is-evac {
+  --float-point-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11.5 12 5l8 6.5'/%3E%3Cpath d='M6.5 10v9.5h11V10'/%3E%3Cpath d='M10.2 19.5v-5h3.6v5'/%3E%3C/svg%3E");
+}
+
+body.sim-page #setupPanel .setup-route-end.is-evac::before {
+  background: #2563eb;
+}
+
+body.sim-page.dark #setupPanel .setup-route-end.is-evac::before {
+  background: #93c5fd;
+}
+
+body.sim-page #setupPanel .setup-route-end:not(.is-evac)::before {
+  background: var(--accent2);
+}
+
+body.sim-page #setupPanel .setup-route-points dt {
+  color: var(--float-faint);
+  font-size: .75rem;
+  line-height: 1.3;
+}
+
+body.sim-page #setupPanel .setup-route-points dd {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: .90625rem;
+  line-height: 1.35;
+}
+
+body.sim-page #setupPanel .setup-route-description {
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.55;
+}
+
+/* Run, with Back to Home as a quiet text button under it. */
+body.sim-page #setupPanel .panel-foot {
+  padding: 16px 24px 18px;
+  border-top: 1px solid var(--float-line);
+}
+
+body.sim-page #setupPanel .run-btn {
+  min-height: 48px;
+  border-radius: 12px;
+  font: 700 .9375rem var(--font-body);
+  letter-spacing: .01em;
+}
+
+body.sim-page #setupPanel .run-btn:hover:not(:disabled) {
+  transform: none;
+  filter: brightness(1.05);
+}
+
+body.sim-page #setupPanel .setup-run-hint {
+  font-size: .78rem;
+}
+
+body.sim-page #setupPanel .panel-back-btn {
+  justify-content: center;
+  min-height: 40px;
+  margin-top: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: 600 .84rem var(--font-body);
+}
+
+body.sim-page #setupPanel .panel-back-btn:hover:not(:disabled) {
+  background: var(--float-chip);
+  color: var(--text);
+  transform: none;
+}
+
+/* ---------- RESULTS PANEL ----------
+   The brand and the two actions stay put; the results scroll under them. */
+body.sim-page #routeSafetyPanel {
+  padding-top: 0;
+  padding-inline: 0;
+}
+
+body.sim-page #routeSafetyPanel > .safety-brand {
+  flex: none;
+  padding: 22px 22px 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+body.sim-page #routeSafetyPanel .safety-eyebrow {
+  color: var(--accent-text, var(--accent));
+  font: 500 .72rem var(--font-meta);
+  letter-spacing: .16em;
+}
+
+body.sim-page #routeSafetyPanel .safety-brand h2 {
+  margin-top: 4px;
+  color: var(--text);
+  font: 700 1.25rem/1.15 var(--font-heading);
+}
+
+/* Short screens only: back to setup. */
+body.sim-page #routeSafetyPanel > .safety-edit-setup-btn {
+  width: auto;
+  margin: 14px 22px 0;
+  border-color: var(--float-line);
+  border-radius: 12px;
+}
+
+body.sim-page #routeSafetyPanel > .safety-actions {
+  flex: none;
+  margin: 0;
+  padding: 16px 22px 0;
+}
+
+body.sim-page #routeSafetyPanel > .safety-actions:not(:has(.show)) {
+  display: none;
+}
+
+body.sim-page #routeSafetyPanel :is(.safety-actions .reset-btn, .safety-download-btn) {
+  min-height: 42px;
+  border-width: 1px;
+  border-radius: 12px;
+  font-size: .84rem;
+}
+
+body.sim-page #routeSafetyPanel .safety-actions .reset-btn {
+  border-color: transparent;
+}
+
+body.sim-page #routeSafetyPanel .safety-download-btn {
+  border-color: var(--float-line);
+  background: transparent;
+}
+
+body.sim-page #routeSafetyPanel .safety-download-btn:hover:not(:disabled) {
+  background: var(--float-chip);
+}
+
+body.sim-page #routeSafetyPanel > #routeSafetyContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 18px;
+  padding: 16px 22px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--float-line);
+}
+
+/* Directions and the route picker. */
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-nav {
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+body.sim-page #routeSafetyContent .result-route-directions {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--float-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+body.sim-page #routeSafetyContent .result-route-directions > summary {
+  min-height: 40px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  font: 600 .84rem var(--font-body);
+}
+
+body.sim-page #routeSafetyContent .result-route-directions[open] > summary {
+  border-bottom: 0;
+}
+
+body.sim-page #routeSafetyContent .result-route-directions > summary svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body.sim-page #routeSafetyContent [data-current-route-summary] {
+  margin-top: 20px;
+}
+
+body.sim-page #routeSafetyContent .result-route-directions .mroute-steps {
+  padding: 0 2px 8px;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-picker {
+  margin: 0;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-picker > summary {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--float-chip);
+  color: var(--text);
+  font: 700 .875rem var(--font-body);
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-picker > summary svg {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-picker > summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The picked route's line, as drawn on the map. */
+body.sim-page .result-route-swatch.mroute-swatch {
+  width: 18px;
+  height: 4px;
+}
+
+body.sim-page .result-route-swatch.mroute-swatch--available,
+body.sim-page .result-route-swatch.mroute-swatch--eliminated {
+  height: 4px;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-options {
+  border-color: var(--float-line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+body.sim-page :is(#routeSafetyContent, #msimRouteNavigation) .result-route-reset {
+  border-width: 1px;
+  border-radius: 12px;
+}
+
+/* What to do, the assessment, the numbers and the hazards: no boxes, the
+   icon in line with each label. */
+body.sim-page :is(#routeSafetyContent, #msimSafetyAction, #msimSafetyDetails) .safety-result-cards {
+  gap: 0;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction, #msimSafetyDetails) .safety-result-card {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction, #msimSafetyDetails) .safety-icon-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  color: var(--muted);
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction, #msimSafetyDetails) .safety-icon-box svg {
+  width: 15px;
+  height: 15px;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction, #msimSafetyDetails) .safety-card-label {
+  min-height: 16px;
+  padding-left: 22px;
+  color: var(--float-faint);
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-action-card {
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--float-danger-bg);
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-action-card .safety-icon-box {
+  top: 16px;
+  left: 16px;
+  color: var(--danger-ink);
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-action-card .safety-card-label {
+  color: var(--danger-ink);
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-action-card .safety-card-value {
+  margin-top: 8px;
+  color: var(--danger-ink);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-action-detail {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: .84rem;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-card-action {
+  min-height: 38px;
+  margin-top: 12px;
+  padding: 0 14px;
+  border: 1px solid var(--float-danger-line);
+  border-radius: 10px;
+  background: transparent;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyAction) .safety-card-action:hover:not(:disabled) {
+  border-color: var(--danger-ink);
+  background: var(--danger-ink);
+}
+
+body.sim-page #routeSafetyContent .safety-section-label {
+  margin: 22px 0 14px;
+  color: var(--float-faint);
+  font: 500 .6875rem var(--font-meta);
+  letter-spacing: .14em;
+}
+
+body.sim-page #routeSafetyContent [data-current-route-summary] > .safety-section-label:first-child {
+  margin-top: 20px;
+}
+
+body.sim-page #routeSafetyContent .result-route-assessment .safety-card-value {
+  margin-top: 6px;
+  font: 700 1.3125rem/1.15 var(--font-heading);
+}
+
+body.sim-page #routeSafetyContent .result-route-assessment .safety-icon-box {
+  color: inherit;
+}
+
+body.sim-page #routeSafetyContent .result-route-assessment.danger .safety-icon-box { color: var(--danger-ink); }
+body.sim-page #routeSafetyContent .result-route-assessment.warning .safety-icon-box { color: var(--yellow-ink); }
+body.sim-page #routeSafetyContent .result-route-assessment.success .safety-icon-box { color: var(--green-ink); }
+
+body.sim-page #routeSafetyContent .result-route-warning {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: .84rem;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+/* Distance and walk: the two numbers, large, between thin rules. */
+body.sim-page #routeSafetyContent .result-summary-facts {
+  gap: 12px;
+  margin: 16px 0;
+  padding: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--float-line);
+  border-bottom: 1px solid var(--float-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+body.sim-page #routeSafetyContent .result-summary-facts > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+
+body.sim-page #routeSafetyContent .result-summary-facts dt {
+  font-size: .75rem;
+}
+
+body.sim-page #routeSafetyContent .result-summary-facts dd {
+  margin: 0;
+  color: var(--text);
+  font: 700 1.75rem/1 var(--font-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The hazard rows: no icon, the label as a small heading. */
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyDetails) .safety-result-card:not(.result-route-assessment):not(.safety-action-card) .safety-icon-box {
+  display: none;
+}
+
+body.sim-page :is(#routeSafetyContent [data-current-route-summary], #msimSafetyDetails) .safety-result-card:not(.result-route-assessment):not(.safety-action-card) .safety-card-label {
+  padding-left: 0;
+  color: var(--text);
+  font-size: .8125rem;
+  font-weight: 700;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimSafetyDetails) .safety-hazard-list {
+  gap: 12px;
+  margin-top: 12px;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimSafetyDetails) .safety-hazard-list li {
+  gap: 2px;
+  color: var(--text);
+  font-size: .84rem;
+  font-weight: 600;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimSafetyDetails) .safety-hazard-list strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimSafetyDetails) .safety-hazard-list strong::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+body.sim-page :is(#routeSafetyContent, #msimSafetyDetails) .safety-result-card:not(.result-route-assessment):not(.safety-action-card) .safety-card-value {
+  margin-top: 6px;
+}
+
+/* A note for the walker (far from the open area, or how a picked route
+   compares): a tinted block with an info mark. */
+body.sim-page #routeSafetyContent .result-route-description {
+  position: relative;
+  margin: 16px 0 0;
+  padding: 12px 14px 12px 38px;
+  border-radius: 12px;
+  background: var(--float-chip);
+  color: var(--text);
+  font-size: .8125rem;
+  line-height: 1.55;
+}
+
+body.sim-page #routeSafetyContent .result-route-description::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  width: 16px;
+  height: 16px;
+  background: var(--accent-text, var(--accent));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 8h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 8h.01'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* From and to, then the notes and the disclaimer, under a rule. */
+body.sim-page #routeSafetyContent .safety-route-chip {
+  margin: 22px 0 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--float-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: 700 .8125rem/1.45 var(--font-body);
+}
+
+body.sim-page #routeSafetyContent .safety-route-chip svg:first-child {
+  display: none;
+}
+
+body.sim-page #routeSafetyContent .safety-notes {
+  margin-top: 12px;
+  padding: 0;
+  border-left: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.6;
+}
+
+body.sim-page #routeSafetyContent .safety-notes > em,
+body.sim-page #routeSafetyContent .safety-disclaimer-label {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 700;
+}
+
+body.sim-page #routeSafetyContent .safety-notes ul {
+  margin: 2px 0 0;
+  list-style: none;
+}
+
+body.sim-page #routeSafetyContent .safety-disclaimer {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+body.sim-page #routeSafetyContent .safety-disclaimer-label {
+  display: inline;
+  color: var(--muted);
+}
+
+body.sim-page #routeSafetyContent .safety-disclaimer-text {
+  display: inline;
+  color: var(--float-faint);
+  font-size: .75rem;
+  line-height: 1.6;
+}
+
+body.sim-page #routeSafetyContent .safety-disclaimer-link {
+  display: block;
+  margin-top: 8px;
+}
+
+/* Short screens (phone landscape): setup and results are full-screen
+   panels there, too short for a fixed head and foot, so each scrolls as one
+   page, a little tighter. */
+@media (max-height: 499px) {
+  body.sim-page #setupPanel,
+  body.sim-page #routeSafetyPanel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  body.sim-page #setupPanel .panel-body,
+  body.sim-page #routeSafetyPanel > #routeSafetyContent {
+    flex: none;
+    overflow: visible;
+  }
+
+  body.sim-page #setupPanel .panel-head {
+    padding: 16px 12px 0 20px;
+  }
+
+  body.sim-page #setupPanel .panel-head-title {
+    font-size: 1.25rem;
+  }
+
+  body.sim-page #setupPanel .panel-barangay {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 12px;
+    padding-bottom: 14px;
+  }
+
+  body.sim-page #setupPanel .panel-barangay-seg {
+    flex: 1 1 auto;
+  }
+
+  body.sim-page #setupPanel .panel-body {
+    padding: 16px 20px 12px;
+  }
+
+  body.sim-page #setupPanel .panel-foot {
+    padding: 12px 20px 14px;
+  }
+}
+
+/* ---------- PHONES AND TABLETS (< 1024px wide, >= 500px tall) ----------
+   The top bar and map buttons float 12px in; the sheet floats 10px off the
+   screen's sides and bottom (mobile-sim.js reads that gap from the sheet's
+   bottom). */
+@media (max-width: 1023px) and (min-height: 500px) {
+  body.sim-page {
+    --msim-bar-top: calc(12px + env(safe-area-inset-top, 0px));
+    --msim-bar-h: 58px;
+    --msim-bar-bottom: calc(var(--msim-bar-top) + var(--msim-bar-h));
+    --msim-sheet-gap: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  #msim .msim-topbar {
+    top: var(--msim-bar-top);
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    height: var(--msim-bar-h);
+    padding: 0 6px;
+    border: 1px solid var(--float-edge);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--float-ctrl-shadow);
+    backdrop-filter: none;
+  }
+
+  #msim .msim-topbar-title {
+    font: 700 1.125rem/1.15 var(--font-heading);
+    letter-spacing: .01em;
+  }
+
+  #msim .msim-topbar-sub {
+    color: var(--muted);
+    font: 500 .75rem/1.3 var(--font-body);
+  }
+
+  #msim .msim-icon-btn {
+    border-radius: 12px;
+  }
+
+  #msim .msim-icon-btn--boxed {
+    border: 0;
+    background: var(--float-chip);
+  }
+
+  #msim .msim-bgy-menu {
+    top: calc(var(--msim-bar-bottom) + 8px);
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    border-color: var(--float-edge);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--float-shadow);
+  }
+
+  #msim .msim-map-group {
+    border: 1px solid var(--float-edge);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--float-ctrl-shadow);
+    backdrop-filter: none;
+  }
+
+  #msim .msim-map-btn {
+    color: var(--text);
+  }
+
+  #msim .msim-map-btn + .msim-map-btn {
+    border-top-color: var(--float-line);
+  }
+
+  #msim .msim-toast {
+    top: calc(var(--msim-bar-bottom) + 12px);
+    border-color: var(--float-edge);
+    border-radius: 999px;
+    background: var(--surface);
+    box-shadow: var(--float-ctrl-shadow);
+  }
+
+  body.sim-page #appShell .map-pin-hint {
+    top: calc(var(--msim-bar-bottom) + 12px);
+    border-radius: 14px;
+  }
+
+  /* The legend: a 44px "LEGEND ^" pill riding 10px above the sheet. */
+  #msim .msim-maplegend {
+    bottom: calc(var(--msim-sheet-gap) + 10px);
+    padding: 10px 14px 0;
+    border: 1px solid var(--float-edge);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--float-ctrl-shadow);
+    backdrop-filter: none;
+  }
+
+  #msim .msim-maplegend.is-folded {
+    padding: 0 14px;
+    border-radius: 999px;
+  }
+
+  #msim .msim-maplegend-toggle {
+    min-height: 42px;
+    color: var(--accent-text, var(--accent));
+    font: 500 .6875rem/1 var(--font-meta);
+    letter-spacing: .14em;
+  }
+
+  #msim .msim-maplegend-toggle svg {
+    color: var(--muted);
+  }
+
+  #msim .msim-maplegend-toggle::after {
+    inset: -1px -14px;
+  }
+
+  #msim .msim-maplegend-body {
+    border-bottom-color: var(--float-line);
+  }
+
+  /* The map credit just above the sheet's gap. */
+  body.sim-page #map .leaflet-bottom {
+    bottom: var(--msim-sheet-gap);
+  }
+
+  body.sim-page #map .leaflet-control-attribution {
+    border-radius: 8px 0 0 8px;
+  }
+
+  #msim .msim-layers {
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: var(--msim-sheet-gap);
+    padding: 18px;
+    border: 1px solid var(--float-edge);
+    border-radius: 24px;
+    background: var(--surface);
+    box-shadow: var(--float-shadow);
+    transform: translateY(calc(100% + 24px));
+  }
+
+  #msim .msim-layers.is-open {
+    transform: translateY(0);
+  }
+
+  /* The sheet's content, both sizes. */
+  #msim .msheet {
+    border: 1px solid var(--float-edge);
+    background: var(--surface);
+  }
+
+  #msim .msheet-title {
+    color: var(--text);
+    font: 700 1.375rem/1.1 var(--font-heading);
+    letter-spacing: .01em;
+  }
+
+  #msim .msheet-head {
+    padding: 2px 0 12px;
+  }
+
+  /* A 320px phone keeps the title on one line beside the disaster chip. */
+  @media (max-width: 359px) {
+    #msim .msheet-title {
+      font-size: 1.1875rem;
+    }
+  }
+
+  #msim .msheet-chip {
+    height: 44px;
+    padding: 0 14px 0 12px;
+    gap: 8px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--float-chip);
+    color: var(--accent-text, var(--accent));
+    font: 700 .875rem var(--font-body);
+  }
+
+  #msim .msheet-chip svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  #msim .msheet-label {
+    color: var(--float-faint);
+    font: 500 .66rem var(--font-meta);
+    letter-spacing: .14em;
+  }
+
+  /* Start / End: rows with a thin rule between them, not boxes. */
+  #msim .mslots {
+    gap: 0;
+  }
+
+  #msim .mslot {
+    position: relative;
+    gap: 12px;
+    min-height: 56px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  #msim .mslot + .mslot::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 44px;
+    right: 0;
+    height: 1px;
+    background: var(--float-line);
+  }
+
+  #msim .mslot.is-active {
+    margin-inline: -8px;
+    padding-inline: 8px;
+    border-radius: 14px;
+    background: var(--accent-soft-bg);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+
+  #msim .mslot.is-active::before,
+  #msim .mslot.is-active + .mslot::before {
+    display: none;
+  }
+
+  #msim .mslot.is-disabled {
+    background: transparent;
+  }
+
+  #msim .mslot-badge {
+    width: 32px;
+    height: 32px;
+    font-size: .875rem;
+  }
+
+  #msim .mslot-badge svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  #msim .mslot-label {
+    color: var(--float-faint);
+    font: 500 .66rem var(--font-meta);
+    letter-spacing: .14em;
+  }
+
+  #msim .mslot-value {
+    color: var(--text);
+    font: 600 .9375rem/1.3 var(--font-body);
+  }
+
+  #msim .mslot.is-empty .mslot-value,
+  #msim .mslot.is-disabled :is(.mslot-label, .mslot-value) {
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  #msim .mslot-edit {
+    min-width: 44px;
+    padding: 0 6px;
+    color: var(--accent-text, var(--accent));
+    font: 700 .875rem var(--font-body);
+  }
+
+  #msim .mslot-edit:disabled {
+    color: var(--muted);
+  }
+
+  #msim .mbtn {
+    min-height: 44px;
+    border-color: var(--float-line);
+    border-radius: 14px;
+    font: 700 .875rem var(--font-body);
+  }
+
+  #msim .mbtn--primary {
+    border-color: transparent;
+  }
+
+  #msim #msimRunBtn,
+  #msim #msimSetPinBtn,
+  #msim .msheet-evac-action .mbtn {
+    min-height: 52px;
+    border-radius: 16px;
+    font-size: 1rem;
+  }
+
+  #msim .msheet-actions,
+  #msim .msheet-evac-action {
+    margin-top: 14px;
+  }
+
+  #msim .msheet-help {
+    margin-top: 10px;
+    font-size: .84rem;
+    line-height: 1.5;
+  }
+
+  #msim .msheet-section,
+  #msim .msheet-details {
+    border-top-color: var(--float-line);
+  }
+
+  #msim .mhazard {
+    border-color: var(--float-line);
+    border-radius: 14px;
+    background: var(--surface);
+  }
+
+  #msim .mhazard.selected {
+    border-color: var(--accent);
+    background: var(--hazard-selected-bg);
+  }
+
+  /* Results. */
+  #msim #msimResults .safety-brand {
+    padding: 2px 0 14px;
+    border-bottom: 0;
+  }
+
+  #msim #msimResults .safety-eyebrow {
+    color: var(--accent-text, var(--accent));
+    font: 500 .6875rem var(--font-meta);
+    letter-spacing: .16em;
+  }
+
+  #msim #msimResults .safety-brand h2 {
+    margin-top: 3px;
+    font: 700 1.1875rem/1.15 var(--font-heading);
+  }
+
+  #msim .mlens {
+    gap: 2px;
+    margin: 0 0 14px;
+    padding: 3px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--float-chip);
+  }
+
+  /* Each tab as wide as its name, so "Ground shaking" keeps to one line
+     where it fits. */
+  #msim .mlens {
+    display: flex;
+  }
+
+  #msim .mlens button {
+    flex: 1 1 auto;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: .84rem;
+  }
+
+  #msim .msheet-safety-action {
+    margin-block: 0 14px;
+  }
+
+  #msim .mverdict,
+  #msim .mverdict.is-safe,
+  #msim .mverdict.is-caution,
+  #msim .mverdict.is-danger {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  #msim .mverdict-title {
+    font: 700 1.3125rem/1.15 var(--font-heading);
+  }
+
+  #msim .mverdict-sub {
+    margin-top: 4px;
+    font-size: .875rem;
+    line-height: 1.55;
+  }
+
+  #msim .msummary {
+    margin-top: 14px;
+    padding: 12px 0;
+    border-top: 1px solid var(--float-line);
+    border-bottom: 1px solid var(--float-line);
+  }
+
+  #msim .msummary-main {
+    font: 600 1.375rem/1.1 var(--font-heading);
+  }
+
+  #msim .msummary-main svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  #msim .msummary-dest {
+    margin-top: 8px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Pinned at a peek's bottom: also covers the scroller's bottom padding,
+     where the next block would show through under it. */
+  #msim .msheet[data-mode="results"][data-snap="peek"] #msimResultActions {
+    box-shadow: 0 18px 0 var(--surface);
+  }
+
+  #msim .msheet-safety-details {
+    margin-block: 14px 16px;
+  }
+
+  #msim .maccordion {
+    border: 0;
+    border-top: 1px solid var(--float-line);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  #msim .maccordion summary {
+    padding: 0 2px;
+  }
+
+  #msim .maccordion p {
+    padding: 0 2px 12px;
+  }
+
+  #msim .mhotlines {
+    border: 1px solid var(--float-danger-line);
+    border-radius: 14px;
+    background: var(--float-danger-bg);
+  }
+}
+
+/* The sheet's frame is no box of its own, except on phones (below). */
+.msheet-frame {
+  display: contents;
+}
+
+/* Phones: the sheet floats 10px off the sides and bottom, all four corners
+   round. It moves by transform, with a box taller than what shows while it
+   slides (mobile-sim.js); its frame ends at that gap and clips the rest, so
+   nothing moving needs a clip of its own. The shadow is a plate under the
+   frame (the frame would clip a shadow on the sheet), sliding with it. */
+@media (max-width: 639px) and (min-height: 500px) {
+  #msim .msim-map-controls {
+    top: calc(var(--msim-bar-bottom) + 12px);
+  }
+
+  #msim .msheet-frame,
+  #msim::before {
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: var(--msim-sheet-gap);
+  }
+
+  #msim .msheet-frame {
+    display: block;
+    position: fixed;
+    z-index: 220;
+    top: 0;
+    overflow: hidden;
+    border-radius: 0 0 24px 24px;
+    /* Makes the frame the fixed sheet's containing block, so it clips it. */
+    transform: translateZ(0);
+    pointer-events: none;
+  }
+
+  #msim .msheet {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--float-edge);
+    border-radius: 24px;
+    box-shadow: none;
+    pointer-events: auto;
+  }
+
+  #msim::before {
+    content: "";
+    position: fixed;
+    /* Under the legend and map buttons, over the map. */
+    z-index: 211;
+    height: var(--sheet-box-h, var(--sheet-h, 0px));
+    border-radius: 24px;
+    transform: translateY(calc(var(--sheet-box-h, var(--sheet-h, 0px)) - var(--sheet-h, 0px)));
+    box-shadow: var(--float-sheet-shadow);
+    pointer-events: none;
+    transition: transform .28s var(--msim-ease);
+  }
+
+  #appShell:is(.msim-dragging, .msim-instant) #msim::before {
+    transition: none;
+  }
+
+  #msim .msheet-scroll {
+    padding: 0 18px 18px;
+  }
+
+  #msim .msheet-handle span {
+    top: 10px;
+  }
+
+  /* The credit rides above the sheet, like the legend. */
+  body.sim-page #map .leaflet-bottom {
+    transform: translateY(calc(-1 * var(--sheet-h, 0px) - 6px));
+  }
+}
+
+/* Tablets: the panel docked on the left under the top bar, both floating
+   12px in. */
+@media (min-width: 640px) and (max-width: 1023px) and (min-height: 500px) {
+  body.sim-page {
+    --msim-side-left: calc(12px + env(safe-area-inset-left, 0px));
+    --msim-side-edge: calc(var(--msim-side-left) + var(--msim-side-w));
+  }
+
+  #msim .msim-topbar {
+    left: var(--msim-side-left);
+    right: auto;
+  }
+
+  #msim .msheet {
+    top: calc(var(--msim-bar-bottom) + 12px);
+    max-height: calc(100vh - var(--msim-bar-bottom) - 24px - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - var(--msim-bar-bottom) - 24px - env(safe-area-inset-bottom, 0px));
+    border-bottom: 1px solid var(--float-edge);
+    border-radius: 24px;
+    box-shadow: var(--float-shadow);
+  }
+
+  #msim .msheet .msheet-scroll {
+    padding: 18px 18px 18px;
+  }
+
+  #msim .msim-maplegend {
+    bottom: calc(var(--msim-sheet-gap) + 6px);
+  }
+
+  #msim .msim-toast {
+    top: calc(var(--msim-bar-top));
+  }
+
+  body.sim-page #appShell .map-pin-hint {
+    top: var(--msim-bar-top);
+  }
+}
