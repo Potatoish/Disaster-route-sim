@@ -407,6 +407,10 @@ function toggleFloodSeverityControl() {
   toggleMapOverlayPanel('floodFilterControl', 'floodFilterDetails', 'floodFilterToggle', 'floodFilterToggleAction', 'flood severity');
 }
 
+function toggleEarthquakeLensControl() {
+  toggleMapOverlayPanel('earthquakeViewSelector', 'earthquakeViewDetails', 'earthquakeViewToggle', 'earthquakeViewToggleAction', 'earthquake lens');
+}
+
 function isHazardOnlyView() {
   return hazardOnlyView;
 }

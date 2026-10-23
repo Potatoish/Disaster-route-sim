@@ -213,14 +213,20 @@
     <div class="map-wrap">
       <div id="map"></div>
 
-      <div class="earthquake-view-switcher" id="earthquakeViewSelector" hidden>
-        <div class="earthquake-view-title">Earthquake lens</div>
-        <div class="earthquake-view-tabs" role="tablist" aria-label="Earthquake result views">
-          <button class="eqtab active" id="eqView-overall" type="button" onclick="switchEarthquakeView('overall')">Overall</button>
-          <button class="eqtab" id="eqView-liquefaction" type="button" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
-          <button class="eqtab" id="eqView-ground_shaking" type="button" onclick="switchEarthquakeView('ground_shaking')">Ground shaking</button>
+      <div class="earthquake-view-switcher is-collapsed" id="earthquakeViewSelector" hidden>
+        <button class="legend-toggle earthquake-view-toggle" id="earthquakeViewToggle" type="button" onclick="toggleEarthquakeLensControl()" aria-expanded="false" aria-controls="earthquakeViewDetails" aria-label="Show earthquake lens">
+          <span class="earthquake-view-title">Earthquake lens</span>
+          <span class="legend-toggle-action" id="earthquakeViewToggleAction">Show</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="earthquakeViewDetails" hidden>
+          <div class="earthquake-view-tabs" role="tablist" aria-label="Earthquake result views">
+            <button class="eqtab active" id="eqView-overall" type="button" onclick="switchEarthquakeView('overall')">Overall</button>
+            <button class="eqtab" id="eqView-liquefaction" type="button" onclick="switchEarthquakeView('liquefaction')">Liquefaction</button>
+            <button class="eqtab" id="eqView-ground_shaking" type="button" onclick="switchEarthquakeView('ground_shaking')">Ground shaking</button>
+          </div>
+          <div class="earthquake-view-hint" id="earthquakeViewCopy">Earthquake result lens</div>
         </div>
-        <div class="earthquake-view-hint" id="earthquakeViewCopy">Earthquake result lens</div>
       </div>
 
       <div class="flood-filter-control is-collapsed" id="floodFilterControl" hidden>

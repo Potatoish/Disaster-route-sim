@@ -68,6 +68,7 @@ window.agnasSimulatorCopy = [
   ['Waking up the server…', 'Inihahanda ang server…'], ['Connecting to the server…', 'Kumokonekta sa server…'],
   ['Legend', 'Paliwanag sa mapa'], ['Show', 'Ipakita'], ['Hide', 'Itago'],
   ['Show map legend', 'Ipakita ang paliwanag sa mapa'], ['Hide map legend', 'Itago ang paliwanag sa mapa'],
+  ['Show earthquake lens', 'Ipakita ang pananaw sa lindol'], ['Hide earthquake lens', 'Itago ang pananaw sa lindol'],
   ['Hazards only', 'Mga panganib lamang'], ['View layers without pins or sites.', 'Tingnan ang mga layer nang walang pin o evacuation site.'],
   ['Show routes and pins', 'Ipakita ang mga ruta at pin'], ['Show hazards only', 'Ipakita lamang ang mga panganib'],
   ['Choose a disaster', 'Pumili ng sakuna'], ['(change disaster)', '(baguhin ang sakuna)'],

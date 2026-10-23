@@ -2376,7 +2376,10 @@ body.dark .emergency-modal {
 
 /* Earthquake keeps its lens in the top-left corner. */
 .earthquake-view-switcher { position: absolute; z-index: 6; top: calc(13px + env(safe-area-inset-top, 0px)); left: calc(13px + env(safe-area-inset-left, 0px)); padding: 8px; border: 1px solid var(--map-ui-border); border-radius: 10px; background: var(--map-ui-bg-soft); box-shadow: var(--map-ui-shadow); backdrop-filter: blur(8px); max-width: min(230px, calc(100% - 28px)); }
-.earthquake-view-title { margin: 0 2px 5px; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
+.earthquake-view-switcher.is-collapsed { width: max-content; }
+.earthquake-view-toggle { gap: 6px; }
+.earthquake-view-title { flex: 1; margin: 0; text-align: left; color: var(--map-ui-muted); font: 700 .62rem var(--font-meta); letter-spacing: .08em; text-transform: uppercase; }
+#earthquakeViewDetails { padding-top: 6px; }
 .earthquake-view-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .earthquake-view-hint { margin: 6px 2px 0; color: var(--map-ui-muted); font-size: .75rem; line-height: 1.45; }
 

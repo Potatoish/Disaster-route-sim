@@ -270,10 +270,19 @@ body.sim-page #appShell .earthquake-view-switcher {
   border-radius: 14px;
 }
 
+/* Folded like the legend: a pill, "EARTHQUAKE LENS  Show ^". */
+body.sim-page #appShell .earthquake-view-switcher.is-collapsed {
+  padding: 4px 12px 4px 14px;
+  border-radius: 999px;
+}
+
+body.sim-page #appShell .earthquake-view-switcher:not(.is-collapsed) .earthquake-view-toggle {
+  padding: 0 2px 0 4px;
+}
+
 body.sim-page #appShell .earthquake-view-title {
-  margin: 0 4px 6px;
-  color: var(--float-faint);
-  font: 500 .66rem var(--font-meta);
+  color: var(--accent-text, var(--accent));
+  font: 500 .6875rem var(--font-meta);
   letter-spacing: .14em;
 }
 
