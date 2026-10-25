@@ -297,6 +297,12 @@
       if (!fields[name]) fields[name] = panel.querySelector(`[data-flood="${name}"]`);
       return fields[name];
     };
+    // Written only when it changes, compared in the page's language (in
+    // Tagalog the field holds the translation).
+    const setField = (name, text) => {
+      text = window.agnasI18n?.t(text) ?? text;
+      if (field(name).textContent !== text) field(name).textContent = text;
+    };
     const bars = [...panel.querySelectorAll('.fs-bar')];
 
     // One line for the replay's panel once the intro is over.
@@ -391,9 +397,9 @@
       } else {
         texts = [`${LEVELS[level].name} flood`, `${LEVELS[level].range}, ${lowerFirst(FLOOD_DEPTH_ON_ADULT_BY_VAR[level])}`, LEVELS[level].walk];
       }
-      field('value').textContent = texts[0];
-      field('sub').textContent = texts[1];
-      field('walk').textContent = texts[2];
+      setField('value', texts[0]);
+      setField('sub', texts[1]);
+      setField('walk', texts[2]);
       return level;
     }
 

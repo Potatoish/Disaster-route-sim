@@ -363,8 +363,11 @@
       if (!fields[name]) fields[name] = panel.querySelector(`[data-aco="${name}"]`);
       return fields[name];
     };
+    // Compared in the page's language: in Tagalog the field holds the
+    // translation, so an English comparison would rewrite it every frame.
     const setText = (name, text) => {
       const el = field(name);
+      text = window.agnasI18n?.t(text) ?? text;
       if (el && el.textContent !== text) el.textContent = text;
     };
     const someAnts = options.antsTotal > mainAnts;

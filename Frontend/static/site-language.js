@@ -251,8 +251,31 @@
     neck: 'leeg', face: 'mukha',
   };
 
+  // The first sentence of a caption, skipping the periods of abbreviations
+  // and initials inside names ("Sta. Lucia", "Brgy.", "M. H. del Pilar").
+  function splitFirstSentence(key) {
+    const end = /[.!?]\s+/g;
+    for (let m = end.exec(key); m; m = end.exec(key)) {
+      if (/(?:^|\s)(?:Sta|Sto|Brgy|St|Ave|Blvd|Dr|Mt|[A-Z])$/.test(key.slice(0, m.index))) continue;
+      return [key.slice(0, m.index + 1), key.slice(m.index + m[0].length)];
+    }
+    return null;
+  }
+
+  // The replay and intros rewrite the same labels many times a second; each
+  // lookup can run every pattern, so results are kept (null: no Tagalog).
+  const memo = new Map();
   function tagalog(source) {
     const key = normalize(source);
+    if (!memo.has(key)) {
+      if (memo.size > 4000) memo.clear();
+      const value = translateKey(key);
+      memo.set(key, value === key ? null : value);
+    }
+    return memo.get(key) ?? source;
+  }
+
+  function translateKey(key) {
     if (copy.has(key)) return copy.get(key);
     if (key === key.toUpperCase() && lowerCopy.has(key.toLowerCase())) {
       return lowerCopy.get(key.toLowerCase()).toUpperCase();
@@ -264,11 +287,12 @@
     // A caption can join a title to several independently generated
     // sentences. Translate those before a parameterized title can consume
     // the rest as a place name.
-    let match = key.match(/^(.+?[.!?])\s+(.+)$/);
-    if (match) {
-      const first = tagalog(match[1]);
-      if (first !== match[1]) return `${first} ${tagalog(match[2])}`;
+    const sentences = splitFirstSentence(key);
+    if (sentences) {
+      const first = tagalog(sentences[0]);
+      if (first !== sentences[0]) return `${first} ${tagalog(sentences[1])}`;
     }
+    let match;
     for (const [pattern, replacement] of window.agnasSimulatorPatterns || []) {
       if (pattern.test(key)) return key.replace(pattern, (_match, ...args) => replacement(tagalog, ...args));
     }
@@ -298,7 +322,7 @@
       const translated = tagalog(sentence);
       if (translated !== sentence) return `${translated}.`;
     }
-    return source;
+    return key;
   }
 
   function render(source) {
@@ -364,7 +388,7 @@
     language = next === 'tl' ? 'tl' : 'en';
     if (persist) { try { localStorage.setItem(storageKey, language); } catch (_) {} }
     document.documentElement.lang = language;
-    document.getElementById('siteLanguageCode').textContent = language === 'tl' ? 'TL' : 'EN';
+    document.querySelectorAll('.language-code').forEach(code => { code.textContent = language === 'tl' ? 'TL' : 'EN'; });
     document.querySelectorAll('[data-language]').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.language === language));
     });
@@ -373,49 +397,61 @@
     document.dispatchEvent(new CustomEvent('site:languagechange', { detail: { language } }));
   }
 
-  const menu = document.getElementById('siteLanguageMenu');
-  const trigger = document.getElementById('siteLanguageTrigger');
+  // The simulator has a button per layout (setup panel foot, phone top bar),
+  // only one of them on screen; the popup opens from whichever was pressed.
+  const triggers = [...document.querySelectorAll('.language-trigger')];
   const popup = document.getElementById('siteTranslatePopup');
+  let trigger = triggers[0];
   function positionMenu() {
-    if (document.body.classList.contains('sim-page')) return;
     if (popup.hidden) return;
     const rect = trigger.getBoundingClientRect();
-    if (rect.bottom <= 0 || rect.top >= innerHeight) {
+    if (!rect.width || rect.bottom <= 0 || rect.top >= innerHeight) {
       closePopup();
       return;
     }
     const left = Math.max(12, Math.min(rect.right - popup.offsetWidth, innerWidth - popup.offsetWidth - 12));
+    const below = Math.max(12, Math.min(rect.bottom + 8, innerHeight - popup.offsetHeight - 12));
+    // A button low on the screen (the setup panel's foot) opens it upward.
+    const above = rect.top - 8 - popup.offsetHeight;
+    const top = below < rect.bottom && above >= 12 ? above : below;
     popup.style.left = `${Math.round(left)}px`;
-    popup.style.top = `${Math.round(Math.max(12, Math.min(rect.bottom + 8, innerHeight - popup.offsetHeight - 12)))}px`;
+    popup.style.top = `${Math.round(top)}px`;
   }
-  function showPopup() {
+  function showPopup(from) {
+    trigger = from;
     popup.hidden = false;
     positionMenu();
-    trigger.setAttribute('aria-expanded', 'true');
+    triggers.forEach(button => button.setAttribute('aria-expanded', String(button === trigger && !popup.hidden)));
   }
   function closePopup(restoreFocus = false) {
     popup.hidden = true;
-    trigger.setAttribute('aria-expanded', 'false');
+    triggers.forEach(button => button.setAttribute('aria-expanded', 'false'));
     if (restoreFocus) trigger.focus();
   }
-  trigger.addEventListener('click', () => { if (popup.hidden) showPopup(); else closePopup(); });
+  triggers.forEach(button => button.addEventListener('click', () => {
+    if (popup.hidden || button !== trigger) showPopup(button);
+    else closePopup();
+  }));
   document.getElementById('translationPromptClose').addEventListener('click', () => closePopup(true));
   popup.querySelectorAll('[data-language]').forEach(button => button.addEventListener('click', () => {
     setLanguage(button.dataset.language);
     closePopup(true);
   }));
   document.addEventListener('pointerdown', event => {
-    if (!popup.hidden && !menu.contains(event.target) && !popup.contains(event.target)) closePopup();
+    if (!popup.hidden && !event.target.closest?.('.language-menu') && !popup.contains(event.target)) closePopup();
   });
+  // Capture phase: Escape closes the popup before the simulator's own Escape
+  // handlers skip an intro or replay underneath it.
   document.addEventListener('keydown', event => {
     if (!event.defaultPrevented && event.key === 'Escape' && !popup.hidden) { event.preventDefault(); closePopup(true); }
-  });
+  }, true);
   window.addEventListener('storage', event => { if (event.key === storageKey) setLanguage(event.newValue, false); });
   window.agnasI18n = { t: render, setLanguage, getLanguage: () => language };
   setLanguage(language, false);
   positionMenu();
   window.addEventListener('resize', positionMenu, { passive: true });
-  window.addEventListener('scroll', () => { if (!popup.hidden) positionMenu(); }, { passive: true });
+  // Capture: the simulator's setup panel scrolls inside itself on short screens.
+  document.addEventListener('scroll', () => { if (!popup.hidden) positionMenu(); }, { capture: true, passive: true });
   document.fonts?.ready?.then(positionMenu);
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;

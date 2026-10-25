@@ -1,8 +1,11 @@
-<div class="language-menu" id="siteLanguageMenu" data-no-translate>
-  <button type="button" class="language-trigger" id="siteLanguageTrigger" aria-label="Translate / Isalin" title="Translate / Isalin" aria-expanded="false" aria-controls="siteTranslatePopup">
+{# The language button (site-language.js). A page may hold more than one (the
+   simulator has one per layout); they all open the page's one popup,
+   _language_popup.html, included separately. language_caret: "down", "up" or
+   none. #}
+<div class="language-menu" data-no-translate>
+  <button type="button" class="language-trigger" aria-label="Translate / Isalin" title="Translate / Isalin" aria-expanded="false" aria-controls="siteTranslatePopup">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>
-    <span id="siteLanguageCode">EN</span>
-    {% if language_trigger_only|default(false) %}<svg class="language-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>{% endif %}
+    <span class="language-code">EN</span>
+    {% if language_caret %}<svg class="language-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="{{ 'm7 14 5-5 5 5' if language_caret == 'up' else 'm7 10 5 5 5-5' }}"/></svg>{% endif %}
   </button>
 </div>
-{% if not language_trigger_only|default(false) %}{% include "_language_popup.html" %}{% endif %}

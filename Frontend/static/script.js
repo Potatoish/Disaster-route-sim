@@ -376,6 +376,9 @@ function syncMapOverlayLayout() {
   mapWrap.classList.toggle('pin-hint-crowded', crowded);
 }
 
+// A language switch changes the hint's and the legend's widths.
+document.addEventListener('site:languagechange', () => syncMapOverlayLayout());
+
 function setMapLegendVisible(visible) {
   const legend = document.getElementById('mapLegend');
   // The legend is also the quiet entry point for browsing hazards before a run.
@@ -2671,7 +2674,9 @@ function syncPinHint() {
     || (pinPlacementRole ? PIN_ROLE_COPY[pinPlacementRole].hint : '');
   hint.hidden = hazardOnlyView || !message;
   hint.classList.toggle('is-error', !!pinHintMessage?.isError);
-  text.textContent = message;
+  // Translated before syncMapOverlayLayout measures it: the Tagalog hint is
+  // much wider.
+  text.textContent = uiCopy(message);
   if (closeBtn) closeBtn.hidden = !pinPlacementRole;
   syncMapOverlayLayout();
 }
@@ -6413,14 +6418,20 @@ async function downloadSimulationReport() {
 
     doc.setFontSize(10.5);
     const valueWidth = pageWidth - margin * 2 - labelColWidth;
+    // Labels wrap in their column too: the Tagalog ones run past it.
+    const labelLineWidth = labelColWidth - 12;
     rows.forEach(([label, value]) => {
-      const valueLines = doc.splitTextToSize(String(value), valueWidth);
-      ensureSpace((valueLines.length - 1) * 13 + 4);
       doc.setFont('helvetica', 'bold');
-      doc.text(String(label), margin, y);
+      const labelLines = doc.splitTextToSize(String(label), labelLineWidth);
+      doc.setFont('helvetica', 'normal');
+      const valueLines = doc.splitTextToSize(String(value), valueWidth);
+      const lineCount = Math.max(labelLines.length, valueLines.length);
+      ensureSpace((lineCount - 1) * 13 + 4);
+      doc.setFont('helvetica', 'bold');
+      doc.text(labelLines, margin, y);
       doc.setFont('helvetica', 'normal');
       doc.text(valueLines, margin + labelColWidth, y);
-      y += 17 + (valueLines.length - 1) * 13;
+      y += 17 + (lineCount - 1) * 13;
     });
 
     y += 10;
@@ -6443,28 +6454,30 @@ async function downloadSimulationReport() {
     // page's full list.
     const sources = getReportDataSources(isEq);
     doc.setFontSize(9);
-    const sourceRows = sources.map(source => ({ ...source, lines: doc.splitTextToSize(source.text, valueWidth) }));
-    ensureSpace(32 + sourceRows.reduce((total, row) => total + row.lines.length * 11 + 15, 0));
+    doc.setFont('helvetica', 'bold');
+    const sourceRows = sources.map(source => ({ ...source, labelLines: doc.splitTextToSize(source.label, labelLineWidth) }));
+    doc.setFont('helvetica', 'normal');
+    sourceRows.forEach(row => { row.lines = doc.splitTextToSize(row.text, valueWidth); });
+    const sourceRowHeight = ({ lines, labelLines, url }) => Math.max(lines.length * 11 + (url ? 15 : 4), labelLines.length * 11 + 4);
+    ensureSpace(32 + sourceRows.reduce((total, row) => total + sourceRowHeight(row), 0));
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(0);
     doc.text('Data sources', margin, y);
     y += 15;
     doc.setFontSize(9);
-    sourceRows.forEach(({ label, lines, url }) => {
+    sourceRows.forEach(row => {
+      const { labelLines, lines, url } = row;
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0);
-      doc.text(label, margin, y);
+      doc.text(labelLines, margin, y);
       doc.setFont('helvetica', 'normal');
       doc.text(lines, margin + labelColWidth, y);
-      y += lines.length * 11;
       if (url) {
         doc.setTextColor(...LINK_RGB);
-        doc.text(bareAddress(url), margin + labelColWidth, y);
-        y += 15;
-      } else {
-        y += 4;
+        doc.text(bareAddress(url), margin + labelColWidth, y + lines.length * 11);
       }
+      y += sourceRowHeight(row);
     });
     const allSourcesUrl = new URL(DATA_SOURCES_PAGE_PATH, window.location.origin).href;
     doc.setFont('helvetica', 'bold');

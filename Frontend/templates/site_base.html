@@ -91,7 +91,7 @@
         </button>
       </div>
       <div class="nav-actions">
-        {% with language_trigger_only=true %}{% include "_language_menu.html" %}{% endwith %}
+        {% with language_caret='down' %}{% include "_language_menu.html" %}{% endwith %}
         <div class="theme-switch" role="group" aria-label="Theme">
           <button type="button" class="theme-switch-btn" data-theme="light" onclick="setHomeTheme('light')" aria-label="Light mode" title="Light mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2 12h2.4M19.6 12H22M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7"/></svg>

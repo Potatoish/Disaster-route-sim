@@ -373,14 +373,3 @@ html[data-keyboard-open="true"] .fab-panel {
   .site-page .language-trigger { padding-inline: 7px; gap: 4px; }
   .site-page .translation-popup { max-width: calc(100% - 24px); }
 }
-/* Keep the simulator language control clear of the map buttons and sheet. */
-.sim-page .language-menu { top: auto; bottom: 16px; right: 16px; left: auto; z-index: 210; }
-.sim-page .translation-popup { top: auto; bottom: 68px; right: 16px; left: auto; z-index: 211; max-height: calc(100dvh - 88px); overflow-y: auto; }
-@media (max-height: 499px) {
-  .sim-page .language-menu { bottom: calc(var(--mobile-bar-h, 56px) + 8px); }
-  .sim-page .translation-popup { bottom: calc(var(--mobile-bar-h, 56px) + 60px); max-height: calc(100dvh - 128px); }
-}
-@media (max-width: 1023px) and (min-height: 500px) {
-  .sim-page .language-menu { top: calc(70px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: auto; }
-  .sim-page .translation-popup { top: calc(122px + env(safe-area-inset-top, 0px)); bottom: auto; left: 12px; right: auto; }
-}

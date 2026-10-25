@@ -826,10 +826,20 @@ body.sim-page #setupPanel .setup-run-hint {
   font-size: .78rem;
 }
 
+/* Back to Home and the language button share the last row. */
+body.sim-page #setupPanel .panel-foot-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 body.sim-page #setupPanel .panel-back-btn {
+  flex: 1 1 auto;
+  min-width: 0;
   justify-content: center;
   min-height: 40px;
-  margin-top: 6px;
+  margin-top: 0;
   padding: 8px 14px;
   border: 0;
   border-radius: 12px;
@@ -842,6 +852,50 @@ body.sim-page #setupPanel .panel-back-btn:hover:not(:disabled) {
   background: var(--float-chip);
   color: var(--text);
   transform: none;
+}
+
+body.sim-page #setupPanel .language-menu {
+  position: static;
+  flex: none;
+}
+
+body.sim-page #setupPanel .language-trigger {
+  min-height: 40px;
+  padding: 0 10px;
+  gap: 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font: 600 .84rem var(--font-body);
+}
+
+body.sim-page #setupPanel .language-trigger:is(:hover, [aria-expanded="true"]) {
+  background: var(--float-chip);
+  color: var(--text);
+}
+
+body.sim-page #setupPanel .language-trigger svg {
+  width: 17px;
+  height: 17px;
+}
+
+body.sim-page #setupPanel .language-trigger .language-caret {
+  width: 12px;
+  height: 12px;
+}
+
+/* The language popup (site-language.js places it by its button): over the
+   phone top bar and sheet, under the loader and dialogs. */
+body.sim-page .translation-popup {
+  z-index: 260;
+  width: 260px;
+  max-width: calc(100% - 24px);
+  border-color: var(--float-edge);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--float-shadow);
 }
 
 /* ---------- RESULTS PANEL ----------
@@ -1385,6 +1439,10 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
   body.sim-page #setupPanel .panel-foot {
     padding: 12px 20px 14px;
   }
+
+  body.sim-page #setupPanel :is(.panel-back-btn, .language-trigger) {
+    min-height: 44px;
+  }
 }
 
 /* ---------- PHONES AND TABLETS (< 1024px wide, >= 500px tall) ----------
@@ -1429,6 +1487,45 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
   #msim .msim-icon-btn--boxed {
     border: 0;
     background: var(--float-chip);
+  }
+
+  #msim .msim-topbar .language-menu {
+    position: static;
+    flex: none;
+  }
+
+  #msim .msim-topbar .language-trigger {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 9px;
+    gap: 5px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--float-chip);
+    color: var(--text);
+    box-shadow: none;
+    font: 600 .75rem var(--font-body);
+  }
+
+  #msim .msim-topbar .language-trigger svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* The narrowest phones: the globe alone, and a smaller title, so
+     "Pinagbuhatan" is not cut off. */
+  @media (max-width: 359px) {
+    #msim .msim-topbar .language-code {
+      display: none;
+    }
+
+    #msim .msim-topbar .language-trigger {
+      padding: 0;
+    }
+
+    #msim .msim-topbar-title {
+      font-size: 1rem;
+    }
   }
 
   #msim .msim-bgy-menu {
@@ -1585,7 +1682,8 @@ body.sim-page #routeSafetyContent .safety-disclaimer-link {
     position: relative;
     gap: 12px;
     min-height: 56px;
-    padding: 0;
+    /* Room above and below a value that wraps (the longer Tagalog hints). */
+    padding: 6px 0;
     border: 0;
     border-radius: 0;
     background: transparent;

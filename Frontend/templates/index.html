@@ -202,10 +202,15 @@
         </button>
         <p class="setup-run-hint" id="infoBox" role="status">Choose a disaster.</p>
       </div>
-      <button class="panel-back-btn" id="changeRunBtn" type="button" onclick="goToHomepageForNewScope()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
-        Back to Home
-      </button>
+      <div class="panel-foot-row">
+        <button class="panel-back-btn" id="changeRunBtn" type="button" onclick="goToHomepageForNewScope()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+          Back to Home
+        </button>
+        {# In the foot, not the header: beside the header's buttons it pushes
+           "Simulation setup" onto two lines on laptop screens. #}
+        {% with language_caret='up' %}{% include "_language_menu.html" %}{% endwith %}
+      </div>
     </div>
   </section>
 
@@ -308,6 +313,7 @@
           </span>
           <span class="msim-topbar-sub" id="msimSubtitle">Location</span>
         </button>
+        {% include "_language_menu.html" %}
         <button class="msim-icon-btn msim-icon-btn--boxed" id="msimLayersBtn" type="button" onclick="openMobileLayers()" aria-label="Map layers" aria-haspopup="dialog" aria-expanded="false" aria-controls="msimLayers">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 3 8.5l9 4.5 9-4.5L12 4Z"/><path d="m3 12.5 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>
         </button>
@@ -642,6 +648,7 @@
 </div>
 
 {% include "_tutorial_modal.html" %}
+{% include "_language_popup.html" %}
 
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 
@@ -662,6 +669,8 @@
    image and CDN script, so the map tiles began loading late. #}
 <script>initTheme(); initMap();</script>
 <script src="{{ url_for('static', filename='visitor-count.js') }}"></script>
+<script src="{{ url_for('static', filename='simulator-language.js') }}"></script>
+<script src="{{ url_for('static', filename='site-language.js') }}"></script>
 
 </body>
 </html>
