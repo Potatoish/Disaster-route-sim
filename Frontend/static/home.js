@@ -590,6 +590,32 @@ function setScopeMapError(message) {
   update();
 })();
 
+// ---- feedback button vs. phone content ----
+// On phones the corner button covers the right edge of the content. While a
+// [data-fab-clear] block passes through the bottom strip of the screen, where
+// the button sits, it steps aside (.is-clearing in home.css). An open panel
+// keeps its button.
+(function clearFabForBlocks() {
+  const button = document.getElementById('fabBtn');
+  const blocks = document.querySelectorAll('[data-fab-clear]');
+  if (!button || !blocks.length || !('IntersectionObserver' in window)) return;
+
+  const phone = window.matchMedia('(max-width: 639px)');
+  const underButton = new Set();
+  const sync = () => {
+    button.classList.toggle('is-clearing', phone.matches && underButton.size > 0 && !fabOpen);
+  };
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) underButton.add(entry.target);
+      else underButton.delete(entry.target);
+    });
+    sync();
+  }, { rootMargin: '-88% 0px 0px 0px' });
+  blocks.forEach(block => observer.observe(block));
+  phone.addEventListener('change', sync);
+})();
+
 // ---- "Emergency hotlines" (Plan ahead card, homepage only) ----
 let hotlinesReturnFocus = null;
 

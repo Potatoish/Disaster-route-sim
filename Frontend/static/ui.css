@@ -107,7 +107,7 @@ body.site-page.dark {
 @media (max-width: 820px) {
   .site-page .hero p.lede { text-align: center; text-align-last: auto; }
 }
-.site-page :is(.cta, .hero-action, .gtk-link, .fab-send, .rate-row button,
+.site-page :is(.cta, .gtk-link, .fab-send, .rate-row button,
   .fab-panel-close, .tutorial-btn, .scope-modal-close, .tutorial-modal-close, .hz-sim-btn) {
   min-height: 44px;
   border-radius: var(--radius-control);
@@ -141,21 +141,19 @@ html[data-keyboard-open="true"] .fab-panel {
 }
 
 /* Keep the map's layout, while giving its small result text room to breathe. */
-.sim-page :is(.safety-card-label, .msheet-label-hint, .msummary-route) { font-size: var(--text-xs); }
+.sim-page :is(.safety-card-label, .msummary-route) { font-size: var(--text-xs); }
 .sim-page :is(.safety-card-sub, .safety-notes, .safety-disclaimer-text,
   .mverdict-sub, .msummary-dest, .msummary-far, .msheet-source, .maccordion p) {
   font-size: var(--text-sm);
   line-height: 1.55;
 }
-.sim-page :is(.safety-card-value, .safety-hazard-list strong, .mroute-name) { font-size: .9375rem; }
+.sim-page :is(.safety-card-value, .safety-hazard-list strong) { font-size: .9375rem; }
 .sim-page .safety-hazard-list li { font-size: var(--text-sm); line-height: 1.5; }
 .sim-page .mverdict-title { font-size: var(--text-md); line-height: 1.35; }
-.sim-page .mroute-risk { font-size: var(--text-sm); line-height: 1.4; }
-.sim-page :is(.mroute-dest, .mroute-time) { font-size: var(--text-xs); }
-.sim-page :is(.msummary-dest, .mroute-dest) { white-space: normal; overflow-wrap: anywhere; }
+.sim-page .msummary-dest { white-space: normal; overflow-wrap: anywhere; }
 .sim-page .msummary { flex-wrap: wrap; gap: var(--space-2); }
 .sim-page .msummary-route { white-space: normal; }
-.sim-page :is(.safety-result-card, .mverdict, .mroute, .maccordion) { border-radius: var(--radius-control); }
+.sim-page :is(.safety-result-card, .mverdict, .maccordion) { border-radius: var(--radius-control); }
 .sim-page :is(.safety-result-card.danger .safety-card-value, .safety-hazard-list strong.is-high,
   .mverdict.is-danger .mverdict-title) { color: var(--danger-ink); }
 .sim-page .safety-card-action { min-height: 44px; color: var(--danger-ink); border-color: var(--danger-ink); }

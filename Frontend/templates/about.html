@@ -24,7 +24,7 @@
         </div>
         <div class="panel">
           <h2>Architecture</h2>
-          <p>A three-tier build separating the map interface from the routing computation.</p>
+          <p class="panel-lede">A three-tier build separating the map interface from the routing computation.</p>
           <div class="credit-row"><b>Client</b><span>Leaflet, OSM tiles</span></div>
           <div class="credit-row"><b>Service</b><span>Flask, OSMnx, ACO engine</span></div>
           <div class="credit-row"><b>Data</b><span>Offline multi-hazard datasets</span></div>
@@ -56,7 +56,7 @@
       <div>
         {# A real form: Enter sends it, and home.js marks a missing or invalid
            field (aria-invalid) instead of the browser's own bubbles. #}
-        <form class="panel contact-form" id="contactForm" novalidate onsubmit="submitContactForm(event)" aria-labelledby="contactTitle">
+        <form class="panel contact-form" id="contactForm" novalidate onsubmit="submitContactForm(event)" aria-labelledby="contactTitle" data-fab-clear>
           <h2 id="contactTitle">Contact the team</h2>
           <p class="contact-intro">Questions about the study, the data, or a request to use the system.</p>
           <div class="form-row"><label for="cName">Name</label><input id="cName" name="name" type="text" placeholder="Juan Dela Cruz" autocomplete="name" maxlength="100" required></div>

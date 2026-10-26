@@ -4085,6 +4085,7 @@ function syncWorkflowSummaries() {
   }
 
   if (changeRouteBtn) {
+    changeRouteBtn.hidden = !selectedHazard;
     changeRouteBtn.disabled = isSimulationInteractionLocked() || !(selectedBarangay && selectedHazard);
   }
 

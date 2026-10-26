@@ -233,7 +233,7 @@ body.site-page.dark { --accent-text: var(--blue-300); }
   border-color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--c-ink);
 }
 .site-page .hz-sim-btn { color: var(--quake-text); border-color: var(--border2); }
-.sim-page :is(.left-panel, .right-panel, .route-safety-panel, .topbar, .msheet) { background: var(--surface); }
+.sim-page :is(.left-panel, .right-panel, .route-safety-panel, .msheet) { background: var(--surface); }
 body.sim-page .workflow-card, body.sim-page.dark .workflow-card {
   background: var(--panel); box-shadow: none;
 }
@@ -261,11 +261,13 @@ body.sim-page .workflow-card.active, body.sim-page.dark .workflow-card.active {
 .sim-page #loaderProgress.loader-progress--earthquake {
   --accent: var(--amber-700); --accent2: var(--amber-400);
 }
-/* Default/light palette: steel blue from the chosen swatches. */
+/* Default/light palette: steel blue from the chosen swatches. Filled
+   actions and the accent use --blue-600, a step deeper than the 500 swatch,
+   so their white labels reach 5:1 (white on the 500 is 3.8:1). */
 body.site-page:not(.dark), body.sim-page:not(.dark) {
-  --blue-100: #c0e6fd; --blue-300: #80aad3; --blue-500: #5b86b6;
+  --blue-100: #c0e6fd; --blue-300: #80aad3; --blue-500: #5b86b6; --blue-600: #46709f;
   --blue-700: #3f6593; --blue-900: #1b3554; --blue-950: #000f22;
-  --accent: var(--blue-500); --accent2: var(--blue-700);
+  --accent: var(--blue-600); --accent2: var(--blue-700);
   --accent-ink: var(--blue-950); --accent-text: var(--blue-700);
   --panel-strong: #f0f4f8; --border: #d1ddea; --border2: #9db5cf;
   --accent-soft-bg: #eef3f9; --accent-soft-border: #c3d3e5;
@@ -273,8 +275,8 @@ body.site-page:not(.dark), body.sim-page:not(.dark) {
   --hazard-selected-text: var(--blue-700);
   --hazard-chip-bg: #eef3f9; --hazard-chip-border: #c3d3e5; --hazard-chip-text: var(--blue-700);
   --hazard-panel-bg: #eef3f9; --hazard-panel-border: #c3d3e5; --hazard-panel-strong: var(--blue-700);
-  --hazard-button-start: var(--blue-500); --hazard-button-end: var(--blue-500);
-  --map-ui-accent: var(--blue-500);
+  --hazard-button-start: var(--blue-600); --hazard-button-end: var(--blue-600);
+  --map-ui-accent: var(--blue-600);
   --flood-theme-ink: var(--blue-500); --quake-theme-ink: var(--amber-400);
   --quake-card-line: color-mix(in srgb, var(--amber-400) 50%, var(--surface));
 }
@@ -291,12 +293,12 @@ body.sim-page:not(.dark)[data-hazard-theme="earthquake"] {
 }
 body.site-page:not(.dark) :is(.nav-btn:is(:active, .is-active), .nav-pill,
   .cta, .fab, .fab-send, .tutorial-btn.primary, .skip-link) {
-  background: var(--blue-500);
+  background: var(--blue-600);
 }
 body.site-page:not(.dark) .dashboard-nav-drawer .nav-links.has-pill .nav-btn.is-active {
-  background: var(--blue-500);
+  background: var(--blue-600);
 }
-body.site-page:not(.dark) .qs-cta:hover { background: var(--blue-300); color: var(--accent-ink); }
+body.site-page:not(.dark) .qs-cta:hover { background: var(--blue-700); }
 body.site-page:not(.dark) .theme-switch-btn.is-active { color: var(--accent-text); }
 body.site-page:not(.dark) .wave-zone::after { background: var(--amber-400); }
 body.sim-page:not(.dark) :is(.run-btn, .evac-btn) { background: var(--hazard-button-start); }
@@ -305,7 +307,7 @@ body.sim-page:not(.dark) :is(.panel-barangay-label, .panel-barangay-seg button[a
   .panel-back-btn:hover:not(:disabled), .card-action-btn:hover:not(:disabled), .sec-label,
   .pin-input-menu-item, .safety-eyebrow, .src-name, .mslot-edit, .msheet-label,
   .legend-title,
-  .aco-replay-skip:hover, .msheet .aco-replay-more, .safety-all-routes-btn:not(:hover),
+  .aco-replay-skip:hover, .msheet .aco-replay-more,
   .route-modal-btn:not(.primary):hover, .safety-edit-setup-btn:hover) { color: var(--accent-text); }
 body.sim-page:not(.dark) .leaflet-control-attribution { --map-ui-accent: var(--accent-text); }
 body.sim-page:not(.dark) .loader-visual--flood .loader-graph,
@@ -416,7 +418,27 @@ body:is(.site-page, .sim-page) :is(.cta, .fab, .fab-send, .skip-link,
 .site-page .nav-pill .nav-pill-label,
 .site-page .nav-links:not(.has-pill) .nav-btn:is(:active, .is-active),
 .site-page .dashboard-nav-drawer .nav-links.has-pill .nav-btn.is-active { color: #ffffff; }
-.sim-page :is(.safety-all-routes-btn, .safety-card-action):hover:not(:disabled) {
+/* Light mode only: dark mode fills this hover with the pale danger pink,
+   where the panel color (ui.css) reads and white would not. */
+body.sim-page:not(.dark) .safety-card-action:hover:not(:disabled) {
   --accent-ink: #ffffff;
   color: #ffffff;
+}
+/* Two fills are too light for white: the dark theme's sky blue and the
+   earthquake orange (white is under 2.5:1 on both). Their labels take the
+   theme's darkest swatch instead, over 6:1. In light earthquake the details
+   button and route reset sit on Deep Amber, so they keep white. Each list
+   holds an ID so it weighs the same as the white-label rule above, and wins
+   by coming after it. */
+body.sim-page.dark { --fill-ink: var(--blue-950); }
+body.sim-page[data-hazard-theme="earthquake"] { --fill-ink: var(--amber-950); }
+body.sim-page.dark :is(.run-btn, .evac-btn, .mbtn--primary, #msimDetailsBtn, .result-route-reset,
+  .tutorial-btn.primary, .route-modal-btn.primary, .mlens button.active,
+  .leaflet-control-layers-base label:has(:checked) > span):not(:disabled),
+body.sim-page:not(.dark)[data-hazard-theme="earthquake"] :is(.run-btn, .evac-btn,
+  .mbtn--primary:not(#msimDetailsBtn), .tutorial-btn.primary, .route-modal-btn.primary,
+  .mlens button.active, .leaflet-control-layers-base label:has(:checked) > span):not(:disabled) {
+  --accent-ink: var(--fill-ink);
+  --strong-ink: var(--fill-ink);
+  color: var(--fill-ink);
 }

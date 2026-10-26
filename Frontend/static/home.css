@@ -220,16 +220,6 @@ body.dark .theme-switch::before{ transform:translateX(30px); }
 /* The promise reads apart from the subject. */
 .hero p.lede{ max-width:min(540px,100%); color:var(--muted); font-size:16px; line-height:1.6; }
 
-/* ---------- HERO ACTIONS (how to use / coverage) ---------- */
-.hero-actions{ display:flex; flex-wrap:wrap; gap:10px; }
-.hero-action{
-  display:inline-flex; align-items:center; gap:8px; border:1px solid var(--border); background:var(--panel);
-  color:var(--text); border-radius:999px; padding:10px 16px; font-size:13.5px; font-weight:700;
-  text-decoration:none; transition:border-color .16s ease, background .16s ease, scale .12s ease;
-}
-.hero-action svg{ width:16px; height:16px; flex:none; stroke:var(--accent); }
-.hero-action:hover{ border-color:var(--accent2); background:var(--accent-soft-bg); }
-
 /* ---------- HERO QUICK-START CARD ---------- */
 .hero-quickstart{
   min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:20px;
@@ -418,6 +408,10 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
 .panel .contact-intro{ margin-bottom:16px; }
 .panel p{ color:var(--muted); font-size:13.5px; line-height:1.6; margin:0 0 8px; }
 .panel p:last-child{ margin-bottom:0; }
+/* A one-sentence intro over full-width rows: `pretty` (JUSTIFIED TEXT) would
+   pull half its first line down to lengthen the last, so it read as a
+   narrow column beside them. */
+.panel .panel-lede{ text-wrap:wrap; margin-bottom:14px; }
 .credit-row{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; padding-block:9px; border-top:1px dashed var(--border); font-size:13px; }
 .credit-row:first-of-type{ border-top:none; padding-top:0; }
 .credit-row b{ color:var(--text); }
@@ -492,9 +486,13 @@ body.dark .tutorial-tile-shot .shot-dark{ display:block; }
   position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:max(calc(20px + env(safe-area-inset-bottom,0px)), calc(var(--fab-lift, 0px) + 12px)); z-index:50; height:48px; border-radius:999px;
   background:linear-gradient(180deg,var(--accent2),var(--accent)); color:var(--accent-ink); border:none; padding:0 18px 0 16px;
   box-shadow:0 12px 26px rgba(0,0,0,.22); display:flex; align-items:center; gap:8px;
-  font-size:13.5px; font-weight:700; transition:box-shadow .18s ease, translate .18s ease, scale .12s ease;
+  font-size:13.5px; font-weight:700;
+  transition:box-shadow .18s ease, translate .18s ease, scale .12s ease, opacity .18s ease, visibility .18s;
 }
 .fab:hover{ translate:0 -2px; box-shadow:0 16px 32px rgba(0,0,0,.26); }
+/* Phones: steps aside while the barangay picker or the contact form passes
+   under it (home.js), so it never takes a tap meant for them. */
+.fab.is-clearing{ opacity:0; scale:.85; visibility:hidden; pointer-events:none; }
 .fab svg{ width:20px; height:20px; flex:none; }
 .fab-panel{
   position:fixed; right:calc(20px + env(safe-area-inset-right,0px)); bottom:max(calc(82px + env(safe-area-inset-bottom,0px)), calc(var(--fab-lift, 0px) + 74px)); z-index:50; width:300px; max-width:calc(100vw - 32px);
@@ -955,7 +953,6 @@ body.dark .hz-section{
   .about-grid{ grid-template-columns:1fr; }
   .hero-split{ grid-template-columns:1fr; text-align:center; }
   .hero-copy{ align-items:center; }
-  .hero-actions{ justify-content:center; }
 }
 @media (max-width:1023px){
   /* Four across is too narrow for "Safety over distance" here: two by two. */
@@ -1016,7 +1013,7 @@ body.dark .hz-section{
    100% is the button's own size, so each side grows by half of what is
    missing. The phone nav (< 640px) is sized in its own block. */
 @media (max-width:1023px){
-  .hero-action, .hz-sim-btn, .fab-send, .tutorial-btn, .cta, .gtk-link{ min-height:44px; }
+  .hz-sim-btn, .fab-send, .tutorial-btn, .cta, .gtk-link{ min-height:44px; }
   /* The depth slider's thumb is small; a 44px-tall input is its tap area. */
   .hz-depth input[type="range"]{ height:44px; }
   .form-row input, .fab-field select, .rate-row button{ min-height:44px; }
@@ -1061,7 +1058,7 @@ body.dark .hz-section{
    Follows the mobile wireframes; the pill nav and the round feedback button
    stay as they are. */
 @media (max-width:639px){
-  /* Hero: the copy, then the barangay card, then Coverage map. The title is
+  /* Hero: the copy, then the barangay card. The title is
      centered, and so is the intro's last line. .hero-copy steps out of the
      way (display:contents) so its children and the card share one column
      and can be reordered. */
@@ -1071,7 +1068,6 @@ body.dark .hz-section{
   .hero h1{ font-size:34px; line-height:1.08; text-align:center; }
   .hero p.lede{ font-size:15px; line-height:1.55; text-align-last:center; }
   .hero-quickstart{ order:1; margin-top:8px; padding:18px; gap:14px; border-radius:16px; }
-  .hero-actions{ order:2; justify-content:flex-start; }
 
   .qs-head h2{ font-size:18px; }
   .qs-barangay-grid{ grid-template-columns:1fr; }
@@ -1213,8 +1209,11 @@ body.dark .hz-section{
    page answers. `scale` composes with the hover lifts that use `transform`
    or `translate`; each control lists it in its own transition. */
 @media (prefers-reduced-motion: no-preference){
-  :is(.cta, .hero-action, .qs-barangay-card, .hz-level, .hz-tile, .hz-sim-btn,
-      .fab, .fab-send, .rate-row button, .tutorial-btn, .gtk-link):active:not(:disabled){
+  :is(.cta, .qs-barangay-card, .hz-level, .hz-tile, .hz-sim-btn,
+      .fab, .fab-send, .rate-row button, .tutorial-btn, .gtk-link,
+      .theme-switch-btn, .language-trigger, .language-options button, .mobile-nav-toggle,
+      .scope-modal-close, .fab-panel-close, .tutorial-modal-close,
+      .translation-popup-close):active:not(:disabled){
     scale:.97;
   }
 }

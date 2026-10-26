@@ -905,24 +905,6 @@ body.dark .pin-input-menu {
   color: var(--muted);
 }
 
-.info-box {
-  background: var(--accent-soft-bg);
-  border: 1px solid var(--accent-soft-border);
-  border-radius: 14px;
-  padding: 12px 14px;
-  font-size: .82rem;
-  font-family: var(--font-body);
-  font-weight: 500;
-  color: var(--muted);
-  line-height: 1.6;
-  box-shadow: 0 8px 20px var(--accent-soft-shadow);
-}
-
-.info-box strong {
-  color: var(--accent2);
-  font-family: var(--font-meta);
-}
-
 .run-btn {
   width: 100%;
   margin-top: 2px;
@@ -1993,15 +1975,9 @@ body.dark .route-safety-panel { background: linear-gradient(180deg, rgba(255,255
 .safety-brand-copy { flex: 1; min-width: 0; }
 .safety-eyebrow { color: var(--accent); font-family: var(--font-heading); font-size: 1.3rem; font-weight: 700; line-height: 1; letter-spacing: .02em; }
 .safety-brand h2, .route-list-modal h2 { margin-top: 4px; color: var(--text); font-size: .92rem; line-height: 1.32; font-weight: 800; }
-.safety-route-hint { margin: 13px 2px 6px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
 .safety-route-chip { display: flex; align-items: center; gap: 8px; width: 100%; margin: 12px 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); font: 700 .76rem var(--font-body); color: var(--ink-strong); overflow: hidden; appearance: none; text-align: left; }
 .safety-route-chip svg:first-child { width: 15px; flex: 0 0 auto; stroke: var(--accent); fill: none; stroke-width: 2; }
 .safety-route-chip span { flex: 1 1 auto; min-width: 0; white-space: normal; word-break: break-word; line-height: 1.3; }
-.safety-route-chip.is-interactive { cursor: pointer; transition: border-color .16s ease; }
-.safety-route-chip.is-interactive:hover { border-color: var(--accent); }
-.safety-route-chip-caret { flex: 0 0 auto; width: 14px; stroke: var(--muted); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .16s ease; }
-.safety-route-chip[aria-expanded="true"] .safety-route-chip-caret { transform: rotate(180deg); }
-.safety-route-streets { list-style: none; margin: -6px 0 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); max-height: 240px; overflow-y: auto; color: var(--text); font-size: .8rem; }
 .turn-step { display: flex; align-items: flex-start; gap: 10px; padding: 7px 2px; }
 .turn-step + .turn-step { border-top: 1px dashed var(--border); }
 .turn-step-icon { flex: 0 0 auto; width: 24px; height: 24px; margin-top: 1px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -2055,8 +2031,6 @@ body.dark .safety-card-action:hover { color: #1c0606; }
 .safety-disclaimer-link { display: inline-block; margin-top: 6px; padding: 0; border: none; background: none; color: var(--red); font-size: .76rem; font-weight: 800; text-decoration: underline; cursor: pointer; }
 .safety-disclaimer-link:hover, .safety-disclaimer-link:focus-visible { opacity: .8; }
 [data-result-hotlines][hidden] { display: none; }
-.safety-all-routes-btn { width: 100%; margin-top: 11px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-soft-bg); color: var(--accent); font: 700 .76rem var(--font-body); cursor: pointer; transition: background-color .16s ease, color .16s ease, scale .12s ease; }
-.safety-all-routes-btn:hover { background: var(--accent); color: var(--accent-ink); }
 
 /* New Simulation | Download PDF, side by side under the panel header. */
 .safety-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
@@ -4301,56 +4275,6 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
   color: var(--muted);
 }
 
-.msheet-label-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 16px 0 8px;
-}
-
-.msheet-label-row .msheet-label {
-  margin: 0;
-}
-
-.msheet-label-hint {
-  color: var(--muted);
-  font-size: .82rem;
-  text-align: right;
-}
-
-.mroutes {
-  display: grid;
-  gap: 6px;
-  list-style: none;
-}
-
-.mroute {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 50px;
-  padding: 7px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
-  color: var(--text);
-  font-family: var(--font-body);
-  text-align: left;
-  cursor: pointer;
-}
-
-/* The picked route; with none picked, the best one is the route on show. */
-.mroute.is-active,
-.mroutes:not(:has(.mroute.is-active)) .mroute.is-best {
-  border: 1.5px solid var(--accent);
-}
-
-.mroute.is-active {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
 /* Same colors as the lines on the map (osm.js). */
 .mroute-swatch {
   flex: none;
@@ -4375,43 +4299,6 @@ body.dark .location-photo-popup .leaflet-popup-close-button { filter: none; }
 }
 .mroute-swatch--eliminated { background: #991b1b; box-shadow: 0 0 0 1px #450a0a; }
 
-.mroute-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.mroute-name {
-  font-size: .88rem;
-  font-weight: 800;
-}
-
-.mroute-risk {
-  font-size: .78rem;
-  font-weight: 600;
-}
-
-.mroute-risk--low { color: #a16207; }
-.mroute-risk--moderate { color: #c2410c; }
-.mroute-risk--high { color: var(--red); }
-.mroute-risk--unknown { color: var(--muted); }
-body.dark .mroute-risk--low { color: #facc15; }
-body.dark .mroute-risk--moderate { color: #fb923c; }
-
-.mroute-dest {
-  color: var(--muted);
-  font-size: .76rem;
-}
-
-.mroute-time {
-  flex: none;
-  color: var(--muted);
-  font: 600 .8rem var(--font-body);
-  font-variant-numeric: tabular-nums;
-}
-
 .mroute-steps {
   margin: 6px 0 2px;
   padding: 4px 12px;
@@ -4421,17 +4308,6 @@ body.dark .mroute-risk--moderate { color: #fb923c; }
   color: var(--text);
   font-size: .86rem;
   list-style: none;
-}
-
-.mroutes-more {
-  min-height: 44px;
-  margin-top: 4px;
-  padding: 0 2px;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: 700 .92rem var(--font-body);
-  cursor: pointer;
 }
 
 .msheet-source {
@@ -5351,9 +5227,14 @@ body.dark .aco-legend-stuck {
    own transition. */
 @media (prefers-reduced-motion: no-preference) {
   :is(.run-btn, .evac-btn, .card-action-btn, .panel-back-btn, .hazard-card,
-      .reset-btn, .safety-download-btn, .safety-all-routes-btn, .route-modal-btn,
+      .reset-btn, .safety-download-btn, .route-modal-btn,
       .empty-map-retry, .eqtab, .flood-filter-buttons button, .mbtn, .mhazard,
-      .safety-card-action, .aco-replay-skip):active:not(:disabled) {
+      .safety-card-action, .aco-replay-skip, .safety-edit-setup-btn, .mhotlines,
+      .result-route-reset, .result-route-options button, .panel-barangay-seg button,
+      .sidebar-toggle, .legend-toggle, .legend-hazard-toggle, .msim-map-btn,
+      .msim-icon-btn, .msheet-chip, .mslot-edit, .mlens button, .language-trigger,
+      .language-options button, .modal-close-btn, .map-pin-hint-close,
+      .translation-popup-close, .tutorial-btn, .tutorial-modal-close):active:not(:disabled) {
     scale: .97;
   }
 }
@@ -5857,8 +5738,6 @@ body.dark .aco-legend-stuck {
 .panel-head-sub,
 .workflow-card-summary,
 .pin-field-help,
-.info-box,
-.safety-route-hint,
 .safety-action-detail,
 .safety-notes li,
 .safety-disclaimer-text,
