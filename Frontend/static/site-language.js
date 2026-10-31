@@ -22,7 +22,7 @@
     ['Ant Guided Navigation And Safety System', 'Sistema ng Ligtas na Paglalakbay sa Gabay ng mga Langgam'],
     ['Disaster Preparedness', 'Paghahanda sa Sakuna'],
     ['for safer communities', 'para sa mas ligtas na komunidad'],
-    ['AGNAS (Ant Guided Navigation and Safety System) is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It models safe navigation paths for Flood and Earthquake scenarios, filtering out hazard-prone routes before evaluating path distance.', 'Ang AGNAS (Sistema ng Ligtas na Paglalakbay sa Gabay ng mga Langgam) ay isang simulator para sa Barangay Pinagbuhatan at Sta. Lucia. Naghahanap ito ng ligtas na ruta para sa mga sitwasyon ng baha at lindol. Inaalis muna nito ang mga rutang delikado bago ikumpara ang layo.'],
+    ['AGNAS (Ant Guided Navigation and Safety System) is a simulation tool for Barangay Pinagbuhatan and Sta. Lucia. It finds walking routes for flood and earthquake scenarios and ranks them by hazard exposure first, then by distance.', 'Ang AGNAS (Sistema ng Ligtas na Paglalakbay sa Gabay ng mga Langgam) ay isang simulator para sa Barangay Pinagbuhatan at Sta. Lucia. Naghahanap ito ng mga ruta sa paglalakad para sa mga sitwasyon ng baha at lindol, at inihahanay ang mga ito ayon sa panganib muna, saka sa layo.'],
     ['Coverage map', 'Mapa ng sakop na lugar'],
     ['Select your Barangay', 'Piliin ang iyong barangay'],
     ['Select a barangay first to start the simulation.', 'Pumili muna ng barangay bago simulan ang simulation.'],
