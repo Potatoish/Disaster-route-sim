@@ -2372,6 +2372,8 @@ function buildBackendRequestError(response, data, fallbackMessage) {
   const error = new Error(data?.message || fallbackMessage);
   error.statusCode = response?.status || 0;
   error.backendCode = data?.code || '';
+  // Every evacuation site in reach is full (evac-capacity.js opens its dialog).
+  error.capacityFull = data?.capacity_full === true;
   return error;
 }
 
@@ -2892,6 +2894,7 @@ function syncRoutePinFields() {
   }
 
   // Most setup changes pass through here; the phone sheet re-reads them all.
+  window.evacCapacity?.sync();
   window.mobileSim?.scheduleSync();
 }
 
@@ -3363,8 +3366,10 @@ function buildFloodEvacLegendRows() {
   const styles = window.floodHazardUI?.evacMarkerStyles;
   if (!styles) return '';
   const row = (style, label) => `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span style="font-size:.78rem;">${label}</span></div>`;
+  const anyFull = floodEvacSites.some(site => window.evacCapacity?.isSiteFull(site.id));
   return (getResultEvacSite() ? row(styles.chosen, 'Chosen evacuation site') : '')
-    + row(styles.site, 'Evacuation site');
+    + row(styles.site, 'Evacuation site')
+    + (anyFull ? row(styles.full, 'Full evacuation site') : '');
 }
 
 // Route rows only once a result is on the map: while pinning there are no
@@ -4512,9 +4517,17 @@ async function runSimulation() {
         start: buildPinRequestPoint('start'),
         end: earthquakeToEvacSite ? null : buildPinRequestPoint('end'),
         barangay: selectedBarangay,
+        // How full each site is: a full one is passed over (evac-capacity.js).
+        ...(earthquakeToEvacSite ? window.evacCapacity?.requestFields() : null),
       }, 'Earthquake simulation']
     : isFloodToEvacSite() && !routePins.end
-    ? ['/simulate', { start: buildPinRequestPoint('start'), to_evacuation_site: true, hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation']
+    ? ['/simulate', {
+        start: buildPinRequestPoint('start'),
+        to_evacuation_site: true,
+        hazard: selectedHazard,
+        barangay: selectedBarangay,
+        ...window.evacCapacity?.requestFields(),
+      }, 'Simulation']
     : ['/simulate', { start: buildPinRequestPoint('start'), end: buildPinRequestPoint('end'), hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation'];
 
   await followSimulationJob(() => submitSimulationJob(endpoint, payload), {
@@ -4626,7 +4639,9 @@ async function followSimulationJob(startJob, context) {
       syncMobilePanelBarLabel();
       window.mobileSim?.showResults();
     }
-    if (!(context.quietIfGone && err.backendCode === 'job_not_found')) {
+    if (err.capacityFull && window.evacCapacity) {
+      window.evacCapacity.open({ allFull: true });
+    } else if (!(context.quietIfGone && err.backendCode === 'job_not_found')) {
       alert(uiCopy(`${context.label} failed: ${err.message}`));
     }
   } finally {
@@ -4692,6 +4707,9 @@ function mountReplayPanel(panel) {
 // draw theirs (aco-replay.js removeLayers).
 let activeReplayController = null;
 let replayRouteOnMap = null;
+// The evacuation site choice (site-pick.js), while it plays before the
+// ants' replay of a run to the evacuation sites.
+let activeSitePick = null;
 // A run's scenario intro (quake-intro.js, flood-intro.js), while it plays
 // before the ants.
 let activeScenarioIntro = null;
@@ -4730,7 +4748,9 @@ function clearReplayRoute() {
 function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
   const controller = activeReplayController;
   if (!gMap || !controller || controller.isDone()) return;
-  const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds() : controller.getSearchBounds();
+  const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds()
+    : activeSitePick && !activeSitePick.isDone() ? activeSitePick.getBounds()
+    : controller.getSearchBounds();
   fitMapBounds(bounds, { padding: getReplayFitPadding(bounds), onlyIfOutOfView, flySeconds });
 }
 
@@ -4772,21 +4792,28 @@ async function drawReplayMapContext(result, isEarthquakeRun, chosenSiteId) {
       hazardLayers: result.hazard_layers,
       activeView: result.active_view || 'overall',
     });
+  } else {
+    const { vars } = getFloodOverlayConfig();
+    try {
+      const hazardLayers = await window.floodHazardUI?.loadHazardLayers({ scope: 'barangay_buffer', barangay: selectedBarangay, vars });
+      window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers, visibleVars: vars });
+    } catch (err) {
+      console.warn('Failed to load flood hazard overlay for the replay:', err);
+    }
+  }
+  drawReplaySites(result, isEarthquakeRun, chosenSiteId);
+}
+
+// The evacuation sites, the chosen one marked -- left unmarked while the
+// site choice (site-pick.js) is still to play, and marked once it has.
+function drawReplaySites(result, isEarthquakeRun, chosenSiteId) {
+  if (isEarthquakeRun) {
     window.earthquakeUI?.drawEvacuationSites({
       map: gMap,
       sites: Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites,
       highlightedSiteId: chosenSiteId,
     });
-    return;
-  }
-  const { vars } = getFloodOverlayConfig();
-  try {
-    const hazardLayers = await window.floodHazardUI?.loadHazardLayers({ scope: 'barangay_buffer', barangay: selectedBarangay, vars });
-    window.floodHazardUI?.renderHazardLayers({ map: gMap, hazardLayers, visibleVars: vars });
-  } catch (err) {
-    console.warn('Failed to load flood hazard overlay for the replay:', err);
-  }
-  if (result.to_evacuation_site) {
+  } else if (result.to_evacuation_site) {
     window.floodHazardUI?.drawEvacuationSites({
       map: gMap,
       sites: floodEvacSites.length ? floodEvacSites : result.evacuation_sites,
@@ -4863,7 +4890,11 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       }
     }
     if (withQuakeIntro || floodIntroData) holdReplayMapContext(true);
-    await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
+    // A run that picked among the evacuation sites first shows how it
+    // picked: each site the ants searched, in turn, then the ranking.
+    const siteSearch = Array.isArray(replayData.site_search) ? replayData.site_search : [];
+    const withSitePick = !!window.sitePick && siteSearch.filter(site => site.route).length > 1;
+    await drawReplayMapContext(result, isEarthquakeRun, withSitePick ? null : chosenSiteId);
     controller = window.acoReplay.create({
       map: gMap,
       replay: replayData,
@@ -4898,6 +4929,19 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       isCameraPaused: () => !!window.mobileSim?.isAutoFitPaused(),
     });
     activeReplayController = controller;
+    if (withSitePick) {
+      activeSitePick = window.sitePick.create({
+        map: gMap,
+        sites: siteSearch,
+        start: { lat: Number(startPoint.lat), lng: Number(startPoint.lng) },
+        startName,
+        mode: isEarthquakeRun ? 'earthquake' : 'flood',
+        groupSize: window.evacCapacity?.groupSize() || 1,
+        legendBody: document.getElementById('mapLegendBody'),
+        legendExtra: buildPinLegendRow('start') + buildBoundaryLegendRow(),
+        onPanelChange: () => window.mobileSim?.scheduleSync(),
+      });
+    }
     const introStart = { lat: Number(startPoint.lat), lng: Number(startPoint.lng), label: startName };
     const introCommon = {
       map: gMap,
@@ -4930,7 +4974,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     const shell = document.getElementById('appShell');
     const layoutBefore = shell?.className;
     shell?.classList.add('aco-replaying');
-    mountReplayPanel(activeScenarioIntro ? activeScenarioIntro.panel : controller.panel);
+    mountReplayPanel(activeScenarioIntro ? activeScenarioIntro.panel : activeSitePick ? activeSitePick.panel : controller.panel);
     applySetupSidebarState(true);
     setMapLegendVisible(true);
     // The panels finish sliding first, and initMap's resize handling (which
@@ -4938,7 +4982,9 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     // view is fitted once, to the map's final size.
     if (shell && shell.className !== layoutBefore) await waitMs(PANEL_SLIDE_MS + REPLAY_RESIZE_SETTLE_MS);
     gMap.invalidateSize({ pan: false });
-    const firstView = activeScenarioIntro ? activeScenarioIntro.getBounds() : controller.getSearchBounds();
+    const firstView = activeScenarioIntro ? activeScenarioIntro.getBounds()
+      : activeSitePick ? activeSitePick.getBounds()
+      : controller.getSearchBounds();
     fitMapBounds(firstView, { padding: { ...getReplayFitPadding(firstView), animate: false } });
   } catch (err) {
     console.error('Could not set up the replay:', err);
@@ -4947,9 +4993,10 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
   }
 
   const intro = activeScenarioIntro;
+  const sitePick = activeSitePick;
   return {
     async play() {
-      let panel = intro ? intro.panel : controller.panel;
+      let panel = intro ? intro.panel : sitePick ? sitePick.panel : controller.panel;
       let host = getReplayHost();
       // Turning a phone or resizing the window mid-replay moves the panel
       // to the new layout's place for it.
@@ -4969,14 +5016,36 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
           intro.destroy({ fade: true });
           activeScenarioIntro = null;
           intro.panel.remove();
-          controller.panel.prepend(intro.buildSummary());
-          panel = controller.panel;
+          const next = sitePick || controller;
+          next.panel.prepend(intro.buildSummary());
+          panel = next.panel;
           host = mountReplayPanel(panel);
           window.mobileSim?.scheduleSync();
+          const nextBounds = sitePick ? sitePick.getBounds() : controller.getSearchBounds();
           if (!controller.isDone()) {
+            fitMapBounds(nextBounds, { padding: getReplayFitPadding(nextBounds), flySeconds: QUAKE_HANDOFF_FLY_SECONDS });
+            await waitMs(QUAKE_HANDOFF_FLY_SECONDS * 1000 + 100);
+          }
+        }
+        if (sitePick) {
+          const { skipped } = await sitePick.start();
+          // The chosen site turns green; the site lines fade as the ants'
+          // own search takes over, with the choice folded to one line.
+          drawReplaySites(result, isEarthquakeRun, chosenSiteId);
+          sitePick.destroy({ fade: !skipped });
+          activeSitePick = null;
+          if (skipped) {
+            controller.skip();
+          } else {
+            controller.panel.prepend(...sitePick.panel.querySelectorAll('.quake-summary'), sitePick.buildSummary());
+            sitePick.panel.remove();
+            panel = controller.panel;
+            host = mountReplayPanel(panel);
+            window.mobileSim?.scheduleSync();
             fitMapBounds(controller.getSearchBounds(), { padding: getReplayFitPadding(controller.getSearchBounds()), flySeconds: QUAKE_HANDOFF_FLY_SECONDS });
             await waitMs(QUAKE_HANDOFF_FLY_SECONDS * 1000 + 100);
           }
+          sitePick.panel.remove();
         }
         await controller.start();
         if (controller.didComplete() && !prefersReducedMotion()) {
@@ -4996,6 +5065,11 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
 
 // keepRoute: the results are next, and draw their routes over Route 1.
 function endSimulationReplay(controller, { keepRoute = false } = {}) {
+  if (activeSitePick) {
+    activeSitePick.destroy();
+    activeSitePick.panel.remove();
+    activeSitePick = null;
+  }
   if (activeScenarioIntro) {
     activeScenarioIntro.destroy();
     activeScenarioIntro.panel.remove();
@@ -5209,6 +5283,7 @@ function resetRouteSafetyPanel() {
   setRouteSafetyPanelVisible(false);
   closeRouteListModal();
   window.mobileSim?.clearResults();
+  window.evacCapacity?.renderResults();
 }
 
 function getRouteTurnSteps(route) {
@@ -5444,6 +5519,7 @@ function renderRouteSafetyPanel(result) {
   setRouteSafetyPanelVisible(true);
   content.hidden = false;
   content.innerHTML = `
+    <div class="capacity-result-slot" data-capacity-result="banner" hidden></div>
     ${buildResultRouteNavigation(routes)}
     <section data-current-route-summary></section>
     <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
@@ -5454,6 +5530,7 @@ function renderRouteSafetyPanel(result) {
       </div>
     </div>`;
   window.mobileSim?.renderResults(result);
+  window.evacCapacity?.renderResults();
   syncResultRouteNavigation();
 }
 

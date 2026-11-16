@@ -37,6 +37,7 @@ from osm_routing import (
     get_barangay_boundary,
     get_barangay_boundary_payload,
     get_flood_evacuation_sites,
+    parse_site_capacity,
 )
 from simulation_progress import get_progress, reset_progress
 
@@ -182,7 +183,7 @@ def _mark_simulation_started(mode, request_summary):
         _SIMULATION_STATE["request"] = {
             key: value
             for key, value in request_summary.items()
-            if key not in ("start", "end") and value not in (None, "")
+            if key not in ("start", "end", "capacity") and value not in (None, "")
         }
 
 def _mark_simulation_finished():
@@ -550,6 +551,11 @@ def check_pin():
         **result,
     })
 
+def _request_site_capacity(data):
+    """The run's evacuation site counts (site_occupancy: site id -> people
+    already there; group_size: people coming), or None without them."""
+    return parse_site_capacity(data.get("site_occupancy"), data.get("group_size"))
+
 @app.route("/simulate", methods=["POST"])
 def run_simulation():
     try:
@@ -561,6 +567,7 @@ def run_simulation():
         # in which case the run picks the site.
         to_evacuation_site = data.get("to_evacuation_site") is True
         end = None if to_evacuation_site else data.get("end")
+        capacity = _request_site_capacity(data) if to_evacuation_site else None
         request_summary = {
             "mode": "flood",
             "hazard": hazard,
@@ -568,11 +575,12 @@ def run_simulation():
             "start": start,
             "end": end,
             "to_evacuation_site": to_evacuation_site,
+            "capacity": capacity,
         }
 
         def work():
             if to_evacuation_site:
-                return simulate_to_evacuation_site(start, hazard, barangay=barangay)
+                return simulate_to_evacuation_site(start, hazard, barangay=barangay, capacity=capacity)
             return simulate(start, end, hazard, barangay=barangay)
 
         return _run_simulation_request("flood", request_summary, work, data)
@@ -680,16 +688,18 @@ def run_earthquake():
         start = data.get("start")
         end = data.get("end")
         barangay = data.get("barangay")
+        capacity = _request_site_capacity(data) if end is None else None
         request_summary = {
             "mode": "earthquake",
             "hazard": "Earthquake",
             "barangay": barangay,
             "start": start,
             "end": end,
+            "capacity": capacity,
         }
 
         def work():
-            return simulate_earthquake(start, barangay, end=end)
+            return simulate_earthquake(start, barangay, end=end, capacity=capacity)
 
         return _run_simulation_request("earthquake", request_summary, work, data)
     except Exception as e:

@@ -1,0 +1,878 @@
+/* ---------- EVACUATION SITE CAPACITY (evac-capacity.js) ----------
+   How full each evacuation site is: a meter and a status pill in the theme's
+   green / amber / red, in the setup card, the phone sheet row, the dialog,
+   the site popups and the results notice. */
+body.sim-page {
+  --cap-open: var(--green);
+  --cap-open-ink: var(--green-ink);
+  --cap-filling: var(--yellow);
+  --cap-filling-ink: var(--yellow-ink);
+  --cap-full: var(--red);
+  --cap-full-ink: #b91c1c;
+  --cap-track: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+body.sim-page.dark {
+  --cap-full-ink: #f87171;
+  --cap-track: color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+/* ---- shared: meter and pill ---- */
+.capacity-meter {
+  position: relative;
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--cap-track);
+}
+
+.capacity-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--cap-open);
+  transition: width .25s cubic-bezier(.22, 1, .36, 1), background-color .2s ease;
+}
+
+.capacity-meter.is-filling > span { background: var(--cap-filling); }
+.capacity-meter:is(.is-full, .is-tight) > span { background: var(--cap-full); }
+
+.capacity-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--cap-open) 14%, transparent);
+  color: var(--cap-open-ink);
+  font: 700 .72rem/1.3 var(--font-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.capacity-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.is-filling .capacity-pill {
+  background: color-mix(in srgb, var(--cap-filling) 16%, transparent);
+  color: var(--cap-filling-ink);
+}
+
+:is(.is-full, .is-tight) .capacity-pill {
+  background: color-mix(in srgb, var(--cap-full) 13%, transparent);
+  color: var(--cap-full-ink);
+}
+
+/* ---- setup: one row that opens the dialog ----
+   The desktop panel's card and the phone/tablet sheet's row, under Start
+   and End: how many sites have room and a dot per site. */
+body.sim-page #setupPanel .capacity-card[hidden] { display: none; }
+
+.capacity-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.capacity-entry[hidden] { display: none; }
+
+/* Desktop: the whole row lights up under the pointer, like a menu item. */
+body.sim-page #setupPanel .capacity-entry {
+  width: calc(100% + 16px);
+  min-height: 52px;
+  margin: -8px -8px;
+  padding: 8px;
+  border-radius: 12px;
+  transition: background-color .15s ease;
+}
+
+body.sim-page #setupPanel .capacity-entry:hover { background: var(--float-chip); }
+
+body.sim-page #setupPanel .capacity-entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+body.sim-page #setupPanel .capacity-entry:hover .capacity-entry-chevron {
+  stroke: var(--accent-text, var(--accent));
+  transform: translateX(2px);
+}
+
+/* Phone/tablet sheet: a thin rule above it, like the slots. */
+#msim .mcapacity-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 44px;
+  right: 0;
+  height: 1px;
+  background: var(--float-line);
+}
+
+#msim .mcapacity-row:active .capacity-entry-value { opacity: .7; }
+
+.capacity-entry-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft-bg);
+  color: var(--accent-text, var(--accent));
+}
+
+.capacity-entry-icon svg,
+.capacity-modal-icon svg,
+.capacity-result-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.capacity-entry-icon svg { width: 18px; height: 18px; }
+
+.capacity-entry-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.capacity-entry-label {
+  color: var(--muted);
+  font: 600 .75rem var(--font-body);
+}
+
+.capacity-entry-value {
+  color: var(--text);
+  font: 600 .9375rem/1.3 var(--font-body);
+}
+
+body.sim-page #setupPanel .capacity-entry-value { font-size: .9rem; }
+
+.capacity-entry.is-full .capacity-entry-value { color: var(--cap-full-ink); }
+
+.capacity-entry-dots {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 52px;
+}
+
+.capacity-entry-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cap-open);
+}
+
+.capacity-entry-dots .is-filling { background: var(--cap-filling); }
+.capacity-entry-dots :is(.is-full, .is-tight) { background: var(--cap-full); }
+
+.capacity-entry-chevron {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 2px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .15s ease, stroke .15s ease;
+}
+
+/* ---- the dialog ---- */
+.capacity-backdrop { z-index: 1160; }
+
+body.sim-page .capacity-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(calc(var(--visual-height, 100dvh) - 32px), 780px);
+  padding: 0;
+  overflow: hidden;
+}
+
+.capacity-modal-head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 20px 16px 22px;
+  border-bottom: 1px solid var(--float-line);
+}
+
+.capacity-modal-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--accent-soft-bg);
+  color: var(--accent-text, var(--accent));
+}
+
+.capacity-modal-icon svg { width: 24px; height: 24px; }
+
+.capacity-modal-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+body.sim-page .capacity-modal .about-modal-title {
+  margin: 1px 0 0;
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.capacity-modal-scope {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font: 500 .8125rem/1.4 var(--font-body);
+}
+
+body.sim-page .capacity-modal-close {
+  position: relative;
+  flex: none;
+  border-color: var(--float-line);
+  border-radius: 10px;
+}
+
+.capacity-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 22px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.capacity-intro {
+  margin: 0;
+  color: var(--ink-soft);
+  font: 500 .84rem/1.6 var(--font-body);
+}
+
+.capacity-alert {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--cap-full) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cap-full) 8%, transparent);
+  color: var(--cap-full-ink);
+  font: 600 .8125rem/1.5 var(--font-body);
+}
+
+.capacity-alert[hidden] { display: none; }
+
+.capacity-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px 14px 14px 16px;
+  border-radius: 14px;
+  background: var(--float-chip);
+}
+
+.capacity-group-text { min-width: 0; }
+
+.capacity-group-label {
+  display: block;
+  color: var(--text);
+  font: 700 .9rem/1.3 var(--font-body);
+}
+
+.capacity-group-hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font: 500 .75rem/1.4 var(--font-body);
+}
+
+.capacity-stepper {
+  display: inline-flex;
+  flex: none;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--float-line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.capacity-stepper button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.capacity-stepper button:hover:not(:disabled) { background: var(--float-chip); }
+.capacity-stepper button:active:not(:disabled) svg { transform: scale(.86); }
+
+.capacity-stepper button:disabled {
+  color: var(--muted);
+  opacity: .4;
+  cursor: default;
+}
+
+.capacity-stepper button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.capacity-stepper svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  transition: transform .1s ease;
+}
+
+.capacity-stepper input {
+  width: 48px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-inline: 1px solid var(--float-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: 700 .95rem var(--font-body);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.capacity-stepper input::-webkit-outer-spin-button,
+.capacity-stepper input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.capacity-stepper input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.capacity-sites {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capacity-site {
+  padding: 14px 14px 12px 16px;
+  border: 1px solid var(--float-line);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color .2s ease, background-color .2s ease;
+}
+
+.capacity-site:is(.is-full, .is-tight) {
+  border-color: color-mix(in srgb, var(--cap-full) 38%, var(--float-line));
+  background: color-mix(in srgb, var(--cap-full) 5%, var(--surface));
+}
+
+.capacity-site-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.capacity-site-name {
+  min-width: 0;
+  color: var(--text);
+  font: 700 .9rem/1.3 var(--font-body);
+}
+
+/* The site the shown result's routes lead to. */
+.capacity-site-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--accent-soft-bg);
+  color: var(--accent-text, var(--accent));
+  font: 700 .68rem/1.3 var(--font-body);
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+.capacity-empty {
+  padding: 16px 12px;
+  border: 1px dashed var(--border2);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: .82rem;
+  text-align: center;
+}
+
+/* The meter is the slider: drag it to set the count. */
+.capacity-range {
+  --fill: 0%;
+  --cap-color: var(--cap-open);
+  display: block;
+  width: 100%;
+  height: 24px;
+  margin: 8px 0 6px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: pan-y;
+}
+
+.is-filling .capacity-range { --cap-color: var(--cap-filling); }
+:is(.is-full, .is-tight) .capacity-range { --cap-color: var(--cap-full); }
+
+.capacity-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 99px;
+  background: linear-gradient(to right, var(--cap-color) var(--fill), var(--cap-track) var(--fill));
+}
+
+.capacity-range::-moz-range-track {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--cap-track);
+}
+
+.capacity-range::-moz-range-progress {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--cap-color);
+}
+
+.capacity-range::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-top: -6px;
+  border: 2px solid var(--cap-color);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .25);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: transform .12s ease;
+}
+
+.capacity-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--cap-color);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .25);
+}
+
+.capacity-range:active::-webkit-slider-thumb { transform: scale(1.12); }
+.capacity-range:focus-visible { outline: none; }
+.capacity-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 32%, transparent); }
+.capacity-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 32%, transparent); }
+
+.capacity-site-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.capacity-of {
+  color: var(--muted);
+  font: 500 .8rem var(--font-body);
+}
+
+.capacity-quick {
+  min-height: 36px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid var(--float-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: 700 .78rem var(--font-body);
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background-color .15s ease;
+}
+
+.capacity-quick:hover {
+  border-color: var(--cap-full);
+  color: var(--cap-full-ink);
+}
+
+.is-full .capacity-quick:hover {
+  border-color: var(--cap-open);
+  color: var(--cap-open-ink);
+}
+
+.capacity-modal-foot {
+  flex: none;
+  padding: 12px 22px 18px;
+  border-top: 1px solid var(--float-line);
+}
+
+.capacity-rerun-note {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font: 500 .78rem/1.4 var(--font-body);
+}
+
+.capacity-rerun-note[hidden] { display: none; }
+
+.capacity-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.capacity-reset {
+  min-height: 40px;
+  margin-left: -10px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: 700 .8125rem var(--font-body);
+  cursor: pointer;
+}
+
+.capacity-reset:hover {
+  background: var(--float-chip);
+  color: var(--text);
+}
+
+body.sim-page .capacity-done {
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: .875rem;
+}
+
+/* ---- results: the notice above the route ---- */
+.capacity-result-slot[hidden] { display: none; }
+body.sim-page #routeSafetyContent .capacity-result-slot { margin-bottom: 16px; }
+#msim [data-capacity-result="compact"] { margin: 4px 0 14px; }
+
+.capacity-result {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--float-line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.capacity-result.is-moved {
+  border-color: color-mix(in srgb, var(--cap-filling) 55%, var(--float-line));
+  background: color-mix(in srgb, var(--cap-filling) 9%, var(--surface));
+}
+
+.capacity-result.is-stale {
+  border-color: color-mix(in srgb, var(--cap-full) 50%, var(--float-line));
+  background: color-mix(in srgb, var(--cap-full) 7%, var(--surface));
+}
+
+.capacity-result-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--cap-open) 15%, transparent);
+  color: var(--cap-open-ink);
+}
+
+.is-moved .capacity-result-icon {
+  background: color-mix(in srgb, var(--cap-filling) 20%, transparent);
+  color: var(--cap-filling-ink);
+}
+
+.is-stale .capacity-result-icon {
+  background: color-mix(in srgb, var(--cap-full) 15%, transparent);
+  color: var(--cap-full-ink);
+}
+
+.capacity-result-icon svg { width: 20px; height: 20px; }
+
+.capacity-result-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.capacity-result-label {
+  color: var(--cap-open-ink);
+  font: 700 .75rem/1.3 var(--font-body);
+}
+
+.is-moved .capacity-result-label { color: var(--cap-filling-ink); }
+.is-stale .capacity-result-label { color: var(--cap-full-ink); }
+
+.capacity-result-title {
+  margin-top: 2px;
+  color: var(--text);
+  font: 700 .95rem/1.3 var(--font-body);
+}
+
+.capacity-result-text {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font: 500 .8125rem/1.5 var(--font-body);
+}
+
+.capacity-result-meter {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--muted);
+  font: 600 .75rem var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.capacity-result-changed {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 500 .75rem/1.4 var(--font-body);
+}
+
+.capacity-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.capacity-result-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--float-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  font: 700 .8rem var(--font-body);
+  cursor: pointer;
+  transition: background-color .15s ease, filter .15s ease;
+}
+
+.capacity-result-btn:hover { background: var(--float-chip); }
+
+.capacity-result-btn.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.capacity-result-btn.is-primary:hover {
+  background: var(--accent);
+  filter: brightness(1.07);
+}
+
+/* The phone sheet's one-line version, between the summary and its buttons. */
+.capacity-result--compact {
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.capacity-result--compact .capacity-result-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.capacity-result--compact .capacity-result-icon svg { width: 18px; height: 18px; }
+
+.capacity-result--compact .capacity-result-text {
+  margin-top: 1px;
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+}
+
+.capacity-result--compact .capacity-result-btn { flex: none; }
+
+#msim .msheet-details > .capacity-result-slot { margin: 0 0 16px; }
+
+/* Desktop results: a few lines at the top; the counts are in the dialog. */
+.capacity-result--banner {
+  gap: 11px;
+  padding: 12px 14px;
+}
+
+.capacity-result--banner .capacity-result-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.capacity-result--banner .capacity-result-icon svg { width: 18px; height: 18px; }
+
+.capacity-result--banner .capacity-result-text {
+  margin-top: 2px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.capacity-result--banner .capacity-result-actions {
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 8px;
+}
+
+.capacity-result--banner .capacity-result-btn { min-height: 32px; }
+
+.capacity-result.is-changed {
+  border-color: var(--accent-soft-border);
+  background: var(--accent-soft-bg);
+}
+
+.is-changed .capacity-result-icon {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.is-changed .capacity-result-label { color: var(--accent-text, var(--accent)); }
+
+.capacity-result-link {
+  position: relative;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  font: 700 .8rem var(--font-body);
+  cursor: pointer;
+}
+
+.capacity-result-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- a site's popup on the map ---- */
+.popup-capacity {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--float-line, rgba(15, 23, 42, .1));
+}
+
+.popup-capacity-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font: 600 .78rem var(--font-body);
+}
+
+.popup-capacity-top span { color: var(--muted); }
+
+.popup-capacity-top strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.popup-capacity .capacity-meter { margin: 7px 0 9px; }
+
+.popup-capacity-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.popup-capacity-edit {
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  font: 700 .78rem var(--font-body);
+  cursor: pointer;
+}
+
+.popup-capacity-edit:hover { background: var(--float-chip); }
+
+/* Below 1024px every tappable control is at least 44px. */
+@media (max-width: 1023px) {
+  .capacity-stepper button { width: 44px; height: 44px; }
+  .capacity-stepper input { width: 52px; }
+  .capacity-quick,
+  .capacity-result-btn,
+  .capacity-reset,
+  body.sim-page .capacity-done { min-height: 44px; }
+  .capacity-range { height: 32px; }
+  body.sim-page .capacity-modal-close { width: 44px; height: 44px; }
+
+  .popup-capacity-edit { position: relative; }
+  .popup-capacity-edit::after {
+    content: "";
+    position: absolute;
+    inset: calc((44px - 100%) / -2);
+  }
+}
+
+/* Phones: the dialog rises from the bottom, full width. */
+@media (max-width: 639px) {
+  .capacity-backdrop {
+    align-items: flex-end;
+    padding: 10px max(10px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
+  }
+
+  body.sim-page .capacity-modal {
+    width: 100%;
+    max-height: calc(var(--visual-height, 100dvh) - 20px);
+    border-radius: 22px;
+  }
+
+  .capacity-modal-head { padding: 18px 14px 14px 16px; }
+  .capacity-modal-body { padding: 14px 16px 16px; }
+  .capacity-modal-foot { padding: 12px 16px 16px; }
+  .capacity-site { padding: 12px 12px 10px 14px; }
+  .capacity-group { padding: 12px 12px 12px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capacity-meter > span,
+  .capacity-range::-webkit-slider-thumb { transition: none; }
+}

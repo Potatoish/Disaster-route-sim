@@ -1,0 +1,316 @@
+/* ---------- SITE CHOICE (site-pick.js) ----------
+   Before the ants' replay of a run to the evacuation sites: each site in
+   turn (waiting, searching, checked), then ranked, then the chosen one in
+   the results' green and any full one passed over in red. Sits in the
+   replay's panel, so the .aco-replay styles frame it. */
+body.sim-page {
+  --pick-search: #2563eb;
+  --pick-search-soft: color-mix(in srgb, #2563eb 10%, var(--surface));
+  --pick-chosen: var(--green);
+  --pick-chosen-ink: var(--green-ink);
+  --pick-passed: var(--red);
+  --pick-passed-ink: #b91c1c;
+}
+
+body.sim-page.dark {
+  --pick-search: #60a5fa;
+  --pick-search-soft: color-mix(in srgb, #60a5fa 14%, var(--surface));
+  --pick-passed-ink: #f87171;
+}
+
+.site-pick-lead {
+  min-height: 3.1em;
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font: 500 .84rem/1.55 var(--font-body);
+}
+
+.site-pick-list {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-pick-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--float-line, var(--border));
+  border-radius: 12px;
+  background: var(--surface);
+  transition: border-color .25s ease, background-color .25s ease, opacity .3s ease;
+}
+
+.site-pick-dot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--border2);
+  border-radius: 50%;
+  color: var(--muted);
+  font: 800 .72rem/1 var(--font-body);
+  transition: border-color .25s ease, background-color .25s ease, color .25s ease;
+}
+
+.site-pick-dot svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+
+.site-pick-dot i {
+  position: absolute;
+  inset: -2px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+}
+
+.site-pick-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.site-pick-name {
+  overflow: hidden;
+  color: var(--text);
+  font: 700 .84rem/1.3 var(--font-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-pick-meta {
+  color: var(--muted);
+  font: 500 .75rem/1.35 var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.site-pick-badge {
+  padding: 3px 9px;
+  border-radius: 99px;
+  font: 700 .7rem/1.3 var(--font-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.site-pick-badge:empty { display: none; }
+
+.site-pick-badge.is-open {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green-ink);
+}
+
+.site-pick-badge.is-filling {
+  background: color-mix(in srgb, var(--yellow) 16%, transparent);
+  color: var(--yellow-ink);
+}
+
+.site-pick-badge.is-full {
+  background: color-mix(in srgb, var(--red) 13%, transparent);
+  color: var(--pick-passed-ink);
+}
+
+/* Waiting its turn. */
+.site-pick-row.is-waiting .site-pick-name { color: var(--muted); font-weight: 600; }
+
+/* The ants searching for it: a spinning arc round the dot. */
+.site-pick-row.is-checking {
+  border-color: color-mix(in srgb, var(--pick-search) 55%, transparent);
+  background: var(--pick-search-soft);
+}
+
+.site-pick-row.is-checking .site-pick-dot { border-color: color-mix(in srgb, var(--pick-search) 30%, transparent); }
+
+.site-pick-row.is-checking .site-pick-dot i {
+  border-top-color: var(--pick-search);
+  animation: sitePickSpin .8s linear infinite;
+}
+
+.site-pick-row.is-checking .site-pick-meta { color: var(--pick-search); font-weight: 600; }
+
+@keyframes sitePickSpin { to { transform: rotate(360deg); } }
+
+/* Searched: a route was found. */
+.site-pick-row.is-checked .site-pick-dot {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--pick-search) 14%, transparent);
+  color: var(--pick-search);
+}
+
+.site-pick-row.is-checked .site-pick-dot svg { opacity: 1; }
+
+.site-pick-row.is-unreached .site-pick-name { color: var(--muted); }
+
+/* Ranked: the dot holds the rank. */
+.site-pick-row.is-ranked .site-pick-dot svg { opacity: 0; }
+
+.site-pick-row.is-ranked .site-pick-dot[data-rank]::after {
+  content: attr(data-rank);
+  position: absolute;
+}
+
+/* A full site that ranked above the chosen one. */
+.site-pick-row.is-passed {
+  border-color: color-mix(in srgb, var(--pick-passed) 45%, transparent);
+  background: color-mix(in srgb, var(--pick-passed) 6%, var(--surface));
+}
+
+.site-pick-row.is-passed .site-pick-dot {
+  border-color: var(--pick-passed);
+  background: transparent;
+  color: var(--pick-passed-ink);
+}
+
+.site-pick-row.is-passed .site-pick-name {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--pick-passed) 70%, transparent);
+}
+
+.site-pick-row.is-passed .site-pick-meta { color: var(--pick-passed-ink); }
+
+/* The chosen site. */
+.site-pick-row.is-chosen {
+  border-color: color-mix(in srgb, var(--pick-chosen) 60%, transparent);
+  background: color-mix(in srgb, var(--pick-chosen) 9%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pick-chosen) 35%, transparent);
+  animation: sitePickChosen .5s cubic-bezier(.22, 1, .36, 1);
+}
+
+.site-pick-row.is-chosen .site-pick-dot {
+  border-color: transparent;
+  background: var(--pick-chosen);
+  color: #ffffff;
+}
+
+.site-pick-row.is-chosen .site-pick-dot svg { opacity: 1; }
+.site-pick-row.is-chosen .site-pick-dot[data-rank]::after { content: none; }
+.site-pick-row.is-chosen .site-pick-meta { color: var(--pick-chosen-ink); font-weight: 600; }
+
+@keyframes sitePickChosen {
+  40% { transform: scale(1.025); }
+}
+
+/* Everything else steps back. */
+.site-pick-row.is-other { opacity: .5; }
+
+.site-pick-summary b { display: block; }
+
+/* ---- the map ---- */
+.leaflet-pane.is-fading,
+.site-pick-tag.is-fading,
+.site-pick-ping.is-fading {
+  opacity: 0;
+  transition: opacity .4s ease;
+}
+
+.site-pick-tag,
+.site-pick-ping { pointer-events: none; }
+
+/* A tag above the site's pin (about 63px tall): its distance, then its
+   rank, then Chosen or FULL. */
+.site-pick-tag > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 99px;
+  background: #ffffff;
+  color: #1e3a8a;
+  font: 800 11px/1.3 var(--font-body);
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 66px));
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .25);
+  animation: sitePickTagIn .32s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.site-pick-tag > span.is-passed { color: #b91c1c; }
+
+.site-pick-tag > span.is-chosen {
+  border-color: #14532d;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.site-pick-tag svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes sitePickTagIn {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 58px)) scale(.9); }
+}
+
+/* A ring spreading from the site the ants are searching for, and from the
+   chosen one. */
+.site-pick-ping > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 70px;
+  height: 70px;
+  margin: -35px 0 0 -35px;
+  border: 3px solid #2563eb;
+  border-radius: 50%;
+  animation: sitePickPing 1.1s ease-out infinite;
+}
+
+.site-pick-ping > span.is-chosen {
+  border-color: #16a34a;
+  animation-duration: 1.4s;
+}
+
+@keyframes sitePickPing {
+  from { opacity: .9; transform: scale(.25); }
+  to { opacity: 0; transform: scale(1.5); }
+}
+
+.site-pick-legend-line {
+  display: inline-block;
+  flex: none;
+  width: 22px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line);
+  box-shadow: 0 0 0 1px var(--edge);
+}
+
+.site-pick-legend-line.is-dashed {
+  background: repeating-linear-gradient(90deg, var(--line) 0 3px, transparent 3px 7px);
+  box-shadow: none;
+}
+
+/* The phone/tablet sheet: tighter rows, so the map keeps its room. */
+#msim .site-pick-lead { min-height: 0; margin-top: 8px; font-size: .8rem; }
+#msim .site-pick-list { gap: 4px; margin-top: 8px; }
+#msim .site-pick-row { padding: 6px 8px; border-radius: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .site-pick-row.is-checking .site-pick-dot i,
+  .site-pick-ping > span,
+  .site-pick-tag > span,
+  .site-pick-row.is-chosen { animation: none; }
+}

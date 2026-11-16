@@ -66,9 +66,10 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
         }
 
 
-def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None):
+def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None, capacity=None):
     """A flood run whose destination is the barangay's evacuation sites: the
-    run picks the site (simulate_flood_to_evacuation_sites)."""
+    run picks the site (simulate_flood_to_evacuation_sites), passing over
+    sites without room when capacity (parse_site_capacity) is given."""
     if not start:
         return {
             "error": True,
@@ -89,6 +90,7 @@ def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None):
             start_lng=start_location["lng"],
             hazard_type=hazard_type,
             barangay_name=barangay,
+            capacity=capacity,
         ), start_location)
     except Exception as e:
         return {

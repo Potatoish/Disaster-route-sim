@@ -100,6 +100,11 @@ BACKUP_ROUTE_EDGE_PENALTY = 1.8
 # compares each site's main colony on its few safest routes to pick the site;
 # only that site gets alternative colonies.
 SITE_PICK_ROUTES_PER_SITE = 5
+# Each evacuation site holds at most this many people. A run may say how many
+# are already at each site (site_occupancy) and how many people are coming
+# (group_size); a site without room for the group is passed over for the next
+# best one with room (pick_site_with_room).
+EVACUATION_SITE_CAPACITY = 100
 # The results open with a replay of the main colony's search (aco-replay.js):
 # every ant's walk in the first rounds -- while the best route still improves,
 # at most this many rounds -- then only each road's trail strength per round.
@@ -503,6 +508,134 @@ def exclude_start_evacuation_sites(evacuation_sites, start_lat, start_lng, start
         > EVACUATION_SITE_START_RADIUS_METERS
         and not (start_node is not None and site_nodes.get(site["id"]) == start_node)
     ]
+
+
+def parse_site_capacity(raw_occupancy, raw_group_size=None):
+    """How many people are already at each evacuation site, and how many are
+    coming, from a run request. None when the request has no counts (the
+    batch tools, older pages): every site then counts as having room."""
+    if not isinstance(raw_occupancy, dict):
+        return None
+    occupancy = {}
+    for site_id, count in raw_occupancy.items():
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            continue
+        occupancy[str(site_id)] = min(max(count, 0), EVACUATION_SITE_CAPACITY)
+    try:
+        group_size = int(raw_group_size)
+    except (TypeError, ValueError):
+        group_size = 1
+    return {
+        "occupancy": occupancy,
+        "group_size": min(max(group_size, 1), EVACUATION_SITE_CAPACITY),
+    }
+
+
+def site_capacity_status(site, capacity):
+    occupancy = capacity["occupancy"].get(str(site["id"]), 0)
+    available = EVACUATION_SITE_CAPACITY - occupancy
+    return {
+        "id": site["id"],
+        "name": site["name"],
+        "capacity": EVACUATION_SITE_CAPACITY,
+        "occupancy": occupancy,
+        "available": available,
+        "has_room": available >= capacity["group_size"],
+    }
+
+
+def site_has_room(site, capacity):
+    return capacity is None or site_capacity_status(site, capacity)["has_room"]
+
+
+def pick_site_with_room(site_picks, capacity):
+    """site_picks: (site, colony, site's best route) per site. Returns the
+    best-ranked pick whose site has room for the group, and the sites ranked
+    above it that were passed over for being full."""
+    skipped = []
+    for pick in sorted(site_picks, key=lambda pick: display_sort_key(pick[2])):
+        if site_has_room(pick[0], capacity):
+            return pick, skipped
+        skipped.append(site_capacity_status(pick[0], capacity))
+    return None, skipped
+
+
+def build_capacity_summary(capacity, sites, chosen_site=None, skipped=()):
+    if capacity is None:
+        return None
+    return {
+        "capacity_per_site": EVACUATION_SITE_CAPACITY,
+        "group_size": capacity["group_size"],
+        "sites": [site_capacity_status(site, capacity) for site in sites],
+        "chosen": site_capacity_status(chosen_site, capacity) if chosen_site else None,
+        "skipped_full_sites": list(skipped),
+        "reassigned": bool(skipped),
+    }
+
+
+def build_site_search(G, site_picks, searched_sites, chosen_site, capacity):
+    """What the run's site choice looked at, for the site-by-site animation
+    before the replay (site-pick.js): every site the ants searched, in the
+    order they did, with its main colony's best route (as on the map), its
+    rank (display_sort_key) and its room. A site no ant or map search
+    reached has no route and no rank."""
+    ranked = sorted(site_picks, key=lambda pick: display_sort_key(pick[2]))
+    rank_of = {pick[0]["id"]: index + 1 for index, pick in enumerate(ranked)}
+    pick_of = {pick[0]["id"]: pick for pick in site_picks}
+    chosen_rank = rank_of.get(chosen_site["id"]) if chosen_site else None
+    entries = []
+    for site in searched_sites:
+        entry = {
+            "id": site["id"],
+            "name": site["name"],
+            "lat": float(site["lat"]),
+            "lng": float(site["lng"]),
+            "rank": rank_of.get(site["id"]),
+            "chosen": bool(chosen_site and site["id"] == chosen_site["id"]),
+        }
+        pick = pick_of.get(site["id"])
+        if pick is not None:
+            _, colony, route = pick
+            entry["route"] = {
+                "distance": round(float(route["distance"]), 1),
+                "unsafe_distance": round(float(route.get("unsafe_distance") or 0), 1),
+                "max_hazard": int(route.get("max_hazard") or 0),
+                "flood_var": max(route.get("flood_vars_encountered") or [0]),
+                # Metres in Medium / High water (flood only): what usually
+                # ranks a farther site above a nearer one.
+                "medium_distance": round(float((route.get("flood_var_distances") or {}).get("2", 0)), 1),
+                "high_distance": round(float((route.get("flood_var_distances") or {}).get("3", 0)), 1),
+                "coordinates": [
+                    [round(point["lat"], 6), round(point["lng"], 6)]
+                    for point in path_to_coords(G, route["path"])
+                ],
+            }
+            entry["ants_sent"] = colony["stats"]["ants_sent"]
+            entry["ants_arrived"] = colony["stats"]["ants_arrived"]
+        if capacity is not None:
+            status = site_capacity_status(site, capacity)
+            entry["capacity"] = {key: status[key] for key in ("capacity", "occupancy", "available", "has_room")}
+            entry["passed_over"] = bool(
+                chosen_rank and entry["rank"] and entry["rank"] < chosen_rank and not status["has_room"]
+            )
+        entries.append(entry)
+    return entries
+
+
+def all_sites_full_error(capacity, sites, other=""):
+    group = capacity["group_size"]
+    return {
+        "error": True,
+        "capacity_full": True,
+        "message": (
+            f"Every {other}evacuation site you can reach is full"
+            + (f" for a group of {group}." if group > 1 else ".")
+            + " Update the site capacity, or choose your own destination."
+        ),
+        "capacity": build_capacity_summary(capacity, sites),
+    }
 
 
 def get_flood_var_risk_label(var_value):
@@ -2829,12 +2962,14 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     }
 
 
-def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_type="Flood", barangay_name=None):
+def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_type="Flood", barangay_name=None, capacity=None):
     """Flood routes from the start to whichever of the barangay's flood
     evacuation sites has the best route, ranked like the results. A main
     colony goes to every site reachable by road; the site whose few safest
     routes rank first gets the alternative colonies and the candidate pool --
-    the earthquake site choice (earthquake_service) works the same way."""
+    the earthquake site choice (earthquake_service) works the same way.
+    capacity (parse_site_capacity): a site without room for the group is
+    passed over for the next best one, and the result says which were."""
     debug_print("\n" + "=" * 60)
     debug_print("[OSM] EVACUATION SITE SIMULATION START")
     debug_print(f"[OSM] From: {start_name} ({start_lat}, {start_lng})")
@@ -2906,6 +3041,8 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
             ),
         }
     debug_print(f"[OSM] Road-reachable evacuation sites: {len(reachable_sites)}")
+    if not any(site_has_room(site, capacity) for site in reachable_sites):
+        return all_sites_full_error(capacity, evacuation_sites, other)
 
     alternatives = FINAL_ROUTES_TO_SHOW - 1
     # Progress: a main colony per site (one step per round), the chosen
@@ -2913,7 +3050,7 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
     reset_progress(len(reachable_sites) * NUM_ITERATIONS + alternatives + 1)
     canonical_name = normalize_barangay_name(scope_name)
 
-    best_pick = None
+    site_picks = []
     ants_sent = ants_arrived = 0
     for site in reachable_sites:
         rng = random.Random(route_search_seed(
@@ -2947,14 +3084,21 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
             f"[OSM]   {site['name']}: unsafe={site_best['unsafe_distance']:.0f}m "
             f"risk={site_best['risk_distance']:.0f}m distance={site_best['distance']:.0f}m"
         )
-        if best_pick is None or display_sort_key(site_best) < display_sort_key(best_pick[2]):
-            best_pick = (site, colony, site_best)
+        site_picks.append((site, colony, site_best))
 
+    # Every site is ranked, full or not, so the result can say when the best
+    # one was full and the run moved on to the next with room.
+    best_pick, skipped_full_sites = pick_site_with_room(site_picks, capacity)
     if best_pick is None:
+        if site_picks:
+            return all_sites_full_error(capacity, evacuation_sites, other)
         return {
             "error": True,
             "message": "No route to an evacuation site was found inside the area covered by hazard data.",
         }
+    for skipped in skipped_full_sites:
+        debug_print(f"[OSM] Passed over (full): {skipped['name']} {skipped['occupancy']}/{skipped['capacity']}")
+    site_search = build_site_search(G, site_picks, reachable_sites, best_pick[0], capacity)
 
     site, colony, _ = best_pick
     main_sent, main_arrived = colony["stats"]["ants_sent"], colony["stats"]["ants_arrived"]
@@ -2991,6 +3135,7 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         "to_evacuation_site": True,
         "selected_evacuation_site": site,
         "evacuation_sites": evacuation_sites,
+        "capacity": build_capacity_summary(capacity, evacuation_sites, site, skipped_full_sites),
         "total_candidate_routes": len(candidate_routes),
         "aco": aco_stats,
         "routes": final_routes,
@@ -2999,6 +3144,6 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
             colony,
             final_routes[0] if final_routes else None,
             flood_replay_span_levels,
-            {"sites_searched": len(reachable_sites)},
+            {"sites_searched": len(reachable_sites), "site_search": site_search},
         ),
     }

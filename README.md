@@ -22,6 +22,8 @@ The visitor picks a barangay and a hazard, pins a start point and optionally a d
 - **Missing data is never "safe"** — routes stay on roads inside the area the hazard data covers; a road without a hazard reading is treated as high hazard.
 - **Routes on the street** — routes start and end where each pin meets the nearest road, never drawn through buildings.
 - **Starting at an evacuation site** — automatic evacuation routing skips sites within 25 metres of the start or sharing its road access point, then ranks the other reachable sites by safety. A destination explicitly pinned by the visitor stays as selected.
+- **Evacuation site capacity** — each evacuation site holds up to 100 people. In the simulator's Site capacity dialog the visitor enters how many people are already at each site and how many are in their group (kept in that browser). When the best-ranked site lacks room for the group, the run moves on to the next best site that has room and the results say which site was full; full sites show as grey "FULL" pins. Changing the counts after a run offers to check the route again.
+- **How the site is chosen, shown step by step** — before the ants' replay of a run to the evacuation sites, the map draws the ants' best route to each site in turn (with its distance, flood or earthquake risk and space left), then ranks the sites safety first and picks the best one with room, crossing out any better-ranked site that is full.
 - **English/Tagalog website** — the homepage and About page offer a language choice; the simulator uses English.
 - **Results** — a verdict (safe route found or not), each route's distance, estimated walking time (at 5 km/h), highest hazard level crossed and turn-by-turn steps, up to five routes on the map, and a downloadable PDF report.
 - **Repeatable and fair** — the same pins always give the same routes, and visitors' simulations run one at a time in a queue (a second visitor waits in line instead of being turned away).
@@ -218,9 +220,10 @@ server, so the live site keeps no record of where visitors pinned, and on for th
 - `POST /check-pin` — checks a start/destination tapped on the map before a run
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`
-- `POST /simulate` — flood simulation (queued; `{"async": true}` returns a job id)
+- `POST /simulate` — flood simulation (queued; `{"async": true}` returns a job id). A run to the evacuation sites (`"to_evacuation_site": true`) may add `site_occupancy` (site id → people already there, 0–100) and `group_size`; the result's `capacity` then lists each site's room, the chosen site and any better-ranked sites passed over as full
+- `GET /flood/evac-sites`
 - `GET /earthquake/evac-sites`
-- `POST /earthquake/simulate` — earthquake simulation (queued like flood)
+- `POST /earthquake/simulate` — earthquake simulation (queued like flood; takes `site_occupancy` / `group_size` too, with `capacity` in each view's summary)
 - `GET /simulation-jobs/<id>` — a queued or running simulation's state, progress and result
 - `GET /simulation-status` — whether a simulation is running, and the queue length
 - `POST /contact` — About page contact form → email to the team inbox

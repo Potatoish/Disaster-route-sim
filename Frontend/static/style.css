@@ -5750,7 +5750,9 @@ body.dark .aco-legend-stuck {
 .msheet-source,
 .maccordion p,
 .aco-step-detail,
-.aco-replay-meta {
+.aco-replay-meta,
+.capacity-intro,
+.capacity-alert {
   text-align: justify;
   /* Balances the last lines, so a paragraph never ends on one stray word. */
   text-wrap: pretty;

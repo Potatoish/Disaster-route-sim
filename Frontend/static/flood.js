@@ -32,7 +32,22 @@
       labelSize: 10,
       halo: true,
     },
+    // No room for the visitor's group (evac-capacity.js): grey, so it reads
+    // as out of use, with its badge in the eliminated routes' red.
+    full: {
+      fill: '#94a3b8',
+      stroke: '#475569',
+      accent: '#b91c1c',
+      label: 'FULL',
+      badgeWidth: 76,
+      labelSize: 10,
+    },
   };
+
+  function markerStyleFor(site, isChosen) {
+    if (isChosen) return EVAC_MARKER_STYLES.chosen;
+    return window.evacCapacity?.isSiteFull(site.id) ? EVAC_MARKER_STYLES.full : EVAC_MARKER_STYLES.site;
+  }
 
   // Strong enough to read against the OSM basemap's own beige/tan fills;
   // route lines stay on top anyway (hazard pane + dark route casing in osm.js).
@@ -250,8 +265,9 @@
         title: site.name,
         alt: `${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}: ${site.name}`,
         zIndexOffset: isChosen ? 3100 : 3000,
-        icon: buildEvacSiteMarkerIcon(isChosen ? EVAC_MARKER_STYLES.chosen : EVAC_MARKER_STYLES.site),
+        icon: buildEvacSiteMarkerIcon(markerStyleFor(site, isChosen)),
       }).addTo(map);
+      marker.agnasEvacSite = { site, isChosen };
       marker.on('click', () => {
         state.evacuationPopup?.remove();
         state.evacuationPopup = L.popup({ offset: [0, -52], ...getEvacSitePopupPanOptions() })
@@ -261,11 +277,21 @@
               ${buildLocationPhoto({ ...site, label: site.name })}
               <div class="popup-title">${escapeHtml(site.name)}</div>
               <div class="popup-row"><span>Role</span><span>${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}</span></div>
+              ${window.evacCapacity?.popupHtml(site) || ''}
             </div>`)
           .openOn(map);
       });
       return marker;
     });
+  }
+
+  // The site counts changed: each pin takes its new look in place.
+  function refreshCapacity() {
+    state.evacuationMarkers.forEach(marker => {
+      const { site, isChosen } = marker.agnasEvacSite || {};
+      if (site) marker.setIcon(buildEvacSiteMarkerIcon(markerStyleFor(site, isChosen)));
+    });
+    state.evacuationPopup?.remove();
   }
 
   function reset() {
@@ -281,6 +307,7 @@
     loadEvacuationSites,
     drawEvacuationSites,
     clearEvacuationSites,
+    refreshCapacity,
     evacMarkerStyles: EVAC_MARKER_STYLES,
     layerStyles: FLOOD_LAYER_STYLES,
     reset,
