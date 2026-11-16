@@ -167,7 +167,7 @@
                   </button>
                   <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
                     <button type="button" class="evac-btn pin-input-menu-evac" id="endMenuEvacBtn" role="menuitemradio" aria-checked="true" onclick="showEvacuationSites()">
-                      Go to an evacuation site
+                      Show the evacuation sites
                     </button>
                     <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('end')">
                       <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
@@ -182,7 +182,7 @@
                in one place (isEvacChoicePending). #}
             <div class="earthquake-route-panel" id="earthquakeRoutePanel" role="group" aria-label="Destination" hidden>
               <button class="evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
-                Go to an evacuation site
+                Show Evacuation Sites
               </button>
               <button type="button" class="pin-input-menu-item evac-choice-own" id="chooseOwnDestinationBtn" onclick="chooseOnMap('end')" disabled>
                 Choose my own destination
@@ -411,7 +411,7 @@
                 <div class="msheet-evac-action" id="msimEvacAction" hidden>
                   <button class="mbtn mbtn--primary mbtn--block" id="msimShowEvacBtn" type="button" onclick="showEvacuationSites()">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9M10.5 19v-4.5h3V19"/></svg>
-                    <span id="msimShowEvacLabel">Go to an evacuation site</span>
+                    <span id="msimShowEvacLabel">Show evacuation sites</span>
                   </button>
                   <button class="mbtn mbtn--block" id="msimChooseOwnBtn" type="button" onclick="chooseMobileDestination()">Choose my own destination</button>
                 </div>

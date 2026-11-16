@@ -18,7 +18,7 @@ let earthquakeEvacSitesVisible = false;
 let earthquakeToEvacSite = true;
 let earthquakeEvacSitesLoading = false;
 let earthquakeDestinationChoice = 0;
-// "Go to an evacuation site" (flood) makes the destination the barangay's
+// "Show Evacuation Sites" (flood) makes the destination the barangay's
 // evacuation sites instead of a pin: the run picks the site, as in
 // earthquake mode.
 let floodEvacSites = [];
@@ -1340,8 +1340,8 @@ function refitMapToCurrentContent(options = {}) {
     return true;
   }
   if (simData?.routes?.length) return refitMapToCurrentRoute(options);
-  if (isEarthquakeMode() && earthquakeEvacSitesVisible && hasEvacSitesOnMap()) return fitEarthquakeMapScope(options);
-  if (areFloodEvacSitesShown() && hasEvacSitesOnMap()) return fitMapToFloodEvacSites(options);
+  if (isEarthquakeMode() && earthquakeEvacSitesVisible) return fitEarthquakeMapScope(options);
+  if (areFloodEvacSitesShown()) return fitMapToFloodEvacSites(options);
   return fitMapToBoundaryPaths(barangayBoundaryRings, 24, {
     fly: !!options.flySeconds,
     duration: options.flySeconds,
@@ -1407,6 +1407,7 @@ function recenterMap() {
       return;
     }
     window.mobileSim.toast(hazardOnlyView ? 'Showing the whole barangay' : simData ? 'Showing full route'
+      : areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Showing evacuation sites'
       : 'Showing the whole barangay');
   }
 
@@ -2519,20 +2520,13 @@ function isToEvacuationSite() {
   return isEarthquakeMode() ? earthquakeToEvacSite : isFloodToEvacSite();
 }
 
-// Evacuation sites go on the map only with a run's result (and its replay,
-// drawReplaySites): before a run nothing shows, since the run itself picks
-// the site.
-function hasEvacSitesOnMap() {
-  return !!(simData && simData.pins_key === getRoutePinsKey() && isToEvacuationSite() && !routePins.end);
-}
-
-// The destination is the sites once the visitor picks Go to an evacuation site;
+// The sites go on the map only once the visitor picks Show Evacuation Sites;
 // until then flood cannot run either.
 function areFloodEvacSitesShown() {
   return isFloodToEvacSite() && floodEvacSites.length > 0;
 }
 
-// The destination is the evacuation sites, but the visitor has not picked them yet.
+// The destination is the evacuation sites, but they are not on the map yet.
 function isWaitingForEvacSites() {
   return isEarthquakeMode()
     ? earthquakeToEvacSite && !earthquakeEvacSitesVisible
@@ -2864,13 +2858,11 @@ function syncRoutePinFields() {
       : placingOwn
       ? 'Tap the map where you want to go'
       : pin?.label || PIN_ROLE_COPY[role].empty;
-    meta.hidden = !pin && !resultSite && !placingOwn && !(toEvacSite && !placeholder);
+    meta.hidden = !pin && !resultSite && !placingOwn;
     meta.textContent = pin
       ? formatPinCoordinates(pin)
       : resultSite
       ? 'Chosen evacuation site'
-      : toEvacSite
-      ? 'Picked by the run'
       : placingOwn
       ? 'Your own destination'
       : '';
@@ -2913,7 +2905,7 @@ function syncEndPinMenu() {
   if (!evacItem || !ownItem) return;
   const ownPin = !!routePins.end;
   const toEvacSite = !ownPin && isToEvacuationSite() && pinPlacementRole !== 'end';
-  evacItem.textContent = toEvacSite ? 'Go to an evacuation site' : 'Go to an evacuation site instead';
+  evacItem.textContent = toEvacSite ? 'Show the evacuation sites' : 'Use an evacuation site instead';
   evacItem.setAttribute('aria-checked', String(toEvacSite));
   evacItem.disabled = isSimulationInteractionLocked() || (isEarthquakeMode() && !getReadyPin('start'));
   ownItem.textContent = ownPin ? 'Move my destination on the map' : 'Choose my own destination instead';
@@ -3081,7 +3073,7 @@ function syncFloodEvacMarkers() {
   if (!gMap || activeReplayController) return;
   window.floodHazardUI?.drawEvacuationSites({
     map: gMap,
-    sites: isFloodToEvacSite() && hasEvacSitesOnMap() ? floodEvacSites : null,
+    sites: isFloodToEvacSite() ? floodEvacSites : null,
     highlightedSiteId: getResultEvacSite()?.id ?? null,
   });
 }
@@ -3218,7 +3210,7 @@ function syncEarthquakeRouteUi() {
 
   if (showEvacBtn) {
     const sitesLoading = isEarthquakeMode() && earthquakeEvacSitesLoading;
-    showEvacBtn.textContent = sitesLoading ? 'Loading evacuation sites…' : 'Go to an evacuation site';
+    showEvacBtn.textContent = sitesLoading ? 'Loading evacuation sites…' : 'Show Evacuation Sites';
     showEvacBtn.disabled = !choicePending || sitesLoading;
   }
 
@@ -3395,7 +3387,7 @@ function setFloodLegendContent() {
     ${showRouteKeys ? buildRouteLegendRows() : ''}
     <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
       ${buildPinLegendRow('start')}
-      ${areFloodEvacSitesShown() && hasEvacSitesOnMap() ? buildFloodEvacLegendRows() : isFloodToEvacSite() ? '' : buildPinLegendRow('end')}
+      ${areFloodEvacSitesShown() ? buildFloodEvacLegendRows() : isFloodToEvacSite() ? '' : buildPinLegendRow('end')}
       ${buildBoundaryLegendRow()}
     </div>`;
 }
@@ -3424,8 +3416,13 @@ function clearSimulationOutput() {
 
   if (wasEarthquakeResult) {
     window.earthquakeUI?.renderHazardLayers({ map: gMap, hazardLayers: null });
-    window.earthquakeUI?.drawEvacuationSites({ map: gMap, sites: null });
-    setMapLegendVisible(false);
+    if (earthquakeEvacSitesVisible && earthquakeEvacSites.length && gMap) {
+      window.earthquakeUI?.drawEvacuationSites({ map: gMap, sites: earthquakeEvacSites });
+      window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: false, showHazardLayers: false });
+      setMapLegendVisible(true);
+    } else {
+      setMapLegendVisible(false);
+    }
     syncEarthquakeViewSelector();
   } else {
     syncFloodHazardOverlay();
@@ -3943,7 +3940,7 @@ function buildRouteInfoHtml() {
   if (isAnyRoutePinChecking()) return 'Checking this spot…';
   if (canRunCurrentSimulation()) return '';
   if (!getReadyPin('start')) return 'Pin your location on the map first.';
-  if (isWaitingForEvacSites()) return 'Go to an evacuation site, or pin your own destination.';
+  if (isWaitingForEvacSites()) return 'Choose an evacuation site or pin a destination.';
   return 'Pin your destination on the map.';
 }
 
@@ -4331,11 +4328,11 @@ function fitMapToFloodEvacSites(options = {}) {
   return fitMapBounds(bounds, options);
 }
 
-// "Go to an evacuation site" (flood): the destination becomes the
-// barangay's evacuation sites in place of a pin -- the run picks the one
-// with the safest route, and only then do they show -- and the setup moves
+// The destination menu's "Show the evacuation sites" (flood): the destination
+// becomes the barangay's evacuation sites, shown on the map, in place of a
+// pin -- the run picks the one with the safest route -- and the setup moves
 // on to Run.
-async function showFloodEvacuationSites() {
+async function showFloodEvacuationSites({ fit = true } = {}) {
   closePinMenus();
   if (isSimulationInteractionLocked() || selectedHazard !== 'Flood' || !selectedBarangay) return;
 
@@ -4363,16 +4360,17 @@ async function showFloodEvacuationSites() {
     pinCheckSeq.end += 1;
   }
   if (pinPlacementRole === 'end') setPinPlacementRole(getNextUnpinnedRole());
-  syncFloodEvacMarkers();
   setFloodLegendContent();
+  setMapLegendVisible(true);
   onRoutePinsChange();
+  if (fit && !hazardOnlyView) fitMapToFloodEvacSites();
 }
 
 async function showEvacuationSites({ fit = true } = {}) {
   if (hazardOnlyView) await leaveHazardOnlyView();
   closePinMenus();
   if (!isEarthquakeMode()) {
-    await showFloodEvacuationSites();
+    await showFloodEvacuationSites({ fit });
     return;
   }
   if (isSimulationInteractionLocked()) return;
@@ -4414,16 +4412,19 @@ async function showEvacuationSites({ fit = true } = {}) {
 
     window.earthquakeUI?.drawEvacuationSites({
       map: gMap,
-      sites: hasActiveEarthquakeResult ? earthquakeEvacSites : null,
+      sites: earthquakeEvacSites,
       highlightedSiteId: hasActiveEarthquakeResult
         ? simData?.active_summary?.selected_evacuation_site?.id || null
         : null,
     });
-    if (hasActiveEarthquakeResult) {
-      window.earthquakeUI?.syncLegend(activeEarthquakeView, { showRouteKeys: true, hazardLayers: simData?.hazard_layers });
-      setMapLegendVisible(true);
-      if (fit && !hazardOnlyView) fitEarthquakeMapScope({ includeHazards: true });
-    }
+    window.earthquakeUI?.syncLegend(
+      activeEarthquakeView,
+      hasActiveEarthquakeResult
+        ? { showRouteKeys: true, hazardLayers: simData?.hazard_layers }
+        : { showRouteKeys: false, showHazardLayers: false }
+    );
+    setMapLegendVisible(true);
+    if (fit && !hazardOnlyView) fitEarthquakeMapScope({ includeHazards: hasActiveEarthquakeResult });
   } catch (err) {
     if (choice !== earthquakeDestinationChoice) return;
     console.error(err);

@@ -585,7 +585,7 @@
     if (held) closeLayers({ restoreFocus: false });
     const fit = $('msimRecenterBtn');
     const fitLabel = isHazardOnlyView() ? 'Show the whole barangay' : state.mode === 'setup'
-      ? 'Show the whole barangay'
+      ? areFloodEvacSitesShown() || earthquakeEvacSitesVisible ? 'Show evacuation sites' : 'Show the whole barangay'
       : 'Show the whole route';
     fit.disabled = held;
     fit.setAttribute('aria-label', fitLabel);
@@ -724,7 +724,7 @@
     $('msimEvacAction').hidden = !needsEvacSites;
     $('msimShowEvacBtn').disabled = locked || earthquakeEvacSitesLoading;
     $('msimChooseOwnBtn').disabled = locked;
-    setText($('msimShowEvacLabel'), earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Go to an evacuation site');
+    setText($('msimShowEvacLabel'), earthquakeEvacSitesLoading ? 'Loading evacuation sites…' : 'Show evacuation sites');
     const setPinBtn = $('msimSetPinBtn');
     setPinBtn.hidden = !role;
     if (role) {
