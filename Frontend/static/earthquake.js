@@ -90,14 +90,7 @@
   }
 
   // The site a run picks keeps its "OPEN AREA" name; only green marks it.
-  // A site without room for the visitor's group (evac-capacity.js) is grey
-  // with a red FULL badge, like the flood sites.
-  const FULL_SITE_STYLE = { fill: '#94a3b8', stroke: '#475569', accent: '#b91c1c', label: 'FULL', badgeWidth: 80, labelSize: 10 };
-
-  function buildEvacMarkerIcon(isHighlighted, site = null) {
-    if (!isHighlighted && site && window.evacCapacity?.isSiteFull(site.id)) {
-      return buildEvacSiteMarkerIcon(FULL_SITE_STYLE);
-    }
+  function buildEvacMarkerIcon(isHighlighted) {
     return buildEvacSiteMarkerIcon(isHighlighted
       ? { fill: '#22c55e', stroke: '#14532d', accent: '#166534', label: 'OPEN AREA', badgeWidth: 80, labelSize: 10, halo: true }
       : { fill: '#f59e0b', stroke: '#9a3412', accent: '#b45309', label: 'OPEN AREA', badgeWidth: 80, labelSize: 10 });
@@ -120,7 +113,6 @@
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pasig City')}</span></div>
         ${buildEvacDetailRow('Site Setup', site.site_setup)}
         ${buildEvacDetailRow('Surroundings', site.surroundings)}
-        ${window.evacCapacity?.popupHtml(site) || ''}
       </div>`;
   }
 
@@ -160,9 +152,8 @@
       const marker = L.marker({ lat: Number(site.lat), lng: Number(site.lng) }, {
         title: site.name,
         zIndexOffset: isHighlighted ? 3100 : 3000,
-        icon: buildEvacMarkerIcon(isHighlighted, site),
+        icon: buildEvacMarkerIcon(isHighlighted),
       }).addTo(map);
-      marker.agnasEvacSite = { site, isHighlighted };
 
       marker.on('click', () => {
         clearInfoWindow();
@@ -491,7 +482,6 @@
       window.renderHazardOnlyLegend();
       return;
     }
-    state.legendArgs = [activeView, options];
     const {
       showRouteKeys = true,
       showHazardLayers = true,
@@ -519,28 +509,14 @@
         ${!window.isToEvacuationSite?.() ? window.buildPinLegendRow('end')
           : showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen evacuation site') : ''}
         ${state.evacuationMarkers.length ? pinRow('#f59e0b', '#9a3412', 'house', 'Open area') : ''}
-        ${state.evacuationMarkers.some(marker => !marker.agnasEvacSite?.isHighlighted && window.evacCapacity?.isSiteFull(marker.agnasEvacSite?.site.id))
-          ? pinRow(FULL_SITE_STYLE.fill, FULL_SITE_STYLE.stroke, 'house', 'Full evacuation site') : ''}
         ${typeof window.buildBoundaryLegendRow === 'function' ? window.buildBoundaryLegendRow() : ''}
         ${hazardLegend}
       </div>`;
   }
 
-  // The site counts changed: each pin takes its new look in place, and the
-  // legend's full-site row follows.
-  function refreshCapacity() {
-    state.evacuationMarkers.forEach(marker => {
-      const { site, isHighlighted } = marker.agnasEvacSite || {};
-      if (site) marker.setIcon(buildEvacMarkerIcon(isHighlighted, site));
-    });
-    clearInfoWindow();
-    if (state.legendArgs && typeof isEarthquakeMode === 'function' && isEarthquakeMode()) syncLegend(...state.legendArgs);
-  }
-
   window.earthquakeUI = {
     loadEvacuationSites,
     drawEvacuationSites,
-    refreshCapacity,
     renderHazardLayers,
     paintHazardLayers,
     getLegendItems,
