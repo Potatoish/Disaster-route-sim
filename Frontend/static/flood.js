@@ -298,6 +298,15 @@
     });
   }
 
+  // A site's pin, to show it from the setup panel's list (script.js).
+  function getSiteMarker(siteId) {
+    return state.evacuationMarkers.find(marker => marker.agnasEvacSite?.site.id === siteId) || null;
+  }
+
+  function playEntrance() {
+    playEvacPinEntrance(state.evacuationMarkers);
+  }
+
   // The open popup's content changed height (its capacity alert came or
   // went): size it again and pan it back into view, leaving its content --
   // and the control in use -- as it is. Leaflet's update() would rebuild the
@@ -325,6 +334,8 @@
     clearEvacuationSites,
     refreshCapacity,
     relayoutPopup,
+    getSiteMarker,
+    playEntrance,
     evacMarkerStyles: EVAC_MARKER_STYLES,
     layerStyles: FLOOD_LAYER_STYLES,
     reset,

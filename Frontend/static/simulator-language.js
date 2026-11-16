@@ -55,6 +55,7 @@ window.agnasSimulatorCopy = [
   ['Show evacuation sites', 'Ipakita ang mga evacuation site'], ['Show Evacuation Sites', 'Ipakita ang mga evacuation site'],
   ['Show the evacuation sites', 'Ipakita ang mga evacuation site'], ['Use an evacuation site instead', 'Gumamit na lang ng evacuation site'],
   ['Showing evacuation sites', 'Ipinapakita ang mga evacuation site'],
+  ['Show on the map', 'Ipakita sa mapa'],
   ['Loading evacuation sites…', 'Ikinakarga ang mga evacuation site…'], ['Evacuation site', 'Evacuation site'],
   ['Evacuation sites', 'Mga evacuation site'], ['Chosen evacuation site', 'Napiling evacuation site'],
   ['Run', 'Simulan'], ['Run simulation', 'Simulan ang simulation'], ['Run Simulation', 'Simulan ang simulation'],

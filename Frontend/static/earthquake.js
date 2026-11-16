@@ -154,6 +154,7 @@
         zIndexOffset: isHighlighted ? 3100 : 3000,
         icon: buildEvacMarkerIcon(isHighlighted),
       }).addTo(map);
+      marker.agnasSiteId = site.id;
 
       marker.on('click', () => {
         clearInfoWindow();
@@ -514,9 +515,20 @@
       </div>`;
   }
 
+  // A site's pin, to show it from the setup panel's list (script.js).
+  function getSiteMarker(siteId) {
+    return state.evacuationMarkers.find(marker => marker.agnasSiteId === siteId) || null;
+  }
+
+  function playEntrance() {
+    playEvacPinEntrance(state.evacuationMarkers);
+  }
+
   window.earthquakeUI = {
     loadEvacuationSites,
     drawEvacuationSites,
+    getSiteMarker,
+    playEntrance,
     renderHazardLayers,
     paintHazardLayers,
     getLegendItems,

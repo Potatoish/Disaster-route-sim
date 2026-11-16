@@ -2882,7 +2882,7 @@ function syncRoutePinFields() {
     if (ready) {
       const destination = end
         ? buildSetupPinName(end)
-        : escapeHtml(uiCopy(getResultEvacSite()?.name || 'Evacuation sites'));
+        : escapeHtml(uiCopy(getResultEvacSite()?.name || 'Evacuation sites')) + buildEvacSiteListHtml();
       summary.innerHTML = `<p class="setup-route-description">${escapeHtml(uiCopy(getSetupRouteDescription()))}</p>
         <dl class="setup-route-points">
           <div class="setup-route-start"><dt>${escapeHtml(uiCopy('Start'))}</dt><dd>${buildSetupPinName(start)}</dd></div>
@@ -2893,9 +2893,70 @@ function syncRoutePinFields() {
     }
   }
 
+  renderPhoneEvacSiteList();
   // Most setup changes pass through here; the phone sheet re-reads them all.
   window.mobileSim?.scheduleSync();
 }
+
+// The evacuation sites on the map while the run is still to pick one: their
+// names, under "Evacuation sites" (desktop) and in a row under the phone
+// sheet's Start and End. A name shows its site (focusEvacSite).
+function getListedEvacSites() {
+  if (routePins.end || getResultEvacSite()) return [];
+  if (isEarthquakeMode()) return earthquakeToEvacSite && earthquakeEvacSitesVisible ? earthquakeEvacSites : [];
+  return areFloodEvacSitesShown() ? floodEvacSites : [];
+}
+
+function buildEvacSiteListHtml() {
+  const sites = getListedEvacSites();
+  if (!sites.length) return '';
+  return `<ul class="setup-evac-sites" aria-label="${escapeHtml(uiCopy('Evacuation sites'))}">
+    ${sites.map(site => `<li><button type="button" data-evac-site-focus="${escapeHtml(site.id)}" title="${escapeHtml(uiCopy('Show on the map'))}">${escapeHtml(site.name)}</button></li>`).join('')}
+  </ul>`;
+}
+
+function renderPhoneEvacSiteList() {
+  const row = document.getElementById('msimEvacSites');
+  if (!row) return;
+  const sites = getListedEvacSites();
+  const html = sites.map(site => `<button type="button" class="msim-evac-chip" data-evac-site-focus="${escapeHtml(site.id)}">${escapeHtml(site.name)}</button>`).join('');
+  if (row._html !== html) {
+    row._html = html;
+    row.innerHTML = html;
+  }
+  row.hidden = !sites.length;
+}
+
+// Glides the map to a site, then opens its popup.
+const EVAC_SITE_FOCUS_FLY_SECONDS = 0.8;
+const EVAC_SITE_FOCUS_ZOOM = 17;
+
+function focusEvacSite(siteId) {
+  const ui = isEarthquakeMode() ? window.earthquakeUI : window.floodHazardUI;
+  const marker = ui?.getSiteMarker?.(siteId);
+  if (!marker || !gMap) return;
+  const point = marker.getLatLng();
+  let opened = false;
+  const open = () => {
+    if (opened) return;
+    opened = true;
+    marker.fire('click');
+  };
+  const bounds = L.latLngBounds([point, point]);
+  const padding = { ...getMapFitPadding(24, { bounds }), maxZoom: EVAC_SITE_FOCUS_ZOOM };
+  const moves = fitMapBounds(bounds, { padding, flySeconds: EVAC_SITE_FOCUS_FLY_SECONDS });
+  if (!moves || prefersReducedMotion()) {
+    open();
+    return;
+  }
+  gMap.once('moveend', open);
+  window.setTimeout(open, EVAC_SITE_FOCUS_FLY_SECONDS * 1000 + 250);
+}
+
+document.addEventListener('click', event => {
+  const button = event.target.closest?.('[data-evac-site-focus]');
+  if (button) focusEvacSite(button.dataset.evacSiteFocus);
+});
 
 // The destination menu: the evacuation sites come first -- the default, shown
 // on the map once picked here -- and a spot of one's own second.
@@ -4352,6 +4413,7 @@ async function showFloodEvacuationSites({ fit = true } = {}) {
     return;
   }
 
+  const wereShown = areFloodEvacSitesShown();
   floodEvacSites = sites;
   floodToEvacSite = true;
   clearPinHintError();
@@ -4363,6 +4425,7 @@ async function showFloodEvacuationSites({ fit = true } = {}) {
   setFloodLegendContent();
   setMapLegendVisible(true);
   onRoutePinsChange();
+  if (!wereShown) window.floodHazardUI?.playEntrance();
   if (fit && !hazardOnlyView) fitMapToFloodEvacSites();
 }
 
@@ -4403,6 +4466,7 @@ async function showEvacuationSites({ fit = true } = {}) {
     const sites = await window.earthquakeUI.loadEvacuationSites(barangay);
     if (choice !== earthquakeDestinationChoice || barangay !== selectedBarangay || !isEarthquakeMode()) return;
     if (!sites.length) throw new Error('No evacuation sites are listed for this barangay. Choose your own destination instead.');
+    const wereShown = earthquakeEvacSitesVisible;
     earthquakeEvacSites = sites;
     earthquakeToEvacSite = true;
     earthquakeEvacSitesVisible = true;
@@ -4417,6 +4481,7 @@ async function showEvacuationSites({ fit = true } = {}) {
         ? simData?.active_summary?.selected_evacuation_site?.id || null
         : null,
     });
+    if (!wereShown) window.earthquakeUI?.playEntrance();
     window.earthquakeUI?.syncLegend(
       activeEarthquakeView,
       hasActiveEarthquakeResult

@@ -335,6 +335,27 @@ function buildEvacSiteMarkerIcon({ fill, stroke, accent, label, badgeWidth, labe
   });
 }
 
+// Evacuation site pins coming onto the map ("Show Evacuation Sites"): each
+// drops in a beat after the last (style.css .evac-pin-enter). Only the
+// marker's own `translate` animates: Leaflet places it with `transform`.
+const EVAC_PIN_STAGGER_MS = 70;
+
+function playEvacPinEntrance(markers) {
+  if (prefersReducedMotion()) return;
+  markers.forEach((marker, index) => {
+    const el = marker.getElement?.();
+    if (!el) return;
+    el.classList.remove('evac-pin-enter');
+    void el.offsetWidth;
+    el.style.animationDelay = `${index * EVAC_PIN_STAGGER_MS}ms`;
+    el.classList.add('evac-pin-enter');
+    el.addEventListener('animationend', () => {
+      el.classList.remove('evac-pin-enter');
+      el.style.animationDelay = '';
+    }, { once: true });
+  });
+}
+
 // Evacuation labels are embedded in SVG image URLs, outside the text walker.
 document.addEventListener('site:languagechange', () => {
   if (typeof gMap === 'undefined' || !gMap) return;

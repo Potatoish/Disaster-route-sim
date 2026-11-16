@@ -5731,6 +5731,138 @@ body.dark .aco-legend-stuck {
   }
 }
 
+/* ---------- EVACUATION SITES ON THE MAP ----------
+   Once "Show Evacuation Sites" puts them on the map: their names under the
+   setup's destination (desktop) or in a row under the phone sheet's Start
+   and End, each showing its site (script.js focusEvacSite); the pins drop
+   in one after another (osm.js playEvacPinEntrance) and a site's popup
+   rises into place. */
+body.sim-page #setupPanel .setup-evac-sites {
+  display: grid;
+  gap: 1px;
+  margin: 6px 0 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+body.sim-page #setupPanel .setup-evac-sites button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 .8125rem/1.35 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+/* A dot in the blue of the sites' pins. */
+body.sim-page #setupPanel .setup-evac-sites button::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+body.sim-page.dark #setupPanel .setup-evac-sites button::before { background: #93c5fd; }
+
+/* Earthquake: the amber of its open-area pins. */
+body.sim-page[data-hazard-theme="earthquake"] :is(#setupPanel .setup-evac-sites button, #msim .msim-evac-chip)::before {
+  background: #f59e0b;
+}
+
+body.sim-page #setupPanel .setup-evac-sites button:hover {
+  background: var(--float-chip);
+  color: var(--text);
+}
+
+body.sim-page #setupPanel .setup-evac-sites button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@media (max-width: 1023px) {
+  body.sim-page #setupPanel .setup-evac-sites button { min-height: 44px; }
+}
+
+/* Phone and tablet: one row that scrolls sideways, so the sheet keeps its
+   height however many sites there are. */
+#msim .msim-evac-sites {
+  display: flex;
+  gap: 8px;
+  margin: 6px -4px 0;
+  padding: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+#msim .msim-evac-sites[hidden] { display: none; }
+#msim .msim-evac-sites::-webkit-scrollbar { display: none; }
+
+#msim .msim-evac-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--float-line);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--text);
+  font: 600 .8125rem/1.2 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#msim .msim-evac-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+body.sim-page.dark #msim .msim-evac-chip::before { background: #93c5fd; }
+#msim .msim-evac-chip:active { background: var(--float-chip); }
+
+.leaflet-marker-icon.evac-site-marker.evac-pin-enter {
+  animation: evacPinEnter .55s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@keyframes evacPinEnter {
+  from { opacity: 0; translate: 0 -22px; }
+  65% { opacity: 1; translate: 0 2px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* The popup's own box and tip rise into place; Leaflet places the popup by
+   its outer element's transform. */
+.leaflet-popup.location-photo-popup :is(.leaflet-popup-content-wrapper, .leaflet-popup-tip-container) {
+  transform-origin: 50% 100%;
+  animation: evacPopupIn .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@keyframes evacPopupIn {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-marker-icon.evac-site-marker.evac-pin-enter,
+  .leaflet-popup.location-photo-popup :is(.leaflet-popup-content-wrapper, .leaflet-popup-tip-container) {
+    animation: none;
+  }
+}
+
 /* ---------- JUSTIFIED TEXT ----------
    Every running-text paragraph is justified, in the setup and results
    panels, the dialogs and the phone sheet alike. Short one-line notes are
