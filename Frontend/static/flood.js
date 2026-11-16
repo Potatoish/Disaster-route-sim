@@ -270,28 +270,44 @@
       marker.agnasEvacSite = { site, isChosen };
       marker.on('click', () => {
         state.evacuationPopup?.remove();
-        state.evacuationPopup = L.popup({ offset: [0, -52], ...getEvacSitePopupPanOptions() })
+        const capacityHtml = window.evacCapacity?.popupHtml(site) || '';
+        state.evacuationPopup = L.popup({ offset: [0, -52], ...getEvacSitePopupPanOptions({ tall: !!capacityHtml }) })
           .setLatLng(marker.getLatLng())
           .setContent(`
             <div class="popup-shell">
               ${buildLocationPhoto({ ...site, label: site.name })}
               <div class="popup-title">${escapeHtml(site.name)}</div>
               <div class="popup-row"><span>Role</span><span>${isChosen ? 'Chosen evacuation site' : 'Evacuation site'}</span></div>
-              ${window.evacCapacity?.popupHtml(site) || ''}
+              ${capacityHtml}
             </div>`)
           .openOn(map);
+        // After a run, the site's count is set here (evac-capacity.js).
+        const capacityBox = state.evacuationPopup.getElement()?.querySelector('.popup-capacity');
+        if (capacityBox) window.evacCapacity.syncPopup(capacityBox);
       });
       return marker;
     });
   }
 
-  // The site counts changed: each pin takes its new look in place.
+  // The site counts changed: each pin takes its new look in place (an open
+  // popup stays: its count may be the one being set).
   function refreshCapacity() {
     state.evacuationMarkers.forEach(marker => {
       const { site, isChosen } = marker.agnasEvacSite || {};
       if (site) marker.setIcon(buildEvacSiteMarkerIcon(markerStyleFor(site, isChosen)));
     });
-    state.evacuationPopup?.remove();
+  }
+
+  // The open popup's content changed height (its capacity alert came or
+  // went): size it again and pan it back into view, leaving its content --
+  // and the control in use -- as it is. Leaflet's update() would rebuild the
+  // content, so its layout steps are called directly (Leaflet 1.9.4).
+  function relayoutPopup() {
+    const popup = state.evacuationPopup;
+    if (!popup?.isOpen()) return;
+    popup._updateLayout();
+    popup._updatePosition();
+    popup._adjustPan();
   }
 
   function reset() {
@@ -308,6 +324,7 @@
     drawEvacuationSites,
     clearEvacuationSites,
     refreshCapacity,
+    relayoutPopup,
     evacMarkerStyles: EVAC_MARKER_STYLES,
     layerStyles: FLOOD_LAYER_STYLES,
     reset,

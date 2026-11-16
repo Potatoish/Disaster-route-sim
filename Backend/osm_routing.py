@@ -100,10 +100,11 @@ BACKUP_ROUTE_EDGE_PENALTY = 1.8
 # compares each site's main colony on its few safest routes to pick the site;
 # only that site gets alternative colonies.
 SITE_PICK_ROUTES_PER_SITE = 5
-# Each evacuation site holds at most this many people. A run may say how many
-# are already at each site (site_occupancy) and how many people are coming
-# (group_size); a site without room for the group is passed over for the next
-# best one with room (pick_site_with_room).
+# Each evacuation site holds at most this many people. A flood run to the
+# evacuation sites may say how many are already at each site (site_occupancy)
+# and how many people are coming (group_size); a site without room for the
+# group is passed over for the next best one with room (pick_site_with_room).
+# Earthquake runs have no site counts.
 EVACUATION_SITE_CAPACITY = 100
 # The results open with a replay of the main colony's search (aco-replay.js):
 # every ant's walk in the first rounds -- while the best route still improves,

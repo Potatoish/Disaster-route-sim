@@ -407,6 +407,7 @@ body:is(.site-page, .sim-page) :is(.run-btn, .evac-btn, .mbtn, .tutorial-btn,
 body:is(.site-page, .sim-page) :is(.cta, .fab, .fab-send, .skip-link,
   .tutorial-btn.primary, .run-btn, .evac-btn, .mbtn--primary,
   .route-modal-btn.primary, .result-route-reset, .safety-actions .reset-btn,
+  .capacity-result-btn.is-primary,
   #msimNewSimBtn):not(:disabled):not([aria-disabled="true"]) {
   --accent-ink: #ffffff;
   --strong-ink: #ffffff;
@@ -433,7 +434,7 @@ body.sim-page:not(.dark) .safety-card-action:hover:not(:disabled) {
 body.sim-page.dark { --fill-ink: var(--blue-950); }
 body.sim-page[data-hazard-theme="earthquake"] { --fill-ink: var(--amber-950); }
 body.sim-page.dark :is(.run-btn, .evac-btn, .mbtn--primary, #msimDetailsBtn, .result-route-reset,
-  .tutorial-btn.primary, .route-modal-btn.primary, .mlens button.active,
+  .tutorial-btn.primary, .route-modal-btn.primary, .capacity-result-btn.is-primary, .mlens button.active,
   .leaflet-control-layers-base label:has(:checked) > span):not(:disabled),
 body.sim-page:not(.dark)[data-hazard-theme="earthquake"] :is(.run-btn, .evac-btn,
   .mbtn--primary:not(#msimDetailsBtn), .tutorial-btn.primary, .route-modal-btn.primary,

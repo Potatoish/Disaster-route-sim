@@ -1,18 +1,21 @@
 /* ---------- EVACUATION SITE CAPACITY (evac-capacity.js) ----------
-   How full each evacuation site is: a meter and a status pill in the theme's
-   green / amber / red, in the setup card, the phone sheet row, the dialog,
-   the site popups and the results notice. */
+   How full each flood evacuation site is, after a run: a meter and a
+   status pill in the theme's green / amber / red, in the dialog and a
+   site's popup on the map (where its count is set) and the results
+   notice. */
 body.sim-page {
   --cap-open: var(--green);
-  --cap-open-ink: var(--green-ink);
+  --cap-open-ink: var(--green-ink, #15803d);
   --cap-filling: var(--yellow);
-  --cap-filling-ink: var(--yellow-ink);
+  --cap-filling-ink: var(--yellow-ink, #b45309);
   --cap-full: var(--red);
   --cap-full-ink: #b91c1c;
   --cap-track: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 body.sim-page.dark {
+  --cap-open-ink: var(--green-ink, #4ade80);
+  --cap-filling-ink: var(--yellow-ink, #eab308);
   --cap-full-ink: #f87171;
   --cap-track: color-mix(in srgb, var(--text) 16%, transparent);
 }
@@ -70,77 +73,7 @@ body.sim-page.dark {
   color: var(--cap-full-ink);
 }
 
-/* ---- setup: one row that opens the dialog ----
-   The desktop panel's card and the phone/tablet sheet's row, under Start
-   and End: how many sites have room and a dot per site. */
-body.sim-page #setupPanel .capacity-card[hidden] { display: none; }
-
-.capacity-entry {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 56px;
-  padding: 6px 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.capacity-entry[hidden] { display: none; }
-
-/* Desktop: the whole row lights up under the pointer, like a menu item. */
-body.sim-page #setupPanel .capacity-entry {
-  width: calc(100% + 16px);
-  min-height: 52px;
-  margin: -8px -8px;
-  padding: 8px;
-  border-radius: 12px;
-  transition: background-color .15s ease;
-}
-
-body.sim-page #setupPanel .capacity-entry:hover { background: var(--float-chip); }
-
-body.sim-page #setupPanel .capacity-entry:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-}
-
-body.sim-page #setupPanel .capacity-entry:hover .capacity-entry-chevron {
-  stroke: var(--accent-text, var(--accent));
-  transform: translateX(2px);
-}
-
-/* Phone/tablet sheet: a thin rule above it, like the slots. */
-#msim .mcapacity-row::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 44px;
-  right: 0;
-  height: 1px;
-  background: var(--float-line);
-}
-
-#msim .mcapacity-row:active .capacity-entry-value { opacity: .7; }
-
-.capacity-entry-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--accent-soft-bg);
-  color: var(--accent-text, var(--accent));
-}
-
-.capacity-entry-icon svg,
+/* The dialog's and the results notice's line icons. */
 .capacity-modal-icon svg,
 .capacity-result-icon svg {
   fill: none;
@@ -148,62 +81,6 @@ body.sim-page #setupPanel .capacity-entry:hover .capacity-entry-chevron {
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.capacity-entry-icon svg { width: 18px; height: 18px; }
-
-.capacity-entry-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.capacity-entry-label {
-  color: var(--muted);
-  font: 600 .75rem var(--font-body);
-}
-
-.capacity-entry-value {
-  color: var(--text);
-  font: 600 .9375rem/1.3 var(--font-body);
-}
-
-body.sim-page #setupPanel .capacity-entry-value { font-size: .9rem; }
-
-.capacity-entry.is-full .capacity-entry-value { color: var(--cap-full-ink); }
-
-.capacity-entry-dots {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-  max-width: 52px;
-}
-
-.capacity-entry-dots span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--cap-open);
-}
-
-.capacity-entry-dots .is-filling { background: var(--cap-filling); }
-.capacity-entry-dots :is(.is-full, .is-tight) { background: var(--cap-full); }
-
-.capacity-entry-chevron {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin-right: 2px;
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform .15s ease, stroke .15s ease;
 }
 
 /* ---- the dialog ---- */
@@ -562,7 +439,7 @@ body.sim-page .capacity-modal-close {
 .capacity-modal-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
 }
 
@@ -588,6 +465,64 @@ body.sim-page .capacity-done {
   padding: 0 20px;
   border-radius: 12px;
   font-size: .875rem;
+}
+
+/* ---- a site's popup on the map, after a flood run: its count is set here ---- */
+.popup-capacity {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--float-line, rgba(15, 23, 42, .1));
+}
+
+.popup-capacity-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.popup-capacity-label {
+  color: var(--muted);
+  font: 600 .78rem var(--font-body);
+}
+
+.popup-capacity .capacity-range { margin: 6px 0 4px; }
+.popup-capacity .capacity-site-controls { gap: 6px 8px; }
+
+.popup-capacity-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cap-full) 9%, transparent);
+  color: var(--cap-full-ink);
+  font: 600 .78rem/1.4 var(--font-body);
+}
+
+.popup-capacity-alert[hidden] { display: none; }
+
+/* Room for the controls under the site's photo, before the popup scrolls
+   (map popups otherwise stop at 320px, style.css). */
+.leaflet-popup.has-capacity .leaflet-popup-content {
+  max-height: min(470px, calc(var(--visual-height, 100dvh) - 220px)) !important;
+}
+
+/* Phones and tablets: the popup only gets the strip of map between the top
+   bar and the sheet, so it leaves out the photo and keeps Mark full on the
+   stepper's line -- the controls show without scrolling. */
+@media (max-width: 1023px) {
+  .leaflet-popup.has-capacity .location-photo { display: none; }
+  .popup-capacity .capacity-of { display: none; }
+}
+
+/* With a mouse, the popup's controls are a size smaller than the dialog's. */
+@media (min-width: 1024px) {
+  .popup-capacity .capacity-stepper button { width: 34px; height: 34px; }
+  .popup-capacity .capacity-stepper input { width: 44px; }
+  .popup-capacity .capacity-quick { min-height: 34px; padding: 0 10px; }
 }
 
 /* ---- results: the notice above the route ---- */
@@ -790,49 +725,6 @@ body.sim-page #routeSafetyContent .capacity-result-slot { margin-bottom: 16px; }
   text-underline-offset: 3px;
 }
 
-/* ---- a site's popup on the map ---- */
-.popup-capacity {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--float-line, rgba(15, 23, 42, .1));
-}
-
-.popup-capacity-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font: 600 .78rem var(--font-body);
-}
-
-.popup-capacity-top span { color: var(--muted); }
-
-.popup-capacity-top strong {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.popup-capacity .capacity-meter { margin: 7px 0 9px; }
-
-.popup-capacity-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.popup-capacity-edit {
-  margin: -4px -6px;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--accent-text, var(--accent));
-  font: 700 .78rem var(--font-body);
-  cursor: pointer;
-}
-
-.popup-capacity-edit:hover { background: var(--float-chip); }
-
 /* Below 1024px every tappable control is at least 44px. */
 @media (max-width: 1023px) {
   .capacity-stepper button { width: 44px; height: 44px; }
@@ -843,13 +735,6 @@ body.sim-page #routeSafetyContent .capacity-result-slot { margin-bottom: 16px; }
   body.sim-page .capacity-done { min-height: 44px; }
   .capacity-range { height: 32px; }
   body.sim-page .capacity-modal-close { width: 44px; height: 44px; }
-
-  .popup-capacity-edit { position: relative; }
-  .popup-capacity-edit::after {
-    content: "";
-    position: absolute;
-    inset: calc((44px - 100%) / -2);
-  }
 }
 
 /* Phones: the dialog rises from the bottom, full width. */

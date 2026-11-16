@@ -688,18 +688,16 @@ def run_earthquake():
         start = data.get("start")
         end = data.get("end")
         barangay = data.get("barangay")
-        capacity = _request_site_capacity(data) if end is None else None
         request_summary = {
             "mode": "earthquake",
             "hazard": "Earthquake",
             "barangay": barangay,
             "start": start,
             "end": end,
-            "capacity": capacity,
         }
 
         def work():
-            return simulate_earthquake(start, barangay, end=end, capacity=capacity)
+            return simulate_earthquake(start, barangay, end=end)
 
         return _run_simulation_request("earthquake", request_summary, work, data)
     except Exception as e:

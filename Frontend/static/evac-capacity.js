@@ -1,11 +1,15 @@
-// Evacuation site capacity: how many people are already at each evacuation
-// site (out of CAPACITY) and how many are in the visitor's group. Entered by
-// hand in the capacity dialog, kept in this browser (localStorage) and sent
-// with every run to the evacuation sites (requestFields); the backend passes
-// over a site without room for the group and says which it passed over
-// (osm_routing.pick_site_with_room). No state of its own beyond the counts:
-// it reads script.js globals and fills the setup card, the phone sheet row,
-// the results notice ([data-capacity-result]) and the site pins' popups.
+// Evacuation site capacity: how many people are already at each flood
+// evacuation site (out of CAPACITY), and how many are in the visitor's group.
+// Kept in this browser (localStorage) and sent with every flood run to the
+// evacuation sites (requestFields); the backend passes over a site without
+// room for the group and says which it passed over
+// (osm_routing.pick_site_with_room). Flood runs only: earthquake runs have
+// no site counts. Like the sites themselves, it shows only after a run: a
+// site's count is set in its popup on the map (popupHtml, flood.js) or in
+// the dialog the results notice ([data-capacity-result]) opens, which lists
+// every site with the group size. Both use the same controls
+// ([data-capacity-controls]) and everything follows a change at once. No
+// state of its own beyond the counts: it reads script.js globals.
 (function initEvacCapacity() {
   const CAPACITY = 100;
   // A site this full (share of CAPACITY) shows as filling up.
@@ -34,10 +38,28 @@
     }
   }
 
-  function writeSaved() {
+  // Another tab may have changed the counts since: each write re-reads
+  // first, so it changes only its own value.
+  function writeFresh(change) {
+    const fresh = readSaved();
+    change(fresh);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
     } catch (err) {}
+    Object.assign(saved, fresh);
+  }
+
+  function writeGroup(group) {
+    writeFresh(fresh => { fresh.group = clampGroup(group); });
+  }
+
+  function setCount(siteId, value) {
+    const key = `${barangayKey()}|${siteId}`;
+    const count = clampCount(value);
+    writeFresh(fresh => {
+      if (count) fresh.counts[key] = count;
+      else delete fresh.counts[key];
+    });
   }
 
   function clampCount(value) {
@@ -54,19 +76,8 @@
     return String(selectedBarangay || '').trim().toLowerCase();
   }
 
-  function countKey(siteId) {
-    return `${barangayKey()}|${siteId}`;
-  }
-
   function countFor(siteId) {
-    return clampCount(saved.counts[countKey(siteId)] || 0);
-  }
-
-  function setCount(siteId, value) {
-    const count = clampCount(value);
-    if (count) saved.counts[countKey(siteId)] = count;
-    else delete saved.counts[countKey(siteId)];
-    writeSaved();
+    return clampCount(saved.counts[`${barangayKey()}|${siteId}`] || 0);
   }
 
   function groupSize() {
@@ -94,10 +105,10 @@
     return `<span class="capacity-meter is-${level}" aria-hidden="true"><span style="width:${(occupancy / CAPACITY) * 100}%"></span></span>`;
   }
 
-  // The destination is the evacuation sites, so the run picks the site.
+  // A flood run whose destination is the evacuation sites, so the run picks
+  // the site.
   function isActive() {
-    if (!selectedBarangay || !selectedHazard) return false;
-    if (isEarthquakeMode() && !isEarthquakeBarangaySupported()) return false;
+    if (!selectedBarangay || selectedHazard !== 'Flood') return false;
     return isToEvacuationSite() && !routePins.end;
   }
 
@@ -105,14 +116,12 @@
     return `${selectedHazard}|${selectedBarangay}`;
   }
 
-  // Flood and earthquake have their own site lists (flood.js / earthquake.js
-  // cache them), so the dialog lists the ones the next run would use.
+  // The barangay's flood evacuation sites (flood.js caches them).
   function ensureSites() {
     const wanted = scope();
     if (sitesScope === wanted) return Promise.resolve(sites);
     if (sitesLoading?.scope === wanted) return sitesLoading.promise;
-    const loader = isEarthquakeMode() ? window.earthquakeUI : window.floodHazardUI;
-    const promise = (loader?.loadEvacuationSites(selectedBarangay) || Promise.resolve([]))
+    const promise = (window.floodHazardUI?.loadEvacuationSites(selectedBarangay) || Promise.resolve([]))
       .then(list => {
         if (scope() !== wanted) return sites;
         sites = Array.isArray(list) ? list : [];
@@ -127,58 +136,19 @@
     return promise;
   }
 
-  function roomTally() {
-    const open = sites.filter(site => statusOf(site.id).hasRoom).length;
-    return { open, total: sites.length };
-  }
-
-  function tallyText() {
-    const { open, total } = roomTally();
-    if (!total) return 'Loading sites…';
-    if (!open) return 'All sites are full';
-    return `${open} of ${total} sites have room`;
-  }
-
   // ---- the run request ----
 
-  // Every count this browser has for the barangay, and the group size. Sent
-  // even when empty, so the result always says how full its site is.
+  // Every count this browser has for the barangay, read fresh, and the group
+  // size. Sent even when empty, so the result always says how full its site
+  // is.
   function requestFields() {
+    Object.assign(saved, readSaved());
     const prefix = `${barangayKey()}|`;
     const occupancy = {};
     Object.entries(saved.counts).forEach(([key, count]) => {
       if (key.startsWith(prefix)) occupancy[key.slice(prefix.length)] = clampCount(count);
     });
     return { site_occupancy: occupancy, group_size: saved.group };
-  }
-
-  // ---- setup: one row (desktop panel, phone sheet) that opens the dialog ----
-
-  function sync() {
-    const active = isActive();
-    const card = $('cardCapacity');
-    const row = $('msimCapacityRow');
-    if (card) card.hidden = !active;
-    if (row) row.hidden = !active;
-    if (!active) return;
-    if (sitesScope !== scope()) {
-      ensureSites().then(() => { if (isActive()) renderSetup(); });
-    }
-    renderSetup();
-  }
-
-  // How many sites have room, and a dot per site in its status color.
-  function renderSetup() {
-    const { open, total } = roomTally();
-    const tally = tallyText();
-    const dots = sites.map(site => `<span class="is-${statusOf(site.id).level}"></span>`).join('');
-    document.querySelectorAll('.capacity-entry').forEach(entry => {
-      entry.classList.toggle('is-full', total > 0 && !open);
-      const value = entry.querySelector('[data-capacity-tally]');
-      if (value.textContent !== tally) value.textContent = tally;
-      const dotBox = entry.querySelector('[data-capacity-dots]');
-      if (dotBox.innerHTML !== dots) dotBox.innerHTML = dots;
-    });
   }
 
   // ---- the dialog ----
@@ -189,18 +159,19 @@
 
   async function open(options = {}) {
     const modal = $('evacCapacityModal');
-    if (!modal || !selectedBarangay || !selectedHazard) return;
+    if (!modal || !isActive()) return;
     returnFocusEl = options.event?.currentTarget instanceof HTMLElement
       ? options.event.currentTarget
       : document.activeElement;
+    Object.assign(saved, readSaved());
     await ensureSites();
-    $('evacCapacityScope').textContent = `${selectedBarangay} · ${isEarthquakeMode() ? 'Earthquake' : 'Flood'} evacuation sites`;
+    $('evacCapacityScope').textContent = `${selectedBarangay} · Flood evacuation sites`;
     renderGroup();
     renderSiteList();
     const alert = $('evacCapacityAlert');
     alert.hidden = !options.allFull;
     alert.textContent = options.allFull
-      ? 'Every site you can reach is full, so no route was found. Lower a count below, make your group smaller, or choose your own destination.'
+      ? 'Every site you can reach is full, so no route was found. Make your group smaller, or choose your own destination.'
       : '';
     openedWith = countsSignature();
     syncDoneButton();
@@ -208,6 +179,10 @@
     modal.hidden = false;
     $('evacCapacityBody').scrollTop = 0;
     window.modalFocus?.enter(modal, modal.querySelector('.capacity-modal-close'));
+  }
+
+  function isOpen() {
+    return $('evacCapacityModal')?.hidden === false;
   }
 
   function close() {
@@ -219,9 +194,9 @@
     focusTarget?.focus?.({ preventScroll: true });
   }
 
-  // Done: when a result is showing and the counts changed, the route is
-  // checked again with the new ones (the site may now be full, or a better
-  // one may have room again).
+  // Done: when a result is showing and the group size or the counts changed,
+  // the route is checked again (the site may now be full, or a better one
+  // may have room again).
   function done() {
     const rerun = shouldRerunOnDone();
     close();
@@ -240,7 +215,7 @@
     const button = $('evacCapacityDone');
     if (!button) return;
     const rerun = shouldRerunOnDone();
-    button.textContent = rerun ? 'Save and update route' : 'Done';
+    button.textContent = rerun ? 'Update my route' : 'Done';
     $('evacCapacityRerunNote').hidden = !rerun;
   }
 
@@ -249,6 +224,28 @@
     if (input && document.activeElement !== input) input.value = String(saved.group);
     $('evacCapacityGroupLess').disabled = saved.group <= 1;
     $('evacCapacityGroupMore').disabled = saved.group >= CAPACITY;
+  }
+
+  // The count controls of one site, in the dialog and in its popup: a
+  // slider, a stepper with the number, and Mark full / Mark empty.
+  function controlsHtml(site, inputId) {
+    const name = escapeHtml(site.name);
+    return `<input class="capacity-range" type="range" min="0" max="${CAPACITY}" step="1" data-capacity-range
+        aria-label="People at ${name}">
+      <div class="capacity-site-controls">
+        <div class="capacity-stepper">
+          <button type="button" data-capacity-step="-1" aria-label="One person fewer at ${name}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>
+          </button>
+          <input id="${inputId}" type="number" inputmode="numeric" min="0" max="${CAPACITY}" step="1" data-capacity-input
+            aria-label="People at ${name}">
+          <button type="button" data-capacity-step="1" aria-label="One person more at ${name}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>
+          </button>
+        </div>
+        <span class="capacity-of">of ${CAPACITY}</span>
+        <button type="button" class="capacity-quick" data-capacity-toggle></button>
+      </div>`;
   }
 
   function renderSiteList() {
@@ -260,81 +257,106 @@
     }
     // The site the shown result's routes lead to.
     const chosenId = hasEvacResult() ? getResultCapacity(simData)?.chosen?.id : null;
-    list.innerHTML = sites.map((site, index) => {
-      const id = `capacitySite${index}`;
-      return `<li class="capacity-site" data-site-id="${escapeHtml(site.id)}">
+    list.innerHTML = sites.map((site, index) => `<li class="capacity-site" data-capacity-controls data-site-id="${escapeHtml(site.id)}">
         <div class="capacity-site-top">
-          <label class="capacity-site-name" for="${id}">${escapeHtml(site.name)}${site.id === chosenId ? ' <span class="capacity-site-tag">Your site</span>' : ''}</label>
+          <label class="capacity-site-name" for="capacitySite${index}">${escapeHtml(site.name)}${site.id === chosenId ? ' <span class="capacity-site-tag">Your site</span>' : ''}</label>
           <span class="capacity-pill" data-capacity-pill></span>
         </div>
-        <input class="capacity-range" type="range" min="0" max="${CAPACITY}" step="1" data-capacity-range
-          aria-label="People already at ${escapeHtml(site.name)}">
-        <div class="capacity-site-controls">
-          <div class="capacity-stepper">
-            <button type="button" data-capacity-step="-1" aria-label="One person fewer at ${escapeHtml(site.name)}">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>
-            </button>
-            <input id="${id}" type="number" inputmode="numeric" min="0" max="${CAPACITY}" step="1" data-capacity-input
-              aria-label="People already at ${escapeHtml(site.name)}">
-            <button type="button" data-capacity-step="1" aria-label="One person more at ${escapeHtml(site.name)}">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>
-            </button>
-          </div>
-          <span class="capacity-of">of ${CAPACITY}</span>
-          <button type="button" class="capacity-quick" data-capacity-toggle></button>
-        </div>
-      </li>`;
-    }).join('');
-    list.querySelectorAll('.capacity-site').forEach(row => updateRow(row));
+        ${controlsHtml(site, `capacitySite${index}`)}
+      </li>`).join('');
+    list.querySelectorAll('[data-capacity-controls]').forEach(box => updateControls(box));
   }
 
-  function updateRow(row, { keepInput = false } = {}) {
-    const status = statusOf(row.dataset.siteId);
-    row.className = `capacity-site is-${status.level}`;
-    const pill = row.querySelector('[data-capacity-pill]');
-    pill.textContent = pillText(status);
-    const range = row.querySelector('[data-capacity-range]');
-    range.value = String(status.occupancy);
-    range.style.setProperty('--fill', `${(status.occupancy / CAPACITY) * 100}%`);
-    range.setAttribute('aria-valuetext', `${status.occupancy} of ${CAPACITY} people, ${pillText(status)}`);
-    const input = row.querySelector('[data-capacity-input]');
-    if (!keepInput) input.value = String(status.occupancy);
-    row.querySelector('[data-capacity-step="-1"]').disabled = status.occupancy <= 0;
-    row.querySelector('[data-capacity-step="1"]').disabled = status.occupancy >= CAPACITY;
-    row.querySelector('[data-capacity-toggle]').textContent = status.occupancy >= CAPACITY ? 'Mark empty' : 'Mark full';
-  }
-
-  // Any count or group change: the setup card, the pins and the results
-  // notice follow at once.
-  function afterChange() {
+  // Any count or group change: the pins, the open popup and dialog, and the
+  // results notice follow at once. source: the controls just used, already
+  // up to date (a count being typed stays as typed).
+  function afterChange(source = null) {
     syncDoneButton();
-    if (isActive()) renderSetup();
     refreshMarkers();
+    document.querySelectorAll('[data-capacity-controls]').forEach(box => {
+      if (box !== source) updateControls(box);
+    });
     renderResults();
   }
 
-  function onSiteInput(event) {
-    const row = event.target.closest('.capacity-site');
-    if (!row) return;
-    const siteId = row.dataset.siteId;
-    if (event.target.matches('[data-capacity-range]')) {
-      setCount(siteId, event.target.value);
-      updateRow(row);
-    } else if (event.target.matches('[data-capacity-input]')) {
-      if (event.target.value === '') return;
-      setCount(siteId, event.target.value);
-      updateRow(row, { keepInput: clampCount(event.target.value) === Number(event.target.value) });
-    } else {
-      return;
-    }
+  function setGroup(value) {
+    writeGroup(value);
+    renderGroup();
     afterChange();
   }
 
-  function onSiteClick(event) {
-    const button = event.target.closest('button');
-    const row = button?.closest('.capacity-site');
-    if (!row) return;
-    const siteId = row.dataset.siteId;
+  // ---- the map: a site's popup, where its count can be set too ----
+
+  // With a flood result to the evacuation sites only; a pinned destination
+  // of one's own has nothing to do with site counts.
+  function popupHtml(site) {
+    if (!hasEvacResult()) return '';
+    return `<div class="popup-capacity" data-capacity-controls data-site-id="${escapeHtml(site.id)}">
+      <div class="popup-capacity-top">
+        <label class="popup-capacity-label" for="popupCapacityInput">People here</label>
+        <span class="capacity-pill" data-capacity-pill></span>
+      </div>
+      ${controlsHtml(site, 'popupCapacityInput')}
+      <div class="popup-capacity-alert" data-capacity-alert hidden>
+        <span>Your route's site is now full.</span>
+        <button type="button" class="capacity-result-btn is-primary" onclick="window.evacCapacity.rerun()">Find another site</button>
+      </div>
+    </div>`;
+  }
+
+  // A site's controls (dialog row or popup), after a change; keepInput: the
+  // count being typed.
+  function updateControls(box, { keepInput = false } = {}) {
+    const siteId = box.dataset.siteId;
+    const status = statusOf(siteId);
+    box.classList.remove('is-open', 'is-filling', 'is-tight', 'is-full');
+    box.classList.add(`is-${status.level}`);
+    box.querySelector('[data-capacity-pill]').textContent = pillText(status);
+    const range = box.querySelector('[data-capacity-range]');
+    range.value = String(status.occupancy);
+    range.style.setProperty('--fill', `${(status.occupancy / CAPACITY) * 100}%`);
+    range.setAttribute('aria-valuetext', `${status.occupancy} of ${CAPACITY} people, ${pillText(status)}`);
+    const input = box.querySelector('[data-capacity-input]');
+    if (!keepInput) input.value = String(status.occupancy);
+    box.querySelector('[data-capacity-step="-1"]').disabled = status.occupancy <= 0;
+    box.querySelector('[data-capacity-step="1"]').disabled = status.occupancy >= CAPACITY;
+    box.querySelector('[data-capacity-toggle]').textContent = status.occupancy >= CAPACITY ? 'Mark empty' : 'Mark full';
+    // The popup's own note when it is the route's site that filled up.
+    const alert = box.querySelector('[data-capacity-alert]');
+    if (!alert) return;
+    const chosenId = hasEvacResult() ? getResultCapacity(simData)?.chosen?.id : null;
+    const hideAlert = !(siteId === chosenId && !status.hasRoom);
+    if (alert.hidden !== hideAlert) {
+      alert.hidden = hideAlert;
+      window.floodHazardUI?.relayoutPopup?.();
+    }
+  }
+
+  function controlsOf(target) {
+    return target.closest?.('[data-capacity-controls]') || null;
+  }
+
+  function onControlsInput(event) {
+    const box = controlsOf(event.target);
+    if (!box) return;
+    if (event.target.matches('[data-capacity-range]')) {
+      setCount(box.dataset.siteId, event.target.value);
+      updateControls(box);
+    } else if (event.target.matches('[data-capacity-input]')) {
+      if (event.target.value === '') return;
+      setCount(box.dataset.siteId, event.target.value);
+      updateControls(box, { keepInput: clampCount(event.target.value) === Number(event.target.value) });
+    } else {
+      return;
+    }
+    afterChange(box);
+  }
+
+  function onControlsClick(event) {
+    const button = event.target.closest?.('button');
+    const box = button && controlsOf(button);
+    if (!box) return;
+    const siteId = box.dataset.siteId;
     if (button.matches('[data-capacity-step]')) {
       setCount(siteId, countFor(siteId) + Number(button.dataset.capacityStep));
     } else if (button.matches('[data-capacity-toggle]')) {
@@ -342,70 +364,28 @@
     } else {
       return;
     }
-    updateRow(row);
     afterChange();
   }
 
-  function setGroup(value) {
-    saved.group = clampGroup(value);
-    writeSaved();
-    renderGroup();
-    document.querySelectorAll('#evacCapacitySites .capacity-site').forEach(row => updateRow(row));
-    afterChange();
-  }
-
-  function resetCounts() {
-    const prefix = `${barangayKey()}|`;
-    Object.keys(saved.counts).forEach(key => {
-      if (key.startsWith(prefix)) delete saved.counts[key];
-    });
-    saved.group = 1;
-    writeSaved();
-    renderGroup();
-    renderSiteList();
-    afterChange();
-  }
-
-  // ---- the map: pins and popups ----
+  // ---- the map: pins ----
 
   function refreshMarkers() {
     window.floodHazardUI?.refreshCapacity?.();
-    window.earthquakeUI?.refreshCapacity?.();
-    // The flood legend's full-site row (earthquake.js redoes its own).
-    if (!isEarthquakeMode() && gMap) setFloodLegendContent();
+    // The legend's full-site row.
+    if (isActive() && gMap) setFloodLegendContent();
   }
 
-  // A popup's capacity block. Only while the run picks the site: a pinned
-  // destination of one's own has nothing to do with site counts.
-  function popupHtml(site) {
-    if (!isActive() && !hasEvacResult()) return '';
-    const status = statusOf(site.id);
-    return `<div class="popup-capacity is-${status.level}">
-      <div class="popup-capacity-top">
-        <span>Capacity</span>
-        <strong>${status.occupancy} / ${CAPACITY} people</strong>
-      </div>
-      ${meterHtml(status.occupancy, status.level)}
-      <div class="popup-capacity-foot">
-        <span class="capacity-pill">${escapeHtml(pillText(status))}</span>
-        <button type="button" class="popup-capacity-edit" onclick="openEvacCapacity(event)">Update</button>
-      </div>
-    </div>`;
-  }
-
-  // A pin's look: a site without room for the group shows as full, unless
-  // it is the one the result's routes lead to.
+  // A pin's look, with a result: a site without room for the group shows
+  // as full, unless it is the one the result's routes lead to.
   function isSiteFull(siteId) {
-    return (isActive() || hasEvacResult()) && !statusOf(siteId).hasRoom;
+    return hasEvacResult() && !statusOf(siteId).hasRoom;
   }
 
   // ---- results ----
 
   function getResultCapacity(result) {
-    if (!result) return null;
-    return isEarthquakeSimulationResult(result)
-      ? result.active_summary?.capacity || null
-      : result.capacity || null;
+    if (!result || isEarthquakeSimulationResult(result)) return null;
+    return result.capacity || null;
   }
 
   function joinNames(names) {
@@ -499,7 +479,7 @@
           ${stale || changed
             ? `<button type="button" class="capacity-result-btn is-primary" onclick="window.evacCapacity.rerun()">${stale ? 'Find another site' : 'Check route again'}</button>`
             : ''}
-          <button type="button" class="capacity-result-btn" onclick="openEvacCapacity(event)">Update capacity</button>
+          <button type="button" class="capacity-result-btn" onclick="openEvacCapacity(event)">See sites</button>
         </div>
       </div>
     </section>`;
@@ -524,17 +504,18 @@
 
   // ---- wiring ----
 
-  const list = $('evacCapacitySites');
-  list?.addEventListener('input', onSiteInput);
-  list?.addEventListener('click', onSiteClick);
+  // The popup is rebuilt each time a site is clicked and the dialog's rows
+  // each time it opens, so their controls are reached through the document.
+  document.addEventListener('input', onControlsInput);
+  document.addEventListener('click', onControlsClick);
   // A typed count out of range, or left empty, settles when the field does.
-  list?.addEventListener('change', event => {
-    if (!event.target.matches('[data-capacity-input]')) return;
-    const row = event.target.closest('.capacity-site');
-    setCount(row.dataset.siteId, event.target.value === '' ? 0 : event.target.value);
-    updateRow(row);
+  document.addEventListener('change', event => {
+    const box = controlsOf(event.target);
+    if (!box || !event.target.matches('[data-capacity-input]')) return;
+    setCount(box.dataset.siteId, event.target.value === '' ? 0 : event.target.value);
     afterChange();
   });
+
   $('evacCapacityGroup')?.addEventListener('input', event => {
     if (event.target.value !== '') setGroup(event.target.value);
   });
@@ -549,24 +530,28 @@
   });
   // Before script.js's handler, which would otherwise close what is behind.
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || $('evacCapacityModal')?.hidden !== false) return;
+    if (event.key !== 'Escape' || !isOpen()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     close();
   }, true);
+  // The counts changed in another tab: the results notice, the pins, an
+  // open popup and an open dialog follow.
+  window.addEventListener('storage', event => {
+    if (event.key !== STORAGE_KEY) return;
+    Object.assign(saved, readSaved());
+    if (isOpen()) renderGroup();
+    afterChange();
+  });
 
   window.openEvacCapacity = event => open({ event });
   window.evacCapacity = {
-    CAPACITY,
-    sync,
     open,
     close,
     done,
-    resetCounts,
-    statusOf,
     isSiteFull,
-    pillText,
     popupHtml,
+    syncPopup: box => updateControls(box),
     requestFields,
     renderResults,
     rerun: rerunWithCounts,

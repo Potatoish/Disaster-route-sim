@@ -229,23 +229,26 @@ function mapMoveOptions(options = {}) {
 // floating panels and the controls on the map's top edge, as for the route
 // pins' popups. A popup taller than the gap keeps its top (the site's name)
 // in view.
-function getEvacSitePopupPanOptions() {
+// tall: the popup also holds a site's capacity controls (evac-capacity.js),
+// so it may grow taller before it scrolls.
+function getEvacSitePopupPanOptions({ tall = false } = {}) {
+  const limit = tall ? 470 : 320;
   const covered = window.mobileSim?.getCoveredInsets();
   const room = gMap.getSize().y - (covered?.top || 130) - (covered?.bottom || 16);
   if (covered) {
     return {
-      className: 'location-photo-popup',
+      className: tall ? 'location-photo-popup has-capacity' : 'location-photo-popup',
       autoPanPaddingTopLeft: [(covered.left || 0) + 12, covered.top + 12],
       autoPanPaddingBottomRight: [(covered.right || 0) + 12, covered.bottom + 12],
-      maxHeight: Math.max(140, Math.min(320, room - 92)),
+      maxHeight: Math.max(140, Math.min(limit, room - 92)),
     };
   }
   const panels = getFloatingPanelInsets();
   return {
-    className: 'location-photo-popup',
+    className: tall ? 'location-photo-popup has-capacity' : 'location-photo-popup',
     autoPanPaddingTopLeft: [panels.left + 16, 130],
     autoPanPaddingBottomRight: [panels.right + 16, 16],
-    maxHeight: 320,
+    maxHeight: tall ? Math.min(limit, gMap.getSize().y - 146) : limit,
   };
 }
 

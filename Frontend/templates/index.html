@@ -167,7 +167,7 @@
                   </button>
                   <div class="pin-input-menu" id="endPinMenu" role="menu" hidden>
                     <button type="button" class="evac-btn pin-input-menu-evac" id="endMenuEvacBtn" role="menuitemradio" aria-checked="true" onclick="showEvacuationSites()">
-                      Show the evacuation sites
+                      Go to an evacuation site
                     </button>
                     <button type="button" class="pin-input-menu-item" role="menuitem" onclick="chooseOnMap('end')">
                       <span class="pin-input-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></span>
@@ -182,7 +182,7 @@
                in one place (isEvacChoicePending). #}
             <div class="earthquake-route-panel" id="earthquakeRoutePanel" role="group" aria-label="Destination" hidden>
               <button class="evac-btn" id="showEvacBtn" type="button" onclick="showEvacuationSites()" disabled>
-                Show Evacuation Sites
+                Go to an evacuation site
               </button>
               <button type="button" class="pin-input-menu-item evac-choice-own" id="chooseOwnDestinationBtn" onclick="chooseOnMap('end')" disabled>
                 Choose my own destination
@@ -192,23 +192,6 @@
             <div class="pin-field-help" id="pinFieldHelp">Pin a location inside the barangay. Routes use the nearest mapped road.</div>
           </div>
         </div>
-      </div>
-
-      {# While the run picks the evacuation site: how many sites have room,
-         one line that opens the capacity dialog (evac-capacity.js). Full
-         sites are passed over for the next best. #}
-      <div class="workflow-card capacity-card" id="cardCapacity" hidden>
-        <button class="capacity-entry" type="button" onclick="openEvacCapacity(event)" aria-haspopup="dialog" aria-controls="evacCapacityModal">
-          <span class="capacity-entry-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2A4.5 4.5 0 0 1 21 18.5"/></svg>
-          </span>
-          <span class="capacity-entry-text">
-            <span class="capacity-entry-label">Site capacity</span>
-            <span class="capacity-entry-value" data-capacity-tally></span>
-          </span>
-          <span class="capacity-entry-dots" data-capacity-dots aria-hidden="true"></span>
-          <svg class="capacity-entry-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
-        </button>
       </div>
 
       </div>
@@ -424,22 +407,11 @@
                   </div>
                 </div>
 
-                <button class="capacity-entry mcapacity-row" id="msimCapacityRow" type="button" onclick="openEvacCapacity(event)" aria-haspopup="dialog" aria-controls="evacCapacityModal" hidden>
-                  <span class="capacity-entry-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2A4.5 4.5 0 0 1 21 18.5"/></svg>
-                  </span>
-                  <span class="capacity-entry-text">
-                    <span class="capacity-entry-label">Site capacity</span>
-                    <span class="capacity-entry-value" data-capacity-tally></span>
-                  </span>
-                  <span class="capacity-entry-dots" data-capacity-dots aria-hidden="true"></span>
-                  <svg class="capacity-entry-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
-                </button>
 
                 <div class="msheet-evac-action" id="msimEvacAction" hidden>
                   <button class="mbtn mbtn--primary mbtn--block" id="msimShowEvacBtn" type="button" onclick="showEvacuationSites()">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9M10.5 19v-4.5h3V19"/></svg>
-                    <span id="msimShowEvacLabel">Show evacuation sites</span>
+                    <span id="msimShowEvacLabel">Go to an evacuation site</span>
                   </button>
                   <button class="mbtn mbtn--block" id="msimChooseOwnBtn" type="button" onclick="chooseMobileDestination()">Choose my own destination</button>
                 </div>
@@ -697,7 +669,7 @@
     </header>
 
     <div class="capacity-modal-body" id="evacCapacityBody">
-      <p class="capacity-intro" id="evacCapacityIntro">Enter how many people are already at each site. Each site holds up to 100 people. If the best site for you is full, AGNAS sends you to the next best site with room.</p>
+      <p class="capacity-intro" id="evacCapacityIntro">Set how many people are already at each site. Each site holds up to 100 people. If the best site for you is full, AGNAS sends you to the next best site with room.</p>
       <p class="capacity-alert" id="evacCapacityAlert" role="alert" hidden></p>
 
       <div class="capacity-group">
@@ -722,7 +694,6 @@
     <footer class="capacity-modal-foot">
       <p class="capacity-rerun-note" id="evacCapacityRerunNote" hidden>Your route will be checked again with these counts.</p>
       <div class="capacity-modal-actions">
-        <button type="button" class="capacity-reset" onclick="window.evacCapacity.resetCounts()">Reset counts</button>
         <button type="button" class="route-modal-btn primary capacity-done" id="evacCapacityDone" onclick="window.evacCapacity.done()">Done</button>
       </div>
     </footer>
