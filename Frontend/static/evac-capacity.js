@@ -1,7 +1,10 @@
 // Evacuation site capacity: how many people are already at each flood
 // evacuation site (out of CAPACITY), and how many are in the visitor's group.
-// Kept in this browser (localStorage) and sent with every flood run to the
-// evacuation sites (requestFields); the backend passes over a site without
+// Every site starts at 0 and the group at 1, again for each new simulation
+// (resetCounts, when script.js drops a result); kept for the tab
+// (sessionStorage), so a reload keeps them with the restored result. Sent
+// with every flood run to the evacuation sites (requestFields); the backend
+// passes over a site without
 // room for the group and says which it passed over
 // (osm_routing.pick_site_with_room). Flood runs only: earthquake runs have
 // no site counts. Like the sites themselves, it shows only after a run: a
@@ -16,6 +19,12 @@
   const FILLING_SHARE = 0.8;
   const STORAGE_KEY = 'agnas-evac-capacity';
 
+  // Earlier versions kept the counts for good (localStorage); they start
+  // at 0 now.
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (err) {}
+
   const saved = readSaved();
   let sites = [];
   let sitesScope = '';
@@ -28,7 +37,7 @@
 
   function readSaved() {
     try {
-      const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const value = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
       return {
         group: clampGroup(value.group),
         counts: value.counts && typeof value.counts === 'object' ? value.counts : {},
@@ -38,15 +47,22 @@
     }
   }
 
-  // Another tab may have changed the counts since: each write re-reads
-  // first, so it changes only its own value.
   function writeFresh(change) {
     const fresh = readSaved();
     change(fresh);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
     } catch (err) {}
     Object.assign(saved, fresh);
+  }
+
+  // A new simulation: every site back to 0, the group back to 1.
+  function resetCounts() {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+    } catch (err) {}
+    saved.group = 1;
+    saved.counts = {};
   }
 
   function writeGroup(group) {
@@ -535,21 +551,13 @@
     event.stopImmediatePropagation();
     close();
   }, true);
-  // The counts changed in another tab: the results notice, the pins, an
-  // open popup and an open dialog follow.
-  window.addEventListener('storage', event => {
-    if (event.key !== STORAGE_KEY) return;
-    Object.assign(saved, readSaved());
-    if (isOpen()) renderGroup();
-    afterChange();
-  });
-
   window.openEvacCapacity = event => open({ event });
   window.evacCapacity = {
     open,
     close,
     done,
     isSiteFull,
+    resetCounts,
     popupHtml,
     syncPopup: box => updateControls(box),
     requestFields,

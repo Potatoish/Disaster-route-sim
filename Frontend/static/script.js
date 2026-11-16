@@ -3411,6 +3411,8 @@ function hasFloodSimulationResult() {
 function clearSimulationOutput() {
   if (!simData) return;
   clearSimulationSession();
+  // The next run is a new simulation: its sites start at 0 again.
+  window.evacCapacity?.resetCounts();
 
   const wasEarthquakeResult = isEarthquakeSimulationResult(simData);
   clearRenderedRoutesOnly();
@@ -3450,6 +3452,9 @@ function clearBarangaySelections({ keepBoundary = false } = {}) {
   floodHazardOverlayMode = 'none';
   resetEarthquakeState();
   resetFloodEvacState();
+  // A result dropped here (New simulation, another barangay or disaster):
+  // the next run's sites start at 0 again.
+  if (simData) window.evacCapacity?.resetCounts();
   simData = null;
   selectedRouteFocus = null;
   resetRouteSafetyPanel();
