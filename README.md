@@ -23,6 +23,7 @@ The visitor picks a barangay and a hazard, pins a start point and optionally a d
 - **Routes on the street** — routes start and end where each pin meets the nearest road, never drawn through buildings.
 - **Starting at an evacuation site** — automatic evacuation routing skips sites within 25 metres of the start or sharing its road access point, then ranks the other reachable sites by safety. A destination explicitly pinned by the visitor stays as selected.
 - **Evacuation site capacity (flood)** — each flood evacuation site holds up to 100 people. After a run, the visitor sets how many people are already at a site by clicking it on the map, or for the chosen site in Adjust capacity (with their group size). Every site starts at 0, again for each new simulation. The run sends a resident to the safest site with room for their group, passing over a full one, and the results say which site was full. When a count changes after the run, the results say so and offer to check the route again. Earthquake runs have no site counts.
+- **Road blocks (flood and earthquake)** — after a run, the visitor can block up to 2 roads (desktop: Add road block, then click the road; phones: the center pin, then Block this road). A third block replaces the oldest. AGNAS re-runs with each blocked spot removed from the road network, with no loader, scenario or replay, and shows the new routes in place. A block no route on the map uses changes nothing, so it is only added. If no route gets around a new block, it is not added. Blocks go with the result (New simulation, a moved pin, another disaster or barangay) and appear in the map legend and the PDF.
 - **How the site is chosen, shown step by step** — before the ants' replay of a run to the evacuation sites, the map draws the ants' best route to each site in turn (with its distance, flood or earthquake risk and space left), then ranks the sites safety first and picks the best one with room, crossing out any better-ranked site that is full.
 - **English/Tagalog website** — the homepage and About page offer a language choice; the simulator uses English.
 - **Results** — a verdict (safe route found or not), each route's distance, estimated walking time (at 5 km/h), highest hazard level crossed and turn-by-turn steps, up to five routes on the map, and a downloadable PDF report.
@@ -217,13 +218,13 @@ server, so the live site keeps no record of where visitors pinned, and on for th
 - `GET /about` — About page (with the contact form)
 - `GET /app` — the route simulator
 - `GET /health` — health check (used by Render)
-- `POST /check-pin` — checks a start/destination tapped on the map before a run
+- `POST /check-pin` — checks a start/destination tapped on the map before a run; with `"kind": "road_block"`, checks a road block instead (a road within 20 m) and returns its street
 - `GET /barangay-boundary`
 - `GET /flood-hazard-layers`
-- `POST /simulate` — flood simulation (queued; `{"async": true}` returns a job id). A run to the evacuation sites (`"to_evacuation_site": true`) may add `site_occupancy` (site id → people already there, 0–100) and `group_size`; the result's `capacity` then lists each site's room, the chosen site and any better-ranked sites passed over as full
+- `POST /simulate` — flood simulation (queued; `{"async": true}` returns a job id). A run to the evacuation sites (`"to_evacuation_site": true`) may add `site_occupancy` (site id → people already there, 0–100) and `group_size`; the result's `capacity` then lists each site's room, the chosen site and any better-ranked sites passed over as full. Any run may add `road_blocks` (up to 2 `{lat, lng}`): each closes its road at that spot; the result's `road_blocks` gives them as placed on the roads, and a run that cannot route around them returns `no_route_around_blocks` (or `road_block_invalid` for a block off the roads or where a route starts or ends)
 - `GET /flood/evac-sites`
 - `GET /earthquake/evac-sites`
-- `POST /earthquake/simulate` — earthquake simulation (queued like flood; no site capacity)
+- `POST /earthquake/simulate` — earthquake simulation (queued like flood; no site capacity; takes `road_blocks` like flood)
 - `GET /simulation-jobs/<id>` — a queued or running simulation's state, progress and result
 - `GET /simulation-status` — whether a simulation is running, and the queue length
 - `POST /contact` — About page contact form → email to the team inbox

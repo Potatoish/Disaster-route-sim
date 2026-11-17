@@ -59,6 +59,12 @@ EVACUATION_SITE_START_RADIUS_METERS = 25.0
 # add_road_access_nodes); a meeting point this close to an existing
 # intersection just uses that intersection.
 ROAD_ACCESS_NODE_SNAP_METERS = 1.0
+# A visitor's road blocks (road-blocks.js): at most this many per run; a tap
+# counts only this close to a road; and the cut sits at least this far from
+# either end of its road, so it closes that street, not the intersection.
+MAX_ROAD_BLOCKS = 2
+ROAD_BLOCK_MAX_TAP_METERS = 20.0
+ROAD_BLOCK_END_CLEARANCE_METERS = 2.0
 GRAPH_NETWORK_TYPE = "walk"
 # The walk network normally leaves out access=private roads (gated
 # subdivisions). They are downloaded too, but keep_private_roads_near() lets
@@ -1032,6 +1038,83 @@ def parse_route_pin(value, role):
     }, None
 
 
+class RoadBlockError(ValueError):
+    """A road block that cannot close a road: off the roads, or where a
+    route starts or ends."""
+
+
+def parse_road_blocks(value):
+    """A run request's road blocks, [{"lat", "lng"}, ...], as (lat, lng)
+    pairs rounded to 6 decimals (about 0.1 m, so one block always gives one
+    job key). Returns (blocks, error_message)."""
+    if value in (None, []):
+        return [], None
+    if not isinstance(value, list):
+        return None, "road_blocks must be a list of points"
+    if len(value) > MAX_ROAD_BLOCKS:
+        return None, f"At most {MAX_ROAD_BLOCKS} road blocks can be placed"
+    blocks = []
+    for item in value:
+        try:
+            lat = float(item.get("lat"))
+            lng = float(item.get("lng"))
+        except (AttributeError, TypeError, ValueError):
+            lat = lng = math.nan
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            return None, "A road block has invalid coordinates"
+        blocks.append((round(lat, 6), round(lng, 6)))
+    return blocks, None
+
+
+def locate_road_block(G, lat, lng):
+    """Where a road block tapped at (lat, lng) closes a road: the closest
+    point on the closest road in G (find_road_access_point), kept
+    ROAD_BLOCK_END_CLEARANCE_METERS from the road's ends as
+    add_road_access_nodes cuts it, and that road's own name. None when no
+    road is within ROAD_BLOCK_MAX_TAP_METERS."""
+    access = find_road_access_point(G, lat, lng)
+    if access is None or access["distance"] > ROAD_BLOCK_MAX_TAP_METERS:
+        return None
+    u, v, key = access["edge"]
+    line = get_edge_geometry(G, u, v, G.edges[u, v, key])
+    meters = _line_length_meters(line)
+    clearance = min(0.5, ROAD_BLOCK_END_CLEARANCE_METERS / meters) if meters > 0 else 0.5
+    fraction = min(max(line.project(Point(access["lng"], access["lat"]), normalized=True), clearance), 1.0 - clearance)
+    spot = line.interpolate(fraction, normalized=True)
+    return dict(access, lat=float(spot.y), lng=float(spot.x), street=_edge_street_name(G.edges[u, v, key]))
+
+
+def check_road_block(G, lat, lng):
+    """The instant check of a road block tapped on the map (/check-pin with
+    kind "road_block"): is a road close enough to close, and which."""
+    block = locate_road_block(G, lat, lng)
+    if block is None:
+        return {
+            "valid": False,
+            "reason": "no_road",
+            "message": "Tap on a road to block it.",
+        }
+    return {
+        "valid": True,
+        "street": block["street"],
+        "road_lat": block["lat"],
+        "road_lng": block["lng"],
+    }
+
+
+def no_route_error(message, road_blocks):
+    """A run that found no route. With road blocks the blocks are the reason
+    (the page placed them on a result), so it says so and the page takes the
+    newest one back."""
+    if road_blocks:
+        return {
+            "error": True,
+            "no_route_around_blocks": True,
+            "message": "No route gets around the road blocks.",
+        }
+    return {"error": True, "message": message}
+
+
 def is_point_on_water(lat, lng):
     """Check stored OSM water polygons, independently of road distance.
     This is permanent mapped water, not a flood-hazard classification."""
@@ -1131,6 +1214,12 @@ def check_flood_pin(barangay_name, lat, lng):
         lng,
         f"{boundary['display_name']}'s flood hazard data",
     )
+
+
+def check_flood_road_block(barangay_name, lat, lng):
+    if get_barangay_boundary(barangay_name) is None:
+        raise ValueError(f"No hazard data coverage is configured for '{barangay_name}'")
+    return check_road_block(build_graph(barangay_name), lat, lng)
 
 
 def build_graph(scope_name):
@@ -1253,24 +1342,41 @@ def _line_length_meters(line):
     )
 
 
-def add_road_access_nodes(G, points, annotate_edge):
+def add_road_access_nodes(G, points, annotate_edge, road_blocks=()):
     """A copy of G in which each (lat, lng) in points gets a node where it
     meets the road (find_road_access_point): that road is split in two there,
     so a route starts or ends on the street beside the pin rather than at the
     nearest intersection. Each piece gets its own length, and
     annotate_edge(data) re-derives its hazard from its own geometry. Private
     roads stay only where a point sits among them (keep_private_roads_near).
+
+    road_blocks: (lat, lng) spots a visitor closed. Each splits its road the
+    same way, but never at an intersection (the cut keeps
+    ROAD_BLOCK_END_CLEARANCE_METERS from the road's ends), and that node is
+    then dropped: no route passes the spot, while both halves of the street
+    stay usable and the streets crossing at its ends stay open. The blocks
+    as placed on the roads go in graph.graph["road_blocks"]. Raises
+    RoadBlockError for a block off the roads or where a point meets the road.
     Returns (graph, [node for each point, None where no road was found])."""
     graph = G.copy()
     # Indexes G's roads, not the split ones.
     graph.graph.pop("_edge_index", None)
 
-    nodes = [None] * len(points)
+    stops_in = [(lat, lng, False) for lat, lng in points] + [(lat, lng, True) for lat, lng in road_blocks]
+    nodes = [None] * len(stops_in)
+    # By stop index; each block's spot is set where its cut ends up.
+    placed_blocks = {}
     splits = {}
-    for point_index, (lat, lng) in enumerate(points):
-        access = find_road_access_point(G, lat, lng)
-        if access is None:
-            continue
+    for point_index, (lat, lng, is_block) in enumerate(stops_in):
+        if is_block:
+            access = locate_road_block(G, lat, lng)
+            if access is None:
+                raise RoadBlockError("A road block has to be on a road. Tap on a road to block it.")
+            placed_blocks[point_index] = {"street": access["street"]}
+        else:
+            access = find_road_access_point(G, lat, lng)
+            if access is None:
+                continue
 
         u, v, key = access["edge"]
         reverse_key = _find_reverse_edge_key(G, u, v, get_edge_geometry(G, u, v, G.edges[u, v, key]))
@@ -1279,36 +1385,42 @@ def add_road_access_nodes(G, points, annotate_edge):
             u, v, key, reverse_key = v, u, reverse_key, key
 
         access_point = build_route_point(access["lat"], access["lng"])
-        nodes[point_index] = next(
-            (
-                node for node in (u, v)
-                if point_distance_meters(
-                    access_point,
-                    build_route_point(G.nodes[node]["y"], G.nodes[node]["x"]),
-                ) <= ROAD_ACCESS_NODE_SNAP_METERS
-            ),
-            None,
-        )
+        if not is_block:
+            nodes[point_index] = next(
+                (
+                    node for node in (u, v)
+                    if point_distance_meters(
+                        access_point,
+                        build_route_point(G.nodes[node]["y"], G.nodes[node]["x"]),
+                    ) <= ROAD_ACCESS_NODE_SNAP_METERS
+                ),
+                None,
+            )
         if nodes[point_index] is None:
             split = splits.setdefault((u, v, key), {"reverse_key": reverse_key, "stops": []})
-            split["stops"].append((point_index, access_point))
+            split["stops"].append((point_index, access_point, is_block))
 
         debug_print(
-            f"[OSM] Road access for point {point_index + 1}: {access['distance']:.1f}m from the pin, "
-            f"on edge {u}->{v}" + (f" at node {nodes[point_index]}" if nodes[point_index] is not None else "")
+            f"[OSM] Road access for {'road block' if is_block else 'point'} {point_index + 1}: "
+            f"{access['distance']:.1f}m away, on edge {u}->{v}"
+            + (f" at node {nodes[point_index]}" if nodes[point_index] is not None else "")
         )
 
     next_node = -1
     for (u, v, key), split in splits.items():
         line = _oriented_edge_geometry(G, u, v, G.edges[u, v, key])
-        stops = sorted(
-            (
-                line.project(Point(access_point["lng"], access_point["lat"]), normalized=True),
-                point_index,
-                access_point,
-            )
-            for point_index, access_point in split["stops"]
-        )
+        line_meters = _line_length_meters(line)
+        clearance = min(0.5, ROAD_BLOCK_END_CLEARANCE_METERS / line_meters) if line_meters > 0 else 0.5
+        stops = []
+        for point_index, access_point, is_block in split["stops"]:
+            fraction = line.project(Point(access_point["lng"], access_point["lat"]), normalized=True)
+            if is_block:
+                fraction = min(max(fraction, clearance), 1.0 - clearance)
+                spot = line.interpolate(fraction, normalized=True)
+                access_point = build_route_point(spot.y, spot.x)
+                placed_blocks[point_index].update(lat=round(spot.y, 6), lng=round(spot.x, 6))
+            stops.append((fraction, point_index, access_point))
+        stops.sort(key=lambda stop: stop[:2])
 
         chain = [(u, 0.0)]
         last_point = None
@@ -1341,8 +1453,20 @@ def add_road_access_nodes(G, points, annotate_edge):
                 data["route_cost"] = edge_traversal_cost(data)
                 graph.add_edge(tail, head, **data)
 
-    keep_private_roads_near(graph, [node for node in nodes if node is not None])
-    return graph, nodes
+    point_nodes = nodes[:len(points)]
+    block_nodes = nodes[len(points):]
+    # A block within ROAD_ACCESS_NODE_SNAP_METERS of where a pin or site meets
+    # the road shares its node: dropping it would remove the route's own end.
+    if any(node in point_nodes for node in block_nodes):
+        raise RoadBlockError(
+            "A road block can't go right where a route starts or ends. Move it a little along the road."
+        )
+    # Only the points open their enclave's private roads: a block inside one
+    # opens nothing.
+    keep_private_roads_near(graph, [node for node in point_nodes if node is not None])
+    graph.remove_nodes_from([node for node in block_nodes if graph.has_node(node)])
+    graph.graph["road_blocks"] = [placed_blocks[index] for index in sorted(placed_blocks)]
+    return graph, point_nodes
 
 
 def annotate_flood_edge(data):
@@ -2797,7 +2921,7 @@ def finalize_routes(G, candidate_routes, edge_pheromone):
     )
     return final_routes
 
-def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end_lng, hazard_type="Flood", barangay_name=None):
+def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end_lng, hazard_type="Flood", barangay_name=None, road_blocks=()):
     debug_print("\n" + "=" * 60)
     debug_print("[OSM] SIMULATION START")
     debug_print(f"[OSM] From: {start_name} ({start_lat}, {start_lng})")
@@ -2837,11 +2961,15 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
 
     # Routes run on this copy of the cached graph, where each pin has a node
     # on the street beside it.
-    G, (start_node, end_node) = add_road_access_nodes(
-        G,
-        [(start_lat, start_lng), (end_lat, end_lng)],
-        annotate_flood_edge,
-    )
+    try:
+        G, (start_node, end_node) = add_road_access_nodes(
+            G,
+            [(start_lat, start_lng), (end_lat, end_lng)],
+            annotate_flood_edge,
+            road_blocks,
+        )
+    except RoadBlockError as exc:
+        return {"error": True, "road_block_invalid": True, "message": str(exc)}
     if start_node is None or end_node is None:
         return {
             "error": True,
@@ -2874,13 +3002,11 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
     debug_print(f"[OSM] Phase 3/4 complete in {now - phase_started:.2f}s")
 
     if not candidate_routes:
-        return {
-            "error": True,
-            "message": (
-                "No route was found between the selected locations that stays "
-                "inside the area covered by hazard data."
-            ),
-        }
+        return no_route_error(
+            "No route was found between the selected locations that stays "
+            "inside the area covered by hazard data.",
+            road_blocks,
+        )
 
     phase_started = now
     debug_print("[OSM] Phase 4/4: finalizing route results")
@@ -2910,11 +3036,12 @@ def simulate_osm_routes(start_name, start_lat, start_lng, end_name, end_lat, end
         "total_candidate_routes": len(candidate_routes),
         "aco": aco_stats,
         "routes": final_routes,
+        "road_blocks": G.graph["road_blocks"],
         "replay": build_colony_replay(colony, final_routes[0] if final_routes else None, flood_replay_span_levels),
     }
 
 
-def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_type="Flood", barangay_name=None, capacity=None):
+def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_type="Flood", barangay_name=None, capacity=None, road_blocks=()):
     """Flood routes from the start to whichever of the barangay's flood
     evacuation sites has the best route, ranked like the results. A main
     colony goes to every site reachable by road; the site whose few safest
@@ -2954,11 +3081,15 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
             "message": f"No flood evacuation sites are listed for Brgy. {scope_display_name}.",
         }
 
-    G, access_nodes = add_road_access_nodes(
-        G,
-        [(start_lat, start_lng)] + [(site["lat"], site["lng"]) for site in covered_sites],
-        annotate_flood_edge,
-    )
+    try:
+        G, access_nodes = add_road_access_nodes(
+            G,
+            [(start_lat, start_lng)] + [(site["lat"], site["lng"]) for site in covered_sites],
+            annotate_flood_edge,
+            road_blocks,
+        )
+    except RoadBlockError as exc:
+        return {"error": True, "road_block_invalid": True, "message": str(exc)}
     start_node = access_nodes[0]
     if start_node is None:
         return {
@@ -2985,13 +3116,11 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         if site_nodes.get(site["id"]) in road_distances
     ]
     if not reachable_sites:
-        return {
-            "error": True,
-            "message": (
-                f"No {other}evacuation site can be reached from this start point without "
-                "leaving the area covered by flood hazard data."
-            ),
-        }
+        return no_route_error(
+            f"No {other}evacuation site can be reached from this start point without "
+            "leaving the area covered by flood hazard data.",
+            road_blocks,
+        )
     debug_print(f"[OSM] Road-reachable evacuation sites: {len(reachable_sites)}")
     if not any(site_has_room(site, capacity) for site in reachable_sites):
         return all_sites_full_error(capacity, evacuation_sites, other)
@@ -3044,10 +3173,10 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
     if best_pick is None:
         if site_picks:
             return all_sites_full_error(capacity, evacuation_sites, other)
-        return {
-            "error": True,
-            "message": "No route to an evacuation site was found inside the area covered by hazard data.",
-        }
+        return no_route_error(
+            "No route to an evacuation site was found inside the area covered by hazard data.",
+            road_blocks,
+        )
     for skipped in skipped_full_sites:
         debug_print(f"[OSM] Passed over (full): {skipped['name']} {skipped['occupancy']}/{skipped['capacity']}")
 
@@ -3090,6 +3219,7 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         "total_candidate_routes": len(candidate_routes),
         "aco": aco_stats,
         "routes": final_routes,
+        "road_blocks": G.graph["road_blocks"],
         # The replay follows the chosen site's colony; the others are counted.
         "replay": build_colony_replay(
             colony,

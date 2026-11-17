@@ -23,6 +23,7 @@ from contact_service import (
 )
 from earthquake_service import (
     check_earthquake_pin,
+    check_earthquake_road_block,
     get_earthquake_evacuation_sites,
     simulate_earthquake,
 )
@@ -34,9 +35,11 @@ from osm_routing import (
     BARANGAY_BOUNDARY_FILES,
     build_flood_hazard_layer_payload,
     check_flood_pin,
+    check_flood_road_block,
     get_barangay_boundary,
     get_barangay_boundary_payload,
     get_flood_evacuation_sites,
+    parse_road_blocks,
     parse_site_capacity,
 )
 from simulation_progress import get_progress, reset_progress
@@ -179,11 +182,12 @@ def _mark_simulation_started(mode, request_summary):
         _SIMULATION_STATE["hazard"] = request_summary.get("hazard")
         _SIMULATION_STATE["started_at"] = _utc_now_iso()
         # Anyone can read /simulation-status, so it names the run's barangay
-        # and hazard but never its pins (another visitor's locations).
+        # and hazard but never its pins or road blocks (another visitor's
+        # locations).
         _SIMULATION_STATE["request"] = {
             key: value
             for key, value in request_summary.items()
-            if key not in ("start", "end", "capacity") and value not in (None, "")
+            if key not in ("start", "end", "capacity", "road_blocks") and value not in (None, "")
         }
 
 def _mark_simulation_finished():
@@ -528,11 +532,14 @@ def check_pin():
             "message": "Valid lat and lng are required"
         }), 400
 
+    # kind "road_block": a road block tapped on a result's map, which must
+    # sit on a road (road-blocks.js).
+    is_road_block = data.get("kind") == "road_block"
     try:
         if hazard.lower() == "earthquake":
-            result = check_earthquake_pin(barangay, lat, lng)
+            result = (check_earthquake_road_block if is_road_block else check_earthquake_pin)(barangay, lat, lng)
         else:
-            result = check_flood_pin(barangay, lat, lng)
+            result = (check_flood_road_block if is_road_block else check_flood_pin)(barangay, lat, lng)
     except ValueError as e:
         return jsonify({
             "error": True,
@@ -556,6 +563,10 @@ def _request_site_capacity(data):
     already there; group_size: people coming), or None without them."""
     return parse_site_capacity(data.get("site_occupancy"), data.get("group_size"))
 
+
+def _bad_road_blocks_response(message):
+    return jsonify({"error": True, "message": message}), 400
+
 @app.route("/simulate", methods=["POST"])
 def run_simulation():
     try:
@@ -568,6 +579,9 @@ def run_simulation():
         to_evacuation_site = data.get("to_evacuation_site") is True
         end = None if to_evacuation_site else data.get("end")
         capacity = _request_site_capacity(data) if to_evacuation_site else None
+        road_blocks, blocks_error = parse_road_blocks(data.get("road_blocks"))
+        if blocks_error:
+            return _bad_road_blocks_response(blocks_error)
         request_summary = {
             "mode": "flood",
             "hazard": hazard,
@@ -576,12 +590,15 @@ def run_simulation():
             "end": end,
             "to_evacuation_site": to_evacuation_site,
             "capacity": capacity,
+            "road_blocks": road_blocks,
         }
 
         def work():
             if to_evacuation_site:
-                return simulate_to_evacuation_site(start, hazard, barangay=barangay, capacity=capacity)
-            return simulate(start, end, hazard, barangay=barangay)
+                return simulate_to_evacuation_site(
+                    start, hazard, barangay=barangay, capacity=capacity, road_blocks=road_blocks,
+                )
+            return simulate(start, end, hazard, barangay=barangay, road_blocks=road_blocks)
 
         return _run_simulation_request("flood", request_summary, work, data)
     except Exception as e:
@@ -688,16 +705,20 @@ def run_earthquake():
         start = data.get("start")
         end = data.get("end")
         barangay = data.get("barangay")
+        road_blocks, blocks_error = parse_road_blocks(data.get("road_blocks"))
+        if blocks_error:
+            return _bad_road_blocks_response(blocks_error)
         request_summary = {
             "mode": "earthquake",
             "hazard": "Earthquake",
             "barangay": barangay,
             "start": start,
             "end": end,
+            "road_blocks": road_blocks,
         }
 
         def work():
-            return simulate_earthquake(start, barangay, end=end)
+            return simulate_earthquake(start, barangay, end=end, road_blocks=road_blocks)
 
         return _run_simulation_request("earthquake", request_summary, work, data)
     except Exception as e:

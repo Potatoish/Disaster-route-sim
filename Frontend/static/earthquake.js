@@ -506,6 +506,7 @@
     body.innerHTML = `
       ${routeLegend}
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
+        ${showRouteKeys ? window.roadBlocks?.legendRowHtml() || '' : ''}
         ${window.buildPinLegendRow('start')}
         ${!window.isToEvacuationSite?.() ? window.buildPinLegendRow('end')
           : showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen open area') : ''}

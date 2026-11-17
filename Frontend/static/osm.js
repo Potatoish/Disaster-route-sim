@@ -622,6 +622,11 @@ function attachRouteClick(hitLayer, route) {
   hitLayer.on('click', ev => {
     // Not also a tap on the map underneath (which can drop a pin).
     L.DomEvent.stopPropagation(ev);
+    // While a road block is being placed, the line is the road to block.
+    if (window.roadBlocks?.isPlacing()) {
+      window.onMapClickForPin?.(ev);
+      return;
+    }
     window.toggleRouteFocus?.(route.display_route_no, route.category);
   });
 }

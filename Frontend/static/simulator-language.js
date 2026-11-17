@@ -342,6 +342,27 @@ window.agnasSimulatorCopy.push(
   ['No evacuation sites are listed for this barangay.', 'Walang nakalistang evacuation site para sa barangay na ito.'],
 );
 
+// Road blocks (road-blocks.js).
+window.agnasSimulatorCopy.push(
+  ['Road blocks', 'Mga harang sa daan'], ['Road block', 'Harang sa daan'],
+  ['Add road block', 'Magdagdag ng harang'], ['Add a road block', 'Magdagdag ng harang sa daan'],
+  ['Is a street blocked? Add it, and AGNAS finds another way.', 'May saradong kalsada? Idagdag ito, at hahanap ang AGNAS ng ibang daan.'],
+  ['Click the blocked road on the map.', 'Pindutin sa mapa ang kalsadang may harang.'],
+  ['Move the map so the pin sits on the blocked road.', 'Ilipat ang mapa upang matapat ang pin sa kalsadang may harang.'],
+  ['Block this road', 'Harangan ang kalsadang ito'], ['Remove', 'Alisin'],
+  ['Checking that road…', 'Sinusuri ang kalsada…'],
+  ['Finding a way around the block…', 'Naghahanap ng daan palibot sa harang…'],
+  ['Updating the route…', 'Ina-update ang ruta…'], ['Route updated.', 'Na-update ang ruta.'],
+  ['None of the routes use this road, so they stay the same.', 'Walang rutang dumadaan sa kalsadang ito, kaya walang nagbago.'],
+  ["No route gets around that block, so it wasn't added.", 'Walang rutang makakaiwas sa harang na iyon, kaya hindi ito idinagdag.'],
+  ['No route gets around these blocks.', 'Walang rutang makakaiwas sa mga harang na ito.'],
+  ['No route gets around the road blocks.', 'Walang rutang makakaiwas sa mga harang.'],
+  ['Tap on a road to block it.', 'Pumili ng kalsada para harangan.'],
+  ['A road block has to be on a road. Tap on a road to block it.', 'Dapat nasa kalsada ang harang. Pumili ng kalsada para harangan.'],
+  ["A road block can't go right where a route starts or ends. Move it a little along the road.", 'Hindi puwedeng ilagay ang harang mismo sa simula o dulo ng ruta. Iusog ito nang kaunti sa kalsada.'],
+  ['Unnamed road', 'Kalsadang walang pangalan'],
+);
+
 // A pin's label inside a sentence: street names stay as they are, the
 // fallback labels ("Your location", "Your destination") are translated.
 const agnasPlace = (t, name) => {
@@ -352,6 +373,13 @@ const agnasPlace = (t, name) => {
 const agnasLinked = word => (/[aeiou]$/i.test(word) ? `${word}ng` : /n$/i.test(word) ? `${word}g` : `${word} na`);
 
 window.agnasSimulatorPatterns = [
+  // Road blocks (road-blocks.js).
+  [/^(\d) of 2$/, (t, n) => `${n} sa 2`],
+  [/^Remove the road block on (.+)$/, (t, name) => `Alisin ang harang sa ${t(name)}`],
+  [/^Road block on (.+)$/, (t, name) => `Harang sa ${t(name)}`],
+  [/^Replaced the block on (.+)\.$/, (t, name) => `Pinalitan ang harang sa ${t(name)}.`],
+  [/^Tap on a road inside Brgy\. (.+)\.$/, (t, name) => `Pumili ng kalsada sa loob ng Brgy. ${name}.`],
+  [/^Couldn't update the route: (.+)$/, (t, message) => `Hindi ma-update ang ruta: ${t(message)}`],
   // Evacuation site capacity (evac-capacity.js).
   [/^(\d+) left$/, (t, n) => `${n} pa ang kasya`],
   [/^No room for (\d+)$/, (t, n) => `Walang puwang para sa ${n}`],

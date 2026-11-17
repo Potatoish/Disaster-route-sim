@@ -1,0 +1,265 @@
+/* ---------- ROAD BLOCKS (road-blocks.js) ----------
+   The results' "Road blocks" section (desktop panel and the phone sheet's
+   details), the markers on the map, and the phone's placing step. */
+
+.road-blocks-slot { margin-top: 14px; }
+
+.road-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--float-line);
+}
+
+.road-blocks-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.road-blocks-title {
+  color: var(--text);
+  font: 700 .84rem var(--font-body);
+}
+
+.road-blocks-count {
+  color: var(--muted);
+  font: 600 .75rem var(--font-body);
+}
+
+.road-blocks-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+.road-blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.road-block-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 4px 0 12px;
+  border-radius: 12px;
+  background: var(--float-chip);
+  color: var(--text);
+  font: 600 .84rem var(--font-body);
+}
+
+.road-block-item.is-pending { opacity: .6; }
+
+.road-block-swatch {
+  display: inline-flex;
+  flex: none;
+  width: 22px;
+  height: 12px;
+}
+
+.road-block-swatch svg { width: 100%; height: 100%; }
+
+.road-block-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.road-block-remove {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.road-block-remove svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.road-block-remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.road-blocks-add {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--float-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  font: 700 .8rem var(--font-body);
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+
+.road-blocks-add:hover:not(:disabled),
+.road-blocks-add.is-cancel { background: var(--float-chip); }
+
+.road-blocks-add.is-cancel { color: var(--text); }
+
+:is(.road-blocks-add, .road-block-remove):disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+:is(.road-blocks-add, .road-block-remove):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.road-blocks-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+.road-blocks-status:empty { display: none; }
+
+.road-blocks-status.is-error { color: var(--red); font-weight: 600; }
+
+body.sim-page.dark .road-blocks-status.is-error { color: #f87171; }
+
+.road-blocks.is-busy .road-blocks-status::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--muted);
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: roadBlockSpin .8s linear infinite;
+}
+
+@keyframes roadBlockSpin { to { transform: rotate(360deg); } }
+
+/* ---------- on the map ---------- */
+
+.road-block-legend-swatch {
+  display: inline-flex;
+  flex: none;
+  width: 18px;
+  height: 10px;
+}
+
+.road-block-legend-swatch svg { width: 100%; height: 100%; }
+
+.road-block-marker {
+  background: none;
+  border: 0;
+}
+
+.road-block-marker svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, .35));
+}
+
+.road-block-marker.is-pending { opacity: .55; }
+
+/* Desktop: the next click places the block. */
+#map.road-block-placing,
+#map.road-block-placing.leaflet-grab,
+#map.road-block-placing .leaflet-interactive { cursor: crosshair; }
+
+/* While a re-run looks for a way around, the routes fade back. */
+body.sim-page #map .leaflet-overlay-pane .route-line { transition: opacity .2s ease; }
+
+body.sim-page #map.road-block-rerouting .leaflet-overlay-pane .route-line { opacity: .3; }
+
+body.sim-page #map.road-block-rerouting .leaflet-overlay-pane .route-hit-area { pointer-events: none; }
+
+.road-block-popup .leaflet-popup-content { margin: 12px 14px; }
+
+.road-block-popup-body .popup-title { margin-bottom: 2px; }
+
+.road-block-popup-body p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.road-block-popup-remove {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--float-line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  font: 700 .8rem var(--font-body);
+  cursor: pointer;
+}
+
+.road-block-popup-remove:hover { background: var(--float-chip); }
+
+/* ---------- the phone's placing step (mobile-sim.js) ---------- */
+
+.msim-block-title {
+  margin: 2px 0 4px;
+  color: var(--text);
+  font: 700 1.02rem var(--font-body);
+}
+
+.msim-block-title:focus { outline: none; }
+
+.msim-block-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: .86rem;
+  line-height: 1.45;
+}
+
+.msim-block-error {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: .84rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+body.sim-page.dark .msim-block-error { color: #f87171; }
+
+#msimBlockActions { margin-top: 12px; }
+
+/* Below 1024px every tappable control is at least 44px. */
+@media (max-width: 1023px) {
+  .road-blocks-add,
+  .road-block-popup-remove { min-height: 44px; }
+
+  .road-block-item { min-height: 48px; }
+
+  .road-block-remove { width: 44px; height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.sim-page #map .leaflet-overlay-pane .route-line { transition: none; }
+  .road-blocks.is-busy .road-blocks-status::before { animation: none; }
+}

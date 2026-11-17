@@ -2374,6 +2374,9 @@ function buildBackendRequestError(response, data, fallbackMessage) {
   error.backendCode = data?.code || '';
   // Every evacuation site in reach is full (evac-capacity.js opens its dialog).
   error.capacityFull = data?.capacity_full === true;
+  // A road block left no way through, or cannot close a road (road-blocks.js).
+  error.noRouteAroundBlocks = data?.no_route_around_blocks === true;
+  error.roadBlockInvalid = data?.road_block_invalid === true;
   return error;
 }
 
@@ -3241,6 +3244,7 @@ async function placeRoutePin(role, lat, lng) {
 function onMapClickForPin(event) {
   // The phone layout sets pins with its center pin instead.
   if (window.mobileSim?.handleMapTap(event.latlng)) return;
+  if (window.roadBlocks?.handleMapClick(event.latlng)) return;
   if (!pinPlacementRole || !canPlaceRoutePins()) return;
   placeRoutePin(pinPlacementRole, event.latlng.lat, event.latlng.lng);
 }
@@ -3453,6 +3457,7 @@ function setFloodLegendContent() {
   body.innerHTML = `
     ${showRouteKeys ? buildRouteLegendRows() : ''}
     <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
+      ${showRouteKeys ? window.roadBlocks?.legendRowHtml() || '' : ''}
       ${buildPinLegendRow('start')}
       ${areFloodEvacSitesShown() ? buildFloodEvacLegendRows() : isFloodToEvacSite() ? '' : buildPinLegendRow('end')}
       ${buildBoundaryLegendRow()}
@@ -4341,7 +4346,7 @@ async function setFloodHazardOverlayMode(modeKey) {
   }
 }
 
-async function renderActiveSimulationRoutes({ fadeIn = true, flySeconds = 0 } = {}) {
+async function renderActiveSimulationRoutes({ fadeIn = true, flySeconds = 0, onlyIfOutOfView = false } = {}) {
   if (!simData || !Array.isArray(simData.routes)) return;
 
   const isEarthquakeResult = isEarthquakeSimulationResult(simData);
@@ -4378,7 +4383,7 @@ async function renderActiveSimulationRoutes({ fadeIn = true, flySeconds = 0 } = 
   } else {
     await syncFloodHazardOverlay(selectedBarangay);
   }
-  refitMapToCurrentRoute({ flySeconds });
+  refitMapToCurrentRoute({ flySeconds, onlyIfOutOfView });
 }
 
 // Fits the map to the flood evacuation sites and the pins set so far.
@@ -4589,11 +4594,29 @@ async function runSimulation() {
     // And the flood intro's scenario (flood-intro.js caches it too).
     if (!prefersReducedMotion()) window.floodIntro?.load(selectedBarangay).catch(() => {});
   }
+  const { endpoint, payload, label } = buildSimulationRequest();
+
+  await followSimulationJob(() => submitSimulationJob(endpoint, payload), {
+    label,
+    isEarthquakeRun,
+    pinsKey: getRoutePinsKey(),
+    session: buildSimulationSessionBase(isEarthquakeRun),
+  });
+}
+
+// The run request for the current setup. roadBlocks: the result's road
+// blocks (road-blocks.js) unless given.
+function buildSimulationRequest({ roadBlocks = null } = {}) {
+  const isEarthquakeRun = isEarthquakeMode();
+  const blocks = roadBlocks
+    ? (roadBlocks.length ? { road_blocks: roadBlocks.map(({ lat, lng }) => ({ lat, lng })) } : {})
+    : window.roadBlocks?.requestFields() || {};
   const [endpoint, payload, label] = isEarthquakeRun
     ? ['/earthquake/simulate', {
         start: buildPinRequestPoint('start'),
         end: earthquakeToEvacSite ? null : buildPinRequestPoint('end'),
         barangay: selectedBarangay,
+        ...blocks,
       }, 'Earthquake simulation']
     : isFloodToEvacSite() && !routePins.end
     ? ['/simulate', {
@@ -4603,15 +4626,40 @@ async function runSimulation() {
         barangay: selectedBarangay,
         // How full each site is: a full one is passed over (evac-capacity.js).
         ...window.evacCapacity?.requestFields(),
+        ...blocks,
       }, 'Simulation']
-    : ['/simulate', { start: buildPinRequestPoint('start'), end: buildPinRequestPoint('end'), hazard: selectedHazard, barangay: selectedBarangay }, 'Simulation'];
+    : ['/simulate', {
+        start: buildPinRequestPoint('start'),
+        end: buildPinRequestPoint('end'),
+        hazard: selectedHazard,
+        barangay: selectedBarangay,
+        ...blocks,
+      }, 'Simulation'];
+  return { endpoint, payload, label, isEarthquakeRun };
+}
 
-  await followSimulationJob(() => submitSimulationJob(endpoint, payload), {
-    label,
-    isEarthquakeRun,
-    pinsKey: getRoutePinsKey(),
-    session: buildSimulationSessionBase(isEarthquakeRun),
-  });
+// Each run the page starts; a quiet re-run's result is shown only if no
+// other run started meanwhile.
+let simulationRunToken = 0;
+
+// A re-run for the road blocks (road-blocks.js): no loader, scenario or
+// replay, and the map is not held; the results stay up until the new ones
+// replace them. Resolves with the new result, or null when the setup moved
+// on meanwhile (another run, a pin moved, New simulation). Throws the
+// backend's error (buildBackendRequestError) when the run fails.
+async function rerunForRoadBlocks(roadBlocks) {
+  const { endpoint, payload, isEarthquakeRun } = buildSimulationRequest({ roadBlocks });
+  const token = ++simulationRunToken;
+  const pinsKey = getRoutePinsKey();
+  const session = buildSimulationSessionBase(isEarthquakeRun);
+  const isCurrent = () => token === simulationRunToken && pinsKey === getRoutePinsKey() && !!simData;
+  const job = await submitSimulationJob(endpoint, payload);
+  const result = await waitForSimulationJob(job, () => {});
+  if (!isCurrent()) return null;
+  delete result.replay;
+  saveSimulationSession({ ...session, jobId: job.job_id, result });
+  await showSimulationResult(result, { isEarthquakeRun, pinsKey, quiet: true });
+  return simData;
 }
 
 // The loader's title and bar while the backend works on the run: its place
@@ -4666,6 +4714,8 @@ async function followSimulationJob(startJob, context) {
     }, delay);
   };
 
+  simulationRunToken += 1;
+  window.roadBlocks?.stopPlacing();
   resetLoaderState();
   loader.classList.add('show');
   setSimulationInProgress(true);
@@ -5110,8 +5160,11 @@ function endSimulationReplay(controller, { keepRoute = false } = {}) {
   document.getElementById('appShell')?.classList.remove('aco-replaying', 'aco-replay-card', 'aco-replay-walking');
 }
 
-// Puts a finished run's result on the map and in the panels.
-async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
+// Puts a finished run's result on the map and in the panels. quiet: a road
+// block re-run (rerunForRoadBlocks), with no loader to drive, which keeps
+// the earthquake lens on screen and moves the camera only if the new route
+// leaves the view.
+async function showSimulationResult(result, { isEarthquakeRun, pinsKey, quiet = false }) {
   const statusTxt = document.getElementById('statusTxt');
 
   if (isEarthquakeRun) {
@@ -5127,7 +5180,9 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
   simData = result;
   selectedRouteFocus = null;
   if (isEarthquakeRun) {
-    hydrateActiveEarthquakeView(result.active_view || 'overall');
+    hydrateActiveEarthquakeView(quiet && result.views?.[activeEarthquakeView]
+      ? activeEarthquakeView
+      : result.active_view || 'overall');
     earthquakeToEvacSite = !isCustomEarthquakeResult(result);
     earthquakeEvacSites = Array.isArray(result.evacuation_sites) ? result.evacuation_sites : earthquakeEvacSites;
     earthquakeEvacSitesVisible = earthquakeEvacSites.length > 0;
@@ -5138,8 +5193,10 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
     syncRoutePinFields();
   }
 
-  setLoaderStep('draw', 92);
-  statusTxt.textContent = 'Opening results…';
+  if (!quiet) {
+    setLoaderStep('draw', 92);
+    statusTxt.textContent = 'Opening results…';
+  }
   const shell = document.getElementById('appShell');
   const layoutBefore = shell?.className;
   renderRouteSafetyPanel(simData);
@@ -5160,6 +5217,7 @@ async function showSimulationResult(result, { isEarthquakeRun, pinsKey }) {
   await renderActiveSimulationRoutes({
     fadeIn: !replayRouteOnMap,
     flySeconds: replayRouteOnMap ? RESULTS_HANDOFF_FLY_SECONDS : 0,
+    onlyIfOutOfView: quiet,
   });
   applyRouteFocusState(null);
   clearReplayRoute();
@@ -5308,6 +5366,7 @@ function resetRouteSafetyPanel() {
   closeRouteListModal();
   window.mobileSim?.clearResults();
   window.evacCapacity?.renderResults();
+  window.roadBlocks?.sync();
 }
 
 function getRouteTurnSteps(route) {
@@ -5545,6 +5604,7 @@ function renderRouteSafetyPanel(result) {
   content.innerHTML = `
     <div class="capacity-result-slot" data-capacity-result="banner" hidden></div>
     ${buildResultRouteNavigation(routes)}
+    <div class="road-blocks-slot" data-road-blocks hidden></div>
     <section data-current-route-summary></section>
     <div class="safety-notes"><em>Note:</em><ul>${notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}<li>${sourceNoteHtml}</li></ul>
       <div class="safety-disclaimer">
@@ -5555,6 +5615,7 @@ function renderRouteSafetyPanel(result) {
     </div>`;
   window.mobileSim?.renderResults(result);
   window.evacCapacity?.renderResults();
+  window.roadBlocks?.sync();
   syncResultRouteNavigation();
 }
 
@@ -6143,8 +6204,10 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
     ? { lat: Number(route.destination_lat), lng: Number(route.destination_lng) }
     : points[points.length - 1];
 
-  const lats = [...points, startPin, endPin].map(p => p.lat);
-  const lngs = [...points, startPin, endPin].map(p => p.lng);
+  // The road blocks (road-blocks.js) stay in the frame too.
+  const framed = [...points, startPin, endPin, ...(window.roadBlocks?.current() || [])];
+  const lats = framed.map(p => p.lat);
+  const lngs = framed.map(p => p.lng);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
@@ -6208,6 +6271,7 @@ async function renderBestRouteMapCanvas(route, labels = {}, { skipBasemap = fals
   const [ex, ey] = project(endPin);
   drawReportPin(ctx, sx, sy, REPORT_PIN_COLORS.start.color, labels.start || 'Start');
   drawReportPin(ctx, ex, ey, (labels.endPin || REPORT_PIN_COLORS.end).color, labels.end || 'Destination');
+  window.roadBlocks?.drawOnReport(ctx, project);
 
   return { canvas, usedBasemap };
 }
@@ -6228,7 +6292,7 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
   doc.setFont('helvetica', 'normal');
 
   const sized = items.map(item => {
-    const swatch = item.kind === 'line' ? 22 : ['area', 'hatch', 'dashed'].includes(item.kind) ? 12 : 10;
+    const swatch = item.kind === 'line' ? 22 : ['area', 'hatch', 'dashed', 'block'].includes(item.kind) ? 12 : 10;
     return { ...item, swatch, itemWidth: swatch + swatchGap + doc.getTextWidth(item.label) };
   });
   let row = 0;
@@ -6297,6 +6361,16 @@ function drawReportMapLegend(doc, items, { x, y, width }) {
       doc.setLineDashPattern([2, 1.5], 0);
       doc.roundedRect(item.left, cy - 4.5, item.swatch, 9, 1.5, 1.5, 'S');
       doc.setLineDashPattern([], 0);
+    } else if (item.kind === 'block') {
+      // A road block, as on the map: a barrier striped red and white.
+      doc.setFillColor('#dc2626');
+      doc.roundedRect(item.left, cy - 3, item.swatch, 6, 1, 1, 'F');
+      doc.setDrawColor('#ffffff');
+      doc.setLineWidth(1);
+      [2, 5.5, 9].forEach(offset => doc.line(item.left + offset, cy + 3, item.left + offset + 2, cy - 3));
+      doc.setDrawColor('#7f1d1d');
+      doc.setLineWidth(0.6);
+      doc.roundedRect(item.left, cy - 3, item.swatch, 6, 1, 1, 'S');
     } else {
       doc.setFillColor(item.color);
       doc.setDrawColor(item.edge);
@@ -6460,6 +6534,7 @@ async function downloadSimulationReport() {
       { kind: 'line', color: routeColor, edge: getRouteEdgeColor(routeColor), label: getTopRouteTitle(best) },
       { kind: 'pin', ...REPORT_PIN_COLORS.start, label: 'Start' },
       { kind: 'pin', ...endPin, label: endIsChosenSite ? getChosenSiteLabel(isEq) : 'Destination' },
+      ...(window.roadBlocks?.current().length ? [{ kind: 'block', label: 'Road block' }] : []),
       ...(hazardLayer?.legend || []).map(item => ({ kind: 'area', group: 'hazard', ...item })),
     ], { x: margin, y, width: mapWidth }) + 12;
 

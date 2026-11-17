@@ -15,8 +15,10 @@ from osm_routing import (
     NUM_ITERATIONS,
     SITE_PICK_ROUTES_PER_SITE,
     UNKNOWN_HAZARD_LEVEL,
+    RoadBlockError,
     add_alternative_routes,
     add_road_access_nodes,
+    check_road_block,
     build_colony_replay,
     build_elimination_reason,
     build_hazard_coverage_area,
@@ -35,6 +37,7 @@ from osm_routing import (
     hydrate_route_edge_records,
     is_point_in_hazard_coverage,
     label_display_routes,
+    no_route_error,
     parse_route_pin,
     path_to_coords,
     resolve_route_edge_records,
@@ -239,14 +242,14 @@ def _area_wide_high_risk(base_graph, view_key):
     }
 
 
-def _add_earthquake_road_access_nodes(base_graph, points, dataset):
+def _add_earthquake_road_access_nodes(base_graph, points, dataset, road_blocks=()):
     def annotate_edge(edge_data):
         # A piece of a road kept inside the coverage area is inside it too;
         # only a missing layer reading takes that back.
         edge_data["hazard_coverage"] = True
         _stamp_earthquake_hazards(edge_data, edge_data["geometry"], dataset)
 
-    return add_road_access_nodes(base_graph, points, annotate_edge)
+    return add_road_access_nodes(base_graph, points, annotate_edge, road_blocks)
 
 
 def _clone_graph_for_view(base_graph, view_key):
@@ -593,7 +596,13 @@ def check_earthquake_pin(barangay_name, lat, lng):
     )
 
 
-def simulate_earthquake(start, barangay_name, end=None):
+def check_earthquake_road_block(barangay_name, lat, lng):
+    if not is_supported_earthquake_barangay(barangay_name):
+        raise ValueError(_unsupported_earthquake_scope_message())
+    return check_road_block(_get_earthquake_graph(get_earthquake_dataset(barangay_name)), lat, lng)
+
+
+def simulate_earthquake(start, barangay_name, end=None, road_blocks=()):
     if not start:
         return {
             "error": True,
@@ -665,12 +674,16 @@ def simulate_earthquake(start, barangay_name, end=None):
             site for site in dataset["evacuation_sites"]
             if is_point_in_hazard_coverage(base_graph, site["lat"], site["lng"])
         ]
-        routing_graph, access_nodes = _add_earthquake_road_access_nodes(
-            base_graph,
-            [(start_location["lat"], start_location["lng"])]
-            + [(site["lat"], site["lng"]) for site in covered_sites],
-            dataset,
-        )
+        try:
+            routing_graph, access_nodes = _add_earthquake_road_access_nodes(
+                base_graph,
+                [(start_location["lat"], start_location["lng"])]
+                + [(site["lat"], site["lng"]) for site in covered_sites],
+                dataset,
+                road_blocks,
+            )
+        except RoadBlockError as exc:
+            return {"error": True, "road_block_invalid": True, "message": str(exc)}
         start_node = access_nodes[0]
         site_nodes = {
             site["id"]: node
@@ -691,15 +704,15 @@ def simulate_earthquake(start, barangay_name, end=None):
             else []
         )
         if not evaluated_sites:
-            return {
-                "error": True,
-                "message": (
+            return no_route_error(
+                (
                     "No route can reach your destination without leaving the area covered by earthquake hazard data."
                 ) if end_location else (
                     f"No {other}evacuation site can be reached from this start point without "
                     "leaving the area covered by earthquake hazard data."
                 ),
-            }
+                road_blocks,
+            )
 
         debug_print(f"[EQ] Road-reachable evacuation sites: {len(evaluated_sites)}")
         for site in evaluated_sites:
@@ -794,6 +807,7 @@ def simulate_earthquake(start, barangay_name, end=None):
             "earthquake_scenario": dataset["scenario"],
             "active_view": REPLAY_VIEW,
             "views": views,
+            "road_blocks": routing_graph.graph["road_blocks"],
             "replay": replay,
         }
         now = time.perf_counter()

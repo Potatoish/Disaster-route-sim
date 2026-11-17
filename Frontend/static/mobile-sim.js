@@ -188,8 +188,7 @@
 
   function isCenterPinShown(height = state.height) {
     return isActive()
-      && state.mode === 'setup'
-      && !!getPinRole()
+      && ((state.mode === 'setup' && !!getPinRole()) || state.mode === 'block')
       && getMapRoom(height) >= PIN_MIN_ROOM;
   }
 
@@ -230,6 +229,7 @@
 
   function getPeekEnd() {
     if (state.mode === 'results') return $('msimResultActions');
+    if (state.mode === 'block') return $('msimBlockActions');
     if (state.mode === 'replay') return $('msimReplay').querySelector('.aco-replay-foot');
     if (!selectedHazard) return $('msimHazardSection');
     const help = $('msimSetupHelp');
@@ -426,16 +426,21 @@
     const img = $('msimCenterPinImg');
     if (!pin || !img) return;
 
-    const role = getPinRole();
+    // A road block being placed (road-blocks.js) has its own pin.
+    const role = state.mode === 'block' ? 'block' : getPinRole();
     const shown = !!role && isCenterPinShown();
     if (shown) {
       if (img.dataset.role !== role) {
-        img.src = makeRouteEndpointPinIcon(role).options.iconUrl;
+        img.src = role === 'block'
+          ? window.roadBlocks.centerPinIconUrl()
+          : makeRouteEndpointPinIcon(role).options.iconUrl;
         img.dataset.role = role;
       }
       shell.style.setProperty('--msim-pin-y', `${getPinY() + getMapTop()}px`);
       shell.style.setProperty('--msim-pin-x', `${getPinX() + getMapLeft()}px`);
-      pin.classList.toggle('is-checking', routePins[role]?.status === 'checking');
+      pin.classList.toggle('is-checking', role === 'block'
+        ? !!window.roadBlocks?.isBusy()
+        : routePins[role]?.status === 'checking');
     }
     pin.hidden = !shown;
   }
@@ -557,13 +562,15 @@
       state.syncFrame = null;
     }
     if (!isActive()) return;
-    if (state.mode === 'results' && !simData) state.mode = 'setup';
+    if ((state.mode === 'results' || state.mode === 'block') && !simData) state.mode = 'setup';
+    if (state.mode === 'block' && !window.roadBlocks?.isPlacing()) state.mode = 'results';
     if (state.mode === 'replay' && !$('msimReplay').firstElementChild) state.mode = simData ? 'results' : 'setup';
     sheet.dataset.mode = state.mode;
 
     $('msimSetup').hidden = state.mode !== 'setup';
     $('msimReplay').hidden = state.mode !== 'replay';
     $('msimResults').hidden = state.mode !== 'results';
+    $('msimBlock').hidden = state.mode !== 'block';
     // The hazard fills step back while routes or trails are on them
     // (style.css), and come back in full for setup.
     shell.classList.toggle('msim-route-on', isActive() && state.mode !== 'setup' && !isHazardOnlyView());
@@ -606,7 +613,7 @@
     setText($('msimTitle'), barangay);
     // Which disaster and which step: "Flood setup", "Flood simulation",
     // "Flood results".
-    const results = state.mode === 'results' && simData;
+    const results = (state.mode === 'results' || state.mode === 'block') && simData;
     const hazard = results
       ? (isEarthquakeSimulationResult(simData) ? 'Earthquake' : 'Flood')
       : selectedHazard;
@@ -1047,11 +1054,48 @@
     editPin('end');
   }
 
+  // ---- placing a road block with the center pin (road-blocks.js) ----
+
+  // The sheet drops to its block step: the center pin carries the barrier,
+  // the map moves under it, and "Block this road" takes the spot. Returns
+  // false outside this layout (the desktop clicks the road instead).
+  function startRoadBlock() {
+    if (!isActive() || !simData) return false;
+    setText($('msimBlockError'), '');
+    $('msimBlockError').hidden = true;
+    enterMode('block');
+    syncNow();
+    $('msimBlockTitle')?.focus({ preventScroll: true });
+    return true;
+  }
+
+  function endRoadBlock() {
+    if (state.mode !== 'block') return;
+    enterMode(simData ? 'results' : 'setup');
+    syncNow();
+  }
+
+  async function setRoadBlockHere() {
+    if (state.mode !== 'block' || !gMap || window.roadBlocks?.isBusy()) return;
+    const button = $('msimBlockHereBtn');
+    button.disabled = true;
+    syncCenterPin();
+    const latlng = gMap.containerPointToLatLng([getPinX(), getPinY()]);
+    const { ok, message } = await window.roadBlocks.place(latlng);
+    button.disabled = false;
+    syncCenterPin();
+    if (ok || state.mode !== 'block') return;
+    const error = $('msimBlockError');
+    setText(error, message);
+    error.hidden = !message;
+    scheduleSync();
+  }
+
   // A map tap never drops a pin here (the pin is set with the button); while
   // one is being placed, it moves the map so the tapped spot is under it.
   function handleMapTap(latlng) {
     if (!isActive()) return false;
-    if (state.mode !== 'setup' || !getPinRole()) return true;
+    if (state.mode !== 'block' && (state.mode !== 'setup' || !getPinRole())) return true;
 
     window.clearTimeout(state.mapTapTimer);
     state.mapTapTimer = window.setTimeout(() => {
@@ -1418,6 +1462,8 @@
     getCoveredInsets,
     handleEscape,
     handleMapTap,
+    startRoadBlock,
+    endRoadBlock,
     isActive,
     isAutoFitPaused: () => isActive() && state.autoFitPaused,
     resumeAutoFit,
@@ -1446,6 +1492,8 @@
     openMobileLayers: openLayers,
     setMobileBaseLayer: setBaseLayer,
     setMobilePinHere: setPinHere,
+    setMobileRoadBlockHere: setRoadBlockHere,
+    cancelMobileRoadBlock: () => window.roadBlocks?.stopPlacing(),
     showMobileHazardPicker: showHazardPicker,
     showMobileResults: showResults,
     showMobileSetup: showSetup,

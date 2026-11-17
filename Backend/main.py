@@ -13,7 +13,7 @@ def with_flood_scenario(result, start_location):
         result["flood_scenario"] = describe_flood_start(start_location["lat"], start_location["lng"])
     return result
 
-def simulate(start, end, hazard_type="Flood", barangay=None):
+def simulate(start, end, hazard_type="Flood", barangay=None, road_blocks=()):
     if not start:
         return {
             "error": True,
@@ -56,6 +56,7 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
             end_lng=end_location["lng"],
             hazard_type=hazard_type,
             barangay_name=barangay,
+            road_blocks=road_blocks,
         )
         return with_flood_scenario(result, start_location)
 
@@ -66,7 +67,7 @@ def simulate(start, end, hazard_type="Flood", barangay=None):
         }
 
 
-def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None, capacity=None):
+def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None, capacity=None, road_blocks=()):
     """A flood run whose destination is the barangay's evacuation sites: the
     run picks the site (simulate_flood_to_evacuation_sites), passing over
     sites without room when capacity (parse_site_capacity) is given."""
@@ -91,6 +92,7 @@ def simulate_to_evacuation_site(start, hazard_type="Flood", barangay=None, capac
             hazard_type=hazard_type,
             barangay_name=barangay,
             capacity=capacity,
+            road_blocks=road_blocks,
         ), start_location)
     except Exception as e:
         return {

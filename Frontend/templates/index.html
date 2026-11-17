@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='palette.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='float.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='evac-capacity.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='road-blocks.css') }}">
 </head>
 <body class="sim-page">
 {# Same theme pick as site_base.html: the visitor's choice, else the device's. #}
@@ -487,6 +488,8 @@
               <div class="msheet-details" id="msimResultDetails">
                 <div class="capacity-result-slot" data-capacity-result hidden></div>
                 <div id="msimRouteNavigation"></div>
+                {# Road blocks on the result (road-blocks.js). #}
+                <div class="road-blocks-slot" data-road-blocks hidden></div>
                 {# The hazard breakdown follows the selected route. #}
                 <div class="safety-result-cards msheet-safety-details" id="msimSafetyDetails"></div>
                 <p class="result-route-description" id="msimRouteComparison" hidden></p>
@@ -514,6 +517,18 @@
                   <span>Emergency hotlines</span>
                   <svg class="mhotlines-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
                 </button>
+              </div>
+            </div>
+
+            {# Placing a road block with the center pin (road-blocks.js,
+               mobile-sim.js startRoadBlock). #}
+            <div class="msheet-mode msim-block" id="msimBlock" hidden>
+              <h2 class="msim-block-title" id="msimBlockTitle" tabindex="-1">Add a road block</h2>
+              <p class="msim-block-hint">Move the map so the pin sits on the blocked road.</p>
+              <p class="msim-block-error" id="msimBlockError" role="alert" hidden></p>
+              <div class="msheet-actions" id="msimBlockActions">
+                <button class="mbtn" type="button" onclick="cancelMobileRoadBlock()">Cancel</button>
+                <button class="mbtn mbtn--primary" id="msimBlockHereBtn" type="button" onclick="setMobileRoadBlockHere()">Block this road</button>
               </div>
             </div>
 
@@ -721,6 +736,7 @@
 <script src="{{ url_for('static', filename='tutorial.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 <script src="{{ url_for('static', filename='evac-capacity.js') }}"></script>
+<script src="{{ url_for('static', filename='road-blocks.js') }}"></script>
 <script src="{{ url_for('static', filename='mobile-sim.js') }}"></script>
 {# Started here rather than on <body onload>, which waits for every font,
    image and CDN script, so the map tiles began loading late. #}
