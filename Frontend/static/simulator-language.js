@@ -247,14 +247,17 @@ window.agnasSimulatorCopy = [
 ];
 
 window.agnasSimulatorCopy.push(
-  ['Evac site', 'Evacuation site'], ['Layers', 'Mga layer'],
+  // The pins' badge, uppercase only: a mixed-case pair would make the reverse
+  // lookup turn English "Evacuation site" text into "Evac site".
+  ['EVAC SITE', 'EVACUATION SITE'], ['Layers', 'Mga layer'],
   ['up to 0.5 m deep', 'hanggang 0.5 m ang lalim'], ['0.5 to 1.5 m deep', '0.5 hanggang 1.5 m ang lalim'],
   ['over 1.5 m deep', 'higit sa 1.5 m ang lalim'],
   ['0.5–1.5 m deep', '0.5–1.5 m ang lalim'],
-  ['Open area', 'Bukas na lugar'], ['Available route', 'Rutang maaaring piliin'],
+  ['Open area', 'Bukas na lugar'], ['Chosen open area', 'Napiling bukas na lugar'],
+  ['Available route', 'Rutang maaaring piliin'],
   ['Ground Shaking', 'Pagyanig ng lupa'], ['Very strong', 'Napakalakas'], ['Severe', 'Matindi'], ['Violent', 'Marahas'], ['Extreme', 'Sukdulan'],
   ['Collapse panel', 'Tiklupin ang panel'], ['Expand panel', 'Palawakin ang panel'], ['Back to map', 'Bumalik sa mapa'],
-  ['Target evacuation site', 'Patutunguhang evacuation site'], ['Site Setup', 'Mga detalye ng site'],
+  ['Site Setup', 'Mga detalye ng site'],
   ['Distance unavailable', 'Hindi makuha ang layo'],
   ['No fully safe route was found. Every route below still passes through a high-hazard area, so treat them as backup options and review each one carefully.', 'Walang natagpuang ganap na ligtas na ruta. Lahat ng ruta sa ibaba ay dumaraan pa rin sa lugar na mataas ang panganib, kaya gamitin lamang bilang karagdagang pagpipilian at suriing mabuti ang bawat isa.'],
   ['No route geometry available for this simulation.', 'Walang hugis ng ruta para sa simulation na ito.'],

@@ -109,7 +109,7 @@
       <div class="popup-shell">
         ${buildLocationPhoto({ ...site, label: site.name })}
         <div class="popup-title">${escapeHtml(site.name)}</div>
-        <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Target evacuation site' : 'Evacuation site'}</span></div>
+        <div class="popup-row"><span>Role</span><span>${isHighlighted ? 'Chosen open area' : 'Open area'}</span></div>
         <div class="popup-row"><span>Address</span><span>${escapeHtml(site.address || 'Pasig City')}</span></div>
         ${buildEvacDetailRow('Site Setup', site.site_setup)}
         ${buildEvacDetailRow('Surroundings', site.surroundings)}
@@ -508,7 +508,7 @@
       <div style="margin-top:${showRouteKeys ? '5px' : '0'};">
         ${window.buildPinLegendRow('start')}
         ${!window.isToEvacuationSite?.() ? window.buildPinLegendRow('end')
-          : showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen evacuation site') : ''}
+          : showRouteKeys ? pinRow('#22c55e', '#14532d', 'house', 'Chosen open area') : ''}
         ${state.evacuationMarkers.length ? pinRow('#f59e0b', '#9a3412', 'house', 'Open area') : ''}
         ${typeof window.buildBoundaryLegendRow === 'function' ? window.buildBoundaryLegendRow() : ''}
         ${hazardLegend}

@@ -2558,6 +2558,12 @@ function getResultEvacSite() {
     : simData.selected_evacuation_site || null;
 }
 
+// What the site a run picks is called: an earthquake's sites are open areas
+// (their pins say OPEN AREA), a flood's are evacuation sites.
+function getChosenSiteLabel(isEarthquake = isEarthquakeMode()) {
+  return isEarthquake ? 'Chosen open area' : 'Chosen evacuation site';
+}
+
 function getReadyPin(role) {
   const pin = routePins[role];
   return pin && pin.status === 'ready' ? pin : null;
@@ -2862,7 +2868,7 @@ function syncRoutePinFields() {
     meta.textContent = pin
       ? formatPinCoordinates(pin)
       : resultSite
-      ? 'Chosen evacuation site'
+      ? getChosenSiteLabel()
       : placingOwn
       ? 'Your own destination'
       : '';
@@ -4891,7 +4897,7 @@ function buildReplayLegendPins(result, isEarthquakeRun) {
   const pinRow = (style, label) => `<div class="legend-row">${buildLegendPinSvg(style.fill, style.stroke, 'house')}<span>${label}</span></div>`;
   let destination = buildPinLegendRow('end');
   if (isEarthquakeRun && !isCustomEarthquakeResult(result)) {
-    destination = pinRow({ fill: '#22c55e', stroke: '#14532d' }, 'Chosen evacuation site')
+    destination = pinRow({ fill: '#22c55e', stroke: '#14532d' }, getChosenSiteLabel(true))
       + pinRow({ fill: '#f59e0b', stroke: '#9a3412' }, 'Open area');
   } else if (result.to_evacuation_site && window.floodHazardUI?.evacMarkerStyles) {
     const styles = window.floodHazardUI.evacMarkerStyles;
@@ -6453,7 +6459,7 @@ async function downloadSimulationReport() {
     y = drawReportMapLegend(doc, [
       { kind: 'line', color: routeColor, edge: getRouteEdgeColor(routeColor), label: getTopRouteTitle(best) },
       { kind: 'pin', ...REPORT_PIN_COLORS.start, label: 'Start' },
-      { kind: 'pin', ...endPin, label: endIsChosenSite ? 'Chosen evacuation site' : 'Destination' },
+      { kind: 'pin', ...endPin, label: endIsChosenSite ? getChosenSiteLabel(isEq) : 'Destination' },
       ...(hazardLayer?.legend || []).map(item => ({ kind: 'area', group: 'hazard', ...item })),
     ], { x: margin, y, width: mapWidth }) + 12;
 
