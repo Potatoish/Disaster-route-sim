@@ -443,3 +443,15 @@ body.sim-page:not(.dark)[data-hazard-theme="earthquake"] :is(.run-btn, .evac-btn
   --strong-ink: var(--fill-ink);
   color: var(--fill-ink);
 }
+/* Except the Map / Satellite switch on the map: its dark label read as
+   black there (the user found it hard to see), so in the earthquake theme,
+   light and dark, the picked side is a deeper Burnt Sienna that carries
+   white at 5:1. The #map.leaflet-container and :not(:disabled) outweigh
+   the rule above. */
+body.sim-page[data-hazard-theme="earthquake"] #map.leaflet-container
+  .leaflet-control-layers-base label:has(:checked) > span:not(:disabled) {
+  --accent-ink: #ffffff;
+  --strong-ink: #ffffff;
+  background: color-mix(in srgb, var(--amber-700) 92%, #000);
+  color: #ffffff;
+}
