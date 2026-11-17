@@ -4777,9 +4777,6 @@ function mountReplayPanel(panel) {
 // draw theirs (aco-replay.js removeLayers).
 let activeReplayController = null;
 let replayRouteOnMap = null;
-// The evacuation site choice (site-pick.js), while it plays before the
-// ants' replay of a run to the evacuation sites.
-let activeSitePick = null;
 // A run's scenario intro (quake-intro.js, flood-intro.js), while it plays
 // before the ants.
 let activeScenarioIntro = null;
@@ -4818,9 +4815,7 @@ function clearReplayRoute() {
 function fitReplaySearch({ flySeconds = 0, onlyIfOutOfView = false } = {}) {
   const controller = activeReplayController;
   if (!gMap || !controller || controller.isDone()) return;
-  const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds()
-    : activeSitePick && !activeSitePick.isDone() ? activeSitePick.getBounds()
-    : controller.getSearchBounds();
+  const bounds = isScenarioIntroPlaying() ? activeScenarioIntro.getViewBounds() : controller.getSearchBounds();
   fitMapBounds(bounds, { padding: getReplayFitPadding(bounds), onlyIfOutOfView, flySeconds });
 }
 
@@ -4874,8 +4869,7 @@ async function drawReplayMapContext(result, isEarthquakeRun, chosenSiteId) {
   drawReplaySites(result, isEarthquakeRun, chosenSiteId);
 }
 
-// The evacuation sites, the chosen one marked -- left unmarked while the
-// site choice (site-pick.js) is still to play, and marked once it has.
+// The evacuation sites, the chosen one marked.
 function drawReplaySites(result, isEarthquakeRun, chosenSiteId) {
   if (isEarthquakeRun) {
     window.earthquakeUI?.drawEvacuationSites({
@@ -4960,11 +4954,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       }
     }
     if (withQuakeIntro || floodIntroData) holdReplayMapContext(true);
-    // A run that picked among the evacuation sites first shows how it
-    // picked: each site the ants searched, in turn, then the ranking.
-    const siteSearch = Array.isArray(replayData.site_search) ? replayData.site_search : [];
-    const withSitePick = !!window.sitePick && siteSearch.filter(site => site.route).length > 1;
-    await drawReplayMapContext(result, isEarthquakeRun, withSitePick ? null : chosenSiteId);
+    await drawReplayMapContext(result, isEarthquakeRun, chosenSiteId);
     controller = window.acoReplay.create({
       map: gMap,
       replay: replayData,
@@ -4999,19 +4989,6 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
       isCameraPaused: () => !!window.mobileSim?.isAutoFitPaused(),
     });
     activeReplayController = controller;
-    if (withSitePick) {
-      activeSitePick = window.sitePick.create({
-        map: gMap,
-        sites: siteSearch,
-        start: { lat: Number(startPoint.lat), lng: Number(startPoint.lng) },
-        startName,
-        mode: isEarthquakeRun ? 'earthquake' : 'flood',
-        groupSize: window.evacCapacity?.groupSize() || 1,
-        legendBody: document.getElementById('mapLegendBody'),
-        legendExtra: buildPinLegendRow('start') + buildBoundaryLegendRow(),
-        onPanelChange: () => window.mobileSim?.scheduleSync(),
-      });
-    }
     const introStart = { lat: Number(startPoint.lat), lng: Number(startPoint.lng), label: startName };
     const introCommon = {
       map: gMap,
@@ -5044,7 +5021,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     const shell = document.getElementById('appShell');
     const layoutBefore = shell?.className;
     shell?.classList.add('aco-replaying');
-    mountReplayPanel(activeScenarioIntro ? activeScenarioIntro.panel : activeSitePick ? activeSitePick.panel : controller.panel);
+    mountReplayPanel(activeScenarioIntro ? activeScenarioIntro.panel : controller.panel);
     applySetupSidebarState(true);
     setMapLegendVisible(true);
     // The panels finish sliding first, and initMap's resize handling (which
@@ -5052,9 +5029,7 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
     // view is fitted once, to the map's final size.
     if (shell && shell.className !== layoutBefore) await waitMs(PANEL_SLIDE_MS + REPLAY_RESIZE_SETTLE_MS);
     gMap.invalidateSize({ pan: false });
-    const firstView = activeScenarioIntro ? activeScenarioIntro.getBounds()
-      : activeSitePick ? activeSitePick.getBounds()
-      : controller.getSearchBounds();
+    const firstView = activeScenarioIntro ? activeScenarioIntro.getBounds() : controller.getSearchBounds();
     fitMapBounds(firstView, { padding: { ...getReplayFitPadding(firstView), animate: false } });
   } catch (err) {
     console.error('Could not set up the replay:', err);
@@ -5063,10 +5038,9 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
   }
 
   const intro = activeScenarioIntro;
-  const sitePick = activeSitePick;
   return {
     async play() {
-      let panel = intro ? intro.panel : sitePick ? sitePick.panel : controller.panel;
+      let panel = intro ? intro.panel : controller.panel;
       let host = getReplayHost();
       // Turning a phone or resizing the window mid-replay moves the panel
       // to the new layout's place for it.
@@ -5086,36 +5060,15 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
           intro.destroy({ fade: true });
           activeScenarioIntro = null;
           intro.panel.remove();
-          const next = sitePick || controller;
-          next.panel.prepend(intro.buildSummary());
-          panel = next.panel;
+          controller.panel.prepend(intro.buildSummary());
+          panel = controller.panel;
           host = mountReplayPanel(panel);
           window.mobileSim?.scheduleSync();
-          const nextBounds = sitePick ? sitePick.getBounds() : controller.getSearchBounds();
           if (!controller.isDone()) {
-            fitMapBounds(nextBounds, { padding: getReplayFitPadding(nextBounds), flySeconds: QUAKE_HANDOFF_FLY_SECONDS });
+            const searchBounds = controller.getSearchBounds();
+            fitMapBounds(searchBounds, { padding: getReplayFitPadding(searchBounds), flySeconds: QUAKE_HANDOFF_FLY_SECONDS });
             await waitMs(QUAKE_HANDOFF_FLY_SECONDS * 1000 + 100);
           }
-        }
-        if (sitePick) {
-          const { skipped } = await sitePick.start();
-          // The chosen site turns green; the site lines fade as the ants'
-          // own search takes over, with the choice folded to one line.
-          drawReplaySites(result, isEarthquakeRun, chosenSiteId);
-          sitePick.destroy({ fade: !skipped });
-          activeSitePick = null;
-          if (skipped) {
-            controller.skip();
-          } else {
-            controller.panel.prepend(...sitePick.panel.querySelectorAll('.quake-summary'), sitePick.buildSummary());
-            sitePick.panel.remove();
-            panel = controller.panel;
-            host = mountReplayPanel(panel);
-            window.mobileSim?.scheduleSync();
-            fitMapBounds(controller.getSearchBounds(), { padding: getReplayFitPadding(controller.getSearchBounds()), flySeconds: QUAKE_HANDOFF_FLY_SECONDS });
-            await waitMs(QUAKE_HANDOFF_FLY_SECONDS * 1000 + 100);
-          }
-          sitePick.panel.remove();
         }
         await controller.start();
         if (controller.didComplete() && !prefersReducedMotion()) {
@@ -5135,11 +5088,6 @@ async function prepareSimulationReplay(result, replayData, { isEarthquakeRun }) 
 
 // keepRoute: the results are next, and draw their routes over Route 1.
 function endSimulationReplay(controller, { keepRoute = false } = {}) {
-  if (activeSitePick) {
-    activeSitePick.destroy();
-    activeSitePick.panel.remove();
-    activeSitePick = null;
-  }
   if (activeScenarioIntro) {
     activeScenarioIntro.destroy();
     activeScenarioIntro.panel.remove();

@@ -9,8 +9,9 @@
 // (osm_routing.pick_site_with_room). Flood runs only: earthquake runs have
 // no site counts. Like the sites themselves, it shows only after a run: a
 // site's count is set in its popup on the map (popupHtml, flood.js) or in
-// the dialog the results notice ([data-capacity-result]) opens, which lists
-// every site with the group size. Both use the same controls
+// the dialog the results notice ([data-capacity-result]) opens, which shows
+// the result's chosen site with the group size (every site only when all
+// are full and there is no result). Both use the same controls
 // ([data-capacity-controls]) and everything follows a change at once. No
 // state of its own beyond the counts: it reads script.js globals.
 (function initEvacCapacity() {
@@ -32,6 +33,12 @@
   let returnFocusEl = null;
   // The counts when the dialog opened, to tell whether Done changed them.
   let openedWith = '';
+  // The one site the dialog shows (the result's chosen site), or null when
+  // it lists every site.
+  let dialogSite = null;
+
+  const INTRO_ONE_SITE = 'Set how many people are already at your evacuation site. It holds up to 100 people. If it is full, AGNAS sends you to the next best site with room.';
+  const INTRO_ALL_SITES = 'Set how many people are already at each site. Each site holds up to 100 people. If the best site for you is full, AGNAS sends you to the next best site with room.';
 
   const $ = id => document.getElementById(id);
 
@@ -181,7 +188,12 @@
       : document.activeElement;
     Object.assign(saved, readSaved());
     await ensureSites();
-    $('evacCapacityScope').textContent = `${selectedBarangay} · Flood evacuation sites`;
+    // With a result, only the site its routes lead to: the others are set in
+    // their own popups on the map.
+    const chosen = options.allFull ? null : chosenResultSite();
+    dialogSite = chosen ? (sites.find(site => site.id === chosen.id) || chosen) : null;
+    $('evacCapacityScope').textContent = dialogSite ? dialogSite.name : 'Flood evacuation sites';
+    $('evacCapacityIntro').textContent = dialogSite ? INTRO_ONE_SITE : INTRO_ALL_SITES;
     renderGroup();
     renderSiteList();
     const alert = $('evacCapacityAlert');
@@ -221,6 +233,11 @@
 
   function hasEvacResult() {
     return !!(simData && simData.pins_key === getRoutePinsKey() && getResultCapacity(simData) && isActive());
+  }
+
+  // The site the shown result's routes lead to.
+  function chosenResultSite() {
+    return hasEvacResult() ? getResultCapacity(simData)?.chosen || null : null;
   }
 
   function shouldRerunOnDone() {
@@ -267,15 +284,15 @@
   function renderSiteList() {
     const list = $('evacCapacitySites');
     if (!list) return;
-    if (!sites.length) {
+    const shown = dialogSite ? [dialogSite] : sites;
+    if (!shown.length) {
       list.innerHTML = '<li class="capacity-empty">No evacuation sites are listed for this barangay.</li>';
       return;
     }
-    // The site the shown result's routes lead to.
-    const chosenId = hasEvacResult() ? getResultCapacity(simData)?.chosen?.id : null;
-    list.innerHTML = sites.map((site, index) => `<li class="capacity-site" data-capacity-controls data-site-id="${escapeHtml(site.id)}">
+    // One site: its name already heads the dialog.
+    list.innerHTML = shown.map((site, index) => `<li class="capacity-site" data-capacity-controls data-site-id="${escapeHtml(site.id)}">
         <div class="capacity-site-top">
-          <label class="capacity-site-name" for="capacitySite${index}">${escapeHtml(site.name)}${site.id === chosenId ? ' <span class="capacity-site-tag">Your site</span>' : ''}</label>
+          <label class="capacity-site-name" for="capacitySite${index}">${dialogSite ? 'People at this site' : escapeHtml(site.name)}</label>
           <span class="capacity-pill" data-capacity-pill></span>
         </div>
         ${controlsHtml(site, `capacitySite${index}`)}
@@ -340,8 +357,7 @@
     // The popup's own note when it is the route's site that filled up.
     const alert = box.querySelector('[data-capacity-alert]');
     if (!alert) return;
-    const chosenId = hasEvacResult() ? getResultCapacity(simData)?.chosen?.id : null;
-    const hideAlert = !(siteId === chosenId && !status.hasRoom);
+    const hideAlert = !(siteId === chosenResultSite()?.id && !status.hasRoom);
     if (alert.hidden !== hideAlert) {
       alert.hidden = hideAlert;
       window.floodHazardUI?.relayoutPopup?.();
@@ -474,7 +490,7 @@
           <p class="capacity-result-text">${escapeHtml(bannerText)}</p>
           <div class="capacity-result-actions">
             ${stale ? rerunButton('Find another site') : changed ? rerunButton('Check again') : ''}
-            <button type="button" class="capacity-result-link" onclick="openEvacCapacity(event)" aria-haspopup="dialog" aria-controls="evacCapacityModal">See sites</button>
+            <button type="button" class="capacity-result-link" onclick="openEvacCapacity(event)" aria-haspopup="dialog" aria-controls="evacCapacityModal">Adjust capacity</button>
           </div>
         </div>
       </section>`;
@@ -495,7 +511,7 @@
           ${stale || changed
             ? `<button type="button" class="capacity-result-btn is-primary" onclick="window.evacCapacity.rerun()">${stale ? 'Find another site' : 'Check route again'}</button>`
             : ''}
-          <button type="button" class="capacity-result-btn" onclick="openEvacCapacity(event)">See sites</button>
+          <button type="button" class="capacity-result-btn" onclick="openEvacCapacity(event)" aria-haspopup="dialog" aria-controls="evacCapacityModal">Adjust capacity</button>
         </div>
       </div>
     </section>`;

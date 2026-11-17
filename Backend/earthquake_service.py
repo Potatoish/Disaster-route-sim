@@ -17,7 +17,6 @@ from osm_routing import (
     UNKNOWN_HAZARD_LEVEL,
     add_alternative_routes,
     add_road_access_nodes,
-    build_site_search,
     build_colony_replay,
     build_elimination_reason,
     build_hazard_coverage_area,
@@ -464,11 +463,10 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
     its colony goes on to alternative colonies (one step each) and the full
     candidate pool. Site capacity is a flood feature, so no site is passed
     over here. Returns (that site's evaluated candidates, ACO stats, that
-    colony -- recorded for the replay in the lens the results open on -- and,
-    in that lens, the site choice for the animation before the replay)."""
+    colony -- recorded for the replay in the lens the results open on)."""
     view_graph = _clone_graph_for_view(base_graph, view_key)
 
-    site_picks = []
+    best_pick = None
     ants_sent = ants_arrived = 0
     for evacuation_site in evacuation_sites:
         rng = random.Random(route_search_seed(*seed_parts, view_key, evacuation_site["id"]))
@@ -499,18 +497,13 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
             _evaluate_colony_routes(base_graph, shortlist, evacuation_site, view_key, colony["pheromone"]),
             key=display_sort_key,
         )
-        site_picks.append((evacuation_site, colony, site_best))
+        if best_pick is None or display_sort_key(site_best) < display_sort_key(best_pick[2]):
+            best_pick = (evacuation_site, colony, site_best)
 
-    best_pick = min(site_picks, key=lambda pick: display_sort_key(pick[2]), default=None)
     alternatives = FINAL_ROUTES_TO_SHOW - 1
     if best_pick is None:
         bump_progress(alternatives)
-        return [], None, None, None
-    site_search = (
-        build_site_search(base_graph, site_picks, evacuation_sites, best_pick[0], None)
-        if view_key == REPLAY_VIEW
-        else None
-    )
+        return [], None, None
 
     evacuation_site, colony, _ = best_pick
     main_sent, main_arrived = colony["stats"]["ants_sent"], colony["stats"]["ants_arrived"]
@@ -520,12 +513,7 @@ def _collect_view_candidates(base_graph, start_node, evacuation_sites, site_node
     stats["sites_searched"] = len(evacuation_sites)
     stats["ants_sent_all_sites"] = ants_sent + colony["stats"]["ants_sent"] - main_sent
     stats["ants_arrived_all_sites"] = ants_arrived + colony["stats"]["ants_arrived"] - main_arrived
-    return (
-        _evaluate_colony_routes(base_graph, candidates, evacuation_site, view_key, colony["pheromone"]),
-        stats,
-        colony,
-        site_search,
-    )
+    return _evaluate_colony_routes(base_graph, candidates, evacuation_site, view_key, colony["pheromone"]), stats, colony
 
 
 def _replay_span_levels(edge_data):
@@ -745,7 +733,7 @@ def simulate_earthquake(start, barangay_name, end=None):
             view_started = time.perf_counter()
             view_label = EARTHQUAKE_VIEW_CONFIG[view_key]["label"]
             debug_print(f"[EQ]   View start: {view_label}")
-            candidates, aco_stats, colony, site_search = _collect_view_candidates(
+            candidates, aco_stats, colony = _collect_view_candidates(
                 routing_graph,
                 start_node,
                 evaluated_sites,
@@ -772,10 +760,7 @@ def simulate_earthquake(start, barangay_name, end=None):
                     colony,
                     routes[0] if routes else None,
                     _replay_span_levels,
-                    {
-                        "sites_searched": 0 if end_location else len(evaluated_sites),
-                        "site_search": None if end_location else site_search,
-                    },
+                    {"sites_searched": 0 if end_location else len(evaluated_sites)},
                 )
             debug_print(
                 f"[EQ]   View complete: {view_label} in {time.perf_counter() - view_started:.2f}s "

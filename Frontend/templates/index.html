@@ -32,7 +32,6 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='palette.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='float.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='evac-capacity.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='site-pick.css') }}">
 </head>
 <body class="sim-page">
 {# Same theme pick as site_base.html: the visitor's choice, else the device's. #}
@@ -673,7 +672,7 @@
     </header>
 
     <div class="capacity-modal-body" id="evacCapacityBody">
-      <p class="capacity-intro" id="evacCapacityIntro">Set how many people are already at each site. Each site holds up to 100 people. If the best site for you is full, AGNAS sends you to the next best site with room.</p>
+      <p class="capacity-intro" id="evacCapacityIntro">Set how many people are already at your evacuation site. It holds up to 100 people. If it is full, AGNAS sends you to the next best site with room.</p>
       <p class="capacity-alert" id="evacCapacityAlert" role="alert" hidden></p>
 
       <div class="capacity-group">
@@ -716,7 +715,6 @@
 <script src="{{ url_for('static', filename='flood.js') }}"></script>
 <script src="{{ url_for('static', filename='earthquake.js') }}"></script>
 <script src="{{ url_for('static', filename='aco-replay.js') }}"></script>
-<script src="{{ url_for('static', filename='site-pick.js') }}"></script>
 <script src="{{ url_for('static', filename='quake-intro.js') }}"></script>
 <script src="{{ url_for('static', filename='flood-intro.js') }}"></script>
 <script src="{{ url_for('static', filename='modal-focus.js') }}"></script>

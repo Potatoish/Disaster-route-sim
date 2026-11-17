@@ -576,55 +576,6 @@ def build_capacity_summary(capacity, sites, chosen_site=None, skipped=()):
     }
 
 
-def build_site_search(G, site_picks, searched_sites, chosen_site, capacity):
-    """What the run's site choice looked at, for the site-by-site animation
-    before the replay (site-pick.js): every site the ants searched, in the
-    order they did, with its main colony's best route (as on the map), its
-    rank (display_sort_key) and its room. A site no ant or map search
-    reached has no route and no rank."""
-    ranked = sorted(site_picks, key=lambda pick: display_sort_key(pick[2]))
-    rank_of = {pick[0]["id"]: index + 1 for index, pick in enumerate(ranked)}
-    pick_of = {pick[0]["id"]: pick for pick in site_picks}
-    chosen_rank = rank_of.get(chosen_site["id"]) if chosen_site else None
-    entries = []
-    for site in searched_sites:
-        entry = {
-            "id": site["id"],
-            "name": site["name"],
-            "lat": float(site["lat"]),
-            "lng": float(site["lng"]),
-            "rank": rank_of.get(site["id"]),
-            "chosen": bool(chosen_site and site["id"] == chosen_site["id"]),
-        }
-        pick = pick_of.get(site["id"])
-        if pick is not None:
-            _, colony, route = pick
-            entry["route"] = {
-                "distance": round(float(route["distance"]), 1),
-                "unsafe_distance": round(float(route.get("unsafe_distance") or 0), 1),
-                "max_hazard": int(route.get("max_hazard") or 0),
-                "flood_var": max(route.get("flood_vars_encountered") or [0]),
-                # Metres in Medium / High water (flood only): what usually
-                # ranks a farther site above a nearer one.
-                "medium_distance": round(float((route.get("flood_var_distances") or {}).get("2", 0)), 1),
-                "high_distance": round(float((route.get("flood_var_distances") or {}).get("3", 0)), 1),
-                "coordinates": [
-                    [round(point["lat"], 6), round(point["lng"], 6)]
-                    for point in path_to_coords(G, route["path"])
-                ],
-            }
-            entry["ants_sent"] = colony["stats"]["ants_sent"]
-            entry["ants_arrived"] = colony["stats"]["ants_arrived"]
-        if capacity is not None:
-            status = site_capacity_status(site, capacity)
-            entry["capacity"] = {key: status[key] for key in ("capacity", "occupancy", "available", "has_room")}
-            entry["passed_over"] = bool(
-                chosen_rank and entry["rank"] and entry["rank"] < chosen_rank and not status["has_room"]
-            )
-        entries.append(entry)
-    return entries
-
-
 def all_sites_full_error(capacity, sites, other=""):
     group = capacity["group_size"]
     return {
@@ -3099,7 +3050,6 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
         }
     for skipped in skipped_full_sites:
         debug_print(f"[OSM] Passed over (full): {skipped['name']} {skipped['occupancy']}/{skipped['capacity']}")
-    site_search = build_site_search(G, site_picks, reachable_sites, best_pick[0], capacity)
 
     site, colony, _ = best_pick
     main_sent, main_arrived = colony["stats"]["ants_sent"], colony["stats"]["ants_arrived"]
@@ -3145,6 +3095,6 @@ def simulate_flood_to_evacuation_sites(start_name, start_lat, start_lng, hazard_
             colony,
             final_routes[0] if final_routes else None,
             flood_replay_span_levels,
-            {"sites_searched": len(reachable_sites), "site_search": site_search},
+            {"sites_searched": len(reachable_sites)},
         ),
     }
