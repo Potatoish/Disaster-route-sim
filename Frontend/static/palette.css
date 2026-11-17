@@ -433,7 +433,7 @@ body.sim-page:not(.dark) .safety-card-action:hover:not(:disabled) {
    by coming after it. */
 body.sim-page.dark { --fill-ink: var(--blue-950); }
 body.sim-page[data-hazard-theme="earthquake"] { --fill-ink: var(--amber-950); }
-body.sim-page.dark :is(.run-btn, .evac-btn, .mbtn--primary, #msimDetailsBtn, .result-route-reset,
+body.sim-page.dark :is(.run-btn, .evac-btn, .mbtn--primary, #msimDetailsBtn.mbtn--primary, .result-route-reset,
   .tutorial-btn.primary, .route-modal-btn.primary, .capacity-result-btn.is-primary, .mlens button.active,
   .leaflet-control-layers-base label:has(:checked) > span):not(:disabled),
 body.sim-page:not(.dark)[data-hazard-theme="earthquake"] :is(.run-btn, .evac-btn,
@@ -443,15 +443,31 @@ body.sim-page:not(.dark)[data-hazard-theme="earthquake"] :is(.run-btn, .evac-btn
   --strong-ink: var(--fill-ink);
   color: var(--fill-ink);
 }
-/* Except the Map / Satellite switch on the map: its dark label read as
-   black there (the user found it hard to see), so in the earthquake theme,
-   light and dark, the picked side is a deeper Burnt Sienna that carries
-   white at 5:1. The #map.leaflet-container and :not(:disabled) outweigh
-   the rule above. */
+/* Except in the earthquake theme, light and dark: the dark label on the
+   light orange read as black (the user found it hard to see), so the filled
+   actions there take a deeper Burnt Sienna that carries white at 5:1. New
+   simulation keeps its own Burnt Sienna, with white. The html and
+   :not([aria-disabled]) outweigh the dark-label rules above; the Map /
+   Satellite switch's #map.leaflet-container does the same. */
+body.sim-page[data-hazard-theme="earthquake"] {
+  --quake-fill: color-mix(in srgb, var(--amber-700) 92%, #000);
+}
+html body.sim-page[data-hazard-theme="earthquake"] :is(.run-btn, .evac-btn,
+  .mbtn--primary:not(#msimNewSimBtn), .result-route-reset, .tutorial-btn.primary,
+  .route-modal-btn.primary, .mlens button.active):not(:disabled):not([aria-disabled="true"]),
 body.sim-page[data-hazard-theme="earthquake"] #map.leaflet-container
   .leaflet-control-layers-base label:has(:checked) > span:not(:disabled) {
   --accent-ink: #ffffff;
   --strong-ink: #ffffff;
-  background: color-mix(in srgb, var(--amber-700) 92%, #000);
+  border-color: var(--quake-fill);
+  background: var(--quake-fill);
+  color: #ffffff;
+}
+/* New simulation's fills (dark flood's blue, the earthquake Burnt Sienna)
+   carry white better than the dark label. */
+html body.sim-page #msimNewSimBtn.mbtn--primary:not(:disabled):not([aria-disabled="true"]),
+html body.sim-page[data-hazard-theme="earthquake"] #msimNewSimBtn.mbtn--primary:not(:disabled):not([aria-disabled="true"]) {
+  --accent-ink: #ffffff;
+  --strong-ink: #ffffff;
   color: #ffffff;
 }
